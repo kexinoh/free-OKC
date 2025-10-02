@@ -40,17 +40,17 @@ class ToolRegistry:
             files.WriteFileTool.name: files.WriteFileTool,
             shell.ShellTool.name: shell.ShellTool,
         }
-        stub_messages = {
-            name: "This tool is not yet implemented in OKCVM; contributions welcome!"
-            for name in self._specs
-            if name not in mapping
-        }
-        specialized_messages = {
-            name: "Browser automation is not included in the reference implementation."
-            for name in self._specs
-            if name.startswith("mshtools-browser")
-        }
-        stub_messages.update(specialized_messages)
+        stub_messages = {}
+        for name in self._specs:
+            if name not in mapping:
+                if name.startswith("mshtools-browser"):
+                    stub_messages[name] = (
+                        "Browser automation is not included in the reference implementation."
+                    )
+                else:
+                    stub_messages[name] = (
+                        "This tool is not yet implemented in OKCVM; contributions welcome!"
+                    )
 
         for name, cls in mapping.items():
             spec = self._specs.get(name)
