@@ -41,9 +41,9 @@ class EndpointConfigPayload(BaseModel):
     api_key: Optional[str] = Field(default=None, description="Provider API key")
 
     def to_model(self) -> ModelEndpointConfig | None:
-        model = (self.model or "").strip() if self.model is not None else None
-        base_url = (self.base_url or "").strip() if self.base_url is not None else None
-        api_key = (self.api_key or "").strip() if self.api_key is not None else None
+        model = self.model.strip() if self.model is not None else None
+        base_url = self.base_url.strip() if self.base_url is not None else None
+        api_key = self.api_key.strip() if self.api_key is not None else None
         if not model or not base_url:
             return None
         return ModelEndpointConfig(model=model, base_url=base_url, api_key=api_key or None)
