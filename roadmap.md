@@ -4,7 +4,7 @@
 
 ### System prompt & manifest bundling
 We package the upstream system prompt and tool manifest with loader helpers so clients can bootstrap OKCVM without extra configuration.
-- `okcvm.spec` exposes dataclasses and loaders that read the packaged `system_prompt.md` and `tools.json`, returning structured specifications for downstream consumers.【F:src/okcvm/spec.py†L1-L57】
+- `okcvm.spec` exposes dataclasses and loaders that read the packaged `system_prompt.md` and `tools.json`, returning structured specifications for downstream consumers. ([`src/okcvm/spec.py#L1-L57`](./src/okcvm/spec.py#L1-L57))
 
 ### Tool registry with default bindings
 The ToolRegistry automatically wires every manifest entry to a concrete implementation or a stub to maintain spec parity.
