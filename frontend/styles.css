@@ -26,6 +26,10 @@ body {
   justify-content: center;
 }
 
+body.no-scroll {
+  overflow: hidden;
+}
+
 .app-shell {
   width: min(1200px, 100%);
   display: flex;
@@ -50,6 +54,12 @@ body {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .logo {
@@ -88,6 +98,39 @@ body {
 .status-pill[data-busy='true'] {
   background: var(--accent);
   color: white;
+}
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 1.05rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.settings-toggle:hover,
+.settings-toggle:focus-visible {
+  background: white;
+  box-shadow: 0 16px 28px -28px rgba(15, 23, 42, 0.6);
+}
+
+.settings-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-toggle[aria-expanded='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  box-shadow: 0 20px 35px -24px rgba(79, 70, 229, 0.8);
 }
 
 .app-main {
@@ -306,6 +349,56 @@ body {
 .insight-panel {
   position: sticky;
   top: 2rem;
+}
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  padding: clamp(1rem, 4vw, 2rem);
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+.settings-overlay[hidden] {
+  display: none;
+}
+
+.settings-drawer {
+  width: min(420px, 100%);
+  max-height: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  box-shadow: 0 28px 60px -40px rgba(15, 23, 42, 0.65);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow: auto;
+}
+
+.settings-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.settings-close {
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .settings-overlay {
+    justify-content: center;
+  }
+
+  .settings-drawer {
+    width: min(520px, 100%);
+  }
 }
 
 .insight-card {

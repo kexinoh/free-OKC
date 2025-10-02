@@ -14,6 +14,12 @@ const modelLogTemplate = document.getElementById('model-log-item-template');
 const pptSlideTemplate = document.getElementById('ppt-slide-template');
 const configForm = document.getElementById('config-form');
 const configStatus = document.getElementById('config-status');
+const settingsToggle = document.getElementById('settings-toggle');
+const settingsOverlay = document.getElementById('settings-overlay');
+const settingsDrawer = settingsOverlay?.querySelector('.settings-drawer') ?? null;
+const settingsCloseButtons = document.querySelectorAll('[data-action="close-settings"]');
+
+let previousFocusedElement = null;
 
 const SERVICES = ['chat', 'image', 'speech', 'sound_effects', 'asr'];
 const serviceInputs = SERVICES.reduce((acc, service) => {
@@ -29,6 +35,67 @@ let currentWebPreview = null;
 let currentPptSlides = [];
 let isCarouselMode = false;
 const modelLogs = [];
+
+function openSettingsPanel() {
+  if (!settingsOverlay || !settingsToggle) return;
+  if (!settingsOverlay.hidden) return;
+
+  previousFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  settingsOverlay.hidden = false;
+  document.body?.classList.add('no-scroll');
+  settingsToggle.setAttribute('aria-expanded', 'true');
+
+  const firstInput = configForm?.querySelector('input, select, textarea, button');
+  if (firstInput instanceof HTMLElement) {
+    firstInput.focus();
+  } else if (settingsDrawer instanceof HTMLElement) {
+    settingsDrawer.focus();
+  }
+}
+
+function closeSettingsPanel() {
+  if (!settingsOverlay || !settingsToggle) return;
+  if (settingsOverlay.hidden) return;
+
+  settingsOverlay.hidden = true;
+  document.body?.classList.remove('no-scroll');
+  settingsToggle.setAttribute('aria-expanded', 'false');
+
+  const focusTarget = previousFocusedElement instanceof HTMLElement ? previousFocusedElement : settingsToggle;
+  previousFocusedElement = null;
+  if (focusTarget instanceof HTMLElement) {
+    focusTarget.focus();
+  }
+}
+
+if (settingsToggle && settingsOverlay) {
+  settingsToggle.addEventListener('click', () => {
+    if (settingsOverlay.hidden) {
+      openSettingsPanel();
+    } else {
+      closeSettingsPanel();
+    }
+  });
+}
+
+settingsCloseButtons.forEach((button) => {
+  button.addEventListener('click', closeSettingsPanel);
+});
+
+if (settingsOverlay) {
+  settingsOverlay.addEventListener('click', (event) => {
+    if (event.target === settingsOverlay) {
+      closeSettingsPanel();
+    }
+  });
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !settingsOverlay?.hidden) {
+    event.preventDefault();
+    closeSettingsPanel();
+  }
+});
 
 function addMessage(role, text) {
   const message = document.createElement('article');
