@@ -18,7 +18,7 @@ The VirtualMachine class orchestrates tool calls, preserves recent history, and 
 We ship working implementations of the todo list, file management, shell, and IPython execution tools defined in the OK Computer contract.
 - The todo tools persist JSON records on disk, supporting full rewrites and append workflows to mirror the upstream behaviour.【F:src/okcvm/tools/todo.py†L1-L88】
 - File tools enforce absolute paths, support binary-safe reads and writes, and provide guarded edit operations that mimic the expected agent ergonomics.【F:src/okcvm/tools/files.py†L1-L93】
-- The shell and IPython tools execute commands with captured output, optional resets, and simple `!`-prefixed shell escapes inside Python sessions.【F:src/okcvm/tools/shell.py†L1-L32】【F:src/okcvm/tools/ipython.py†L1-L60】
+- The shell and IPython tools execute commands with captured output, optional resets, and simple `` `!` ``-prefixed shell escapes inside Python sessions.【F:src/okcvm/tools/shell.py†L1-L32】【F:src/okcvm/tools/ipython.py†L1-L60】
 
 ### Web, media, and deployment utilities
 We include lightweight browser simulation, search/media synthesis, deployment, and slide generation tooling aligned with the OKC spec.
