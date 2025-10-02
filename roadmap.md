@@ -48,3 +48,9 @@ The registry already prepares stub fallbacks for spec entries without implementa
 Synthetic image and audio outputs are deterministic placeholders, so we aim to integrate optional model-backed pipelines for richer creative results.【F:src/okcvm/tools/media.py†L37-L200】
 - Evaluate lightweight diffusion or TTS backends that can run locally while offering significant quality improvements over hashed textures and sine-wave synthesis.
 - Define caching and asset management conventions to keep generated media organised for downstream sharing tools.
+
+### Local control plane & configuration UI
+The repository currently only ships a static in-browser mock experience that is not wired to the virtual machine or runtime configuration helpers, so we need a real deployment surface.【F:frontend/index.html†L1-L114】【F:frontend/app.js†L1-L200】【F:src/okcvm/config.py†L1-L150】
+- Build a lightweight web service/CLI that launches the OKCVM backend, serves the frontend on a local port, and proxies chat/tool requests to the Python runtime.
+- Introduce a persisted configuration file (e.g., YAML/JSON) that maps chat/image/audio model endpoints onto `okcvm.config` so the UI can manage credentials without relying solely on environment variables.
+- Extend the frontend with forms for editing the configuration, persisting changes, and reflecting connection status so users can test their setup before chatting through the browser.
