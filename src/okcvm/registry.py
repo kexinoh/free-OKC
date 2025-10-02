@@ -7,7 +7,19 @@ from typing import Dict, Iterable, List, Mapping
 from . import spec as spec_module
 from .spec import ToolSpec
 from .tools.base import Tool, ToolResult
-from .tools import files, ipython, shell, stubs, todo
+from .tools import (
+    browser,
+    data_sources,
+    deployment,
+    files,
+    ipython,
+    media,
+    search,
+    shell,
+    slides,
+    stubs,
+    todo,
+)
 
 
 class ToolRegistry:
@@ -39,6 +51,23 @@ class ToolRegistry:
             files.EditFileTool.name: files.EditFileTool,
             files.WriteFileTool.name: files.WriteFileTool,
             shell.ShellTool.name: shell.ShellTool,
+            browser.BrowserVisitTool.name: browser.BrowserVisitTool,
+            browser.BrowserStateTool.name: browser.BrowserStateTool,
+            browser.BrowserFindTool.name: browser.BrowserFindTool,
+            browser.BrowserClickTool.name: browser.BrowserClickTool,
+            browser.BrowserInputTool.name: browser.BrowserInputTool,
+            browser.BrowserScrollDownTool.name: browser.BrowserScrollDownTool,
+            browser.BrowserScrollUpTool.name: browser.BrowserScrollUpTool,
+            search.WebSearchTool.name: search.WebSearchTool,
+            search.ImageSearchTool.name: search.ImageSearchTool,
+            media.GenerateImageTool.name: media.GenerateImageTool,
+            media.GetAvailableVoicesTool.name: media.GetAvailableVoicesTool,
+            media.GenerateSpeechTool.name: media.GenerateSpeechTool,
+            media.GenerateSoundEffectsTool.name: media.GenerateSoundEffectsTool,
+            data_sources.GetDataSourceDescTool.name: data_sources.GetDataSourceDescTool,
+            data_sources.GetDataSourceTool.name: data_sources.GetDataSourceTool,
+            deployment.DeployWebsiteTool.name: deployment.DeployWebsiteTool,
+            slides.SlidesGeneratorTool.name: slides.SlidesGeneratorTool,
         }
         stub_messages = {}
         for name in self._specs:
