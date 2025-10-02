@@ -56,4 +56,8 @@ def test_generate_image_and_audio():
     assert effect.success
     effect_bytes = _decode_audio(effect.data["base64"])
     assert effect_bytes[:4] == b"RIFF"
-    assert effect.data["provider"]["api_key_present"] is True
+    assert effect.data["provider"] == {
+        "model": "stub-model",
+        "base_url": "https://example.invalid/v1",
+        "api_key_present": True,
+    }
