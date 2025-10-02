@@ -5,3 +5,6 @@ pytest_cache/
 deployments/
 src/okcvm.egg-info/
 .pytest_cache/
+.idea
+.venv
+uv.lock
