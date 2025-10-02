@@ -33,9 +33,9 @@ class IPythonTool(Tool):
             stripped = line.strip()
             if stripped.startswith("!"):
                 command = stripped[1:]
+                import shlex
                 completed = subprocess.run(
-                    command,
-                    shell=True,
+                    shlex.split(command),
                     capture_output=True,
                     text=True,
                 )
