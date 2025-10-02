@@ -83,15 +83,26 @@ class MediaConfig:
         return getattr(self, service, None)
 
 
+_UNSET = object()
+
+
 @dataclass(slots=True)
 class Config:
     """Top-level runtime configuration."""
 
     media: MediaConfig = field(default_factory=MediaConfig)
+    chat: ModelEndpointConfig | None = None
 
-    def update(self, *, media: MediaConfig | None = None) -> None:
+    def update(
+        self,
+        *,
+        media: MediaConfig | None = None,
+        chat: ModelEndpointConfig | None | object = _UNSET,
+    ) -> None:
         if media is not None:
             self.media = media
+        if chat is not _UNSET:
+            self.chat = chat  # type: ignore[assignment]
 
 
 def _load_media_from_env(env: Mapping[str, str] | None = None) -> MediaConfig:
@@ -104,10 +115,19 @@ def _load_media_from_env(env: Mapping[str, str] | None = None) -> MediaConfig:
     )
 
 
-_CONFIG = Config(media=_load_media_from_env())
+def _load_chat_from_env(env: Mapping[str, str] | None = None) -> ModelEndpointConfig | None:
+    env_mapping = env or os.environ
+    return ModelEndpointConfig.from_env("OKCVM_CHAT", env_mapping)
 
 
-def configure(*, media: MediaConfig | None = None) -> None:
+_CONFIG = Config(media=_load_media_from_env(), chat=_load_chat_from_env())
+
+
+def configure(
+    *,
+    media: MediaConfig | None = None,
+    chat: ModelEndpointConfig | None | object = _UNSET,
+) -> None:
     """Update the process-wide configuration.
 
     Example
@@ -124,7 +144,7 @@ def configure(*, media: MediaConfig | None = None) -> None:
     ... )
     """
 
-    _CONFIG.update(media=media)
+    _CONFIG.update(media=media, chat=chat)
 
 
 def get_config() -> Config:
@@ -137,7 +157,7 @@ def reset_config(env: Mapping[str, str] | None = None) -> None:
     """Reset configuration to match the environment (mainly for tests)."""
 
     global _CONFIG
-    _CONFIG = Config(media=_load_media_from_env(env))
+    _CONFIG = Config(media=_load_media_from_env(env), chat=_load_chat_from_env(env))
 
 
 __all__ = [

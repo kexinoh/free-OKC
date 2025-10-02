@@ -27,6 +27,12 @@ We include lightweight browser simulation, search/media synthesis, deployment, a
 - Media and slides tools generate synthetic images, speech, sound effects, and PPTX decks so agents can complete end-to-end creative tasks without external services.【F:src/okcvm/tools/media.py†L1-L200】【F:src/okcvm/tools/slides.py†L1-L74】
 - Data source and deployment helpers cover the Yahoo Finance quote API and static site publishing to mirror commonly used OK Computer workflows.【F:src/okcvm/tools/data_sources.py†L1-L96】【F:src/okcvm/tools/deployment.py†L1-L66】
 
+### Local control plane & web UI
+We ship a FastAPI service with a first-party browser UI so teams can configure model endpoints and drive the VM from a chat-first workflow.
+- `okcvm.server` mounts the `frontend/` assets, exposes REST endpoints for configuration, chat, and VM inspection, and wires the virtual machine with deterministic demo responses.【F:src/okcvm/server.py†L1-L269】
+- The refreshed `frontend/` bundle fetches configuration state from the backend, persists changes through the new API, and streams chat turns that update the preview panes in real time.【F:frontend/index.html†L1-L160】【F:frontend/app.js†L1-L219】
+- Runtime configuration now supports chat, image, speech, sound-effect, and ASR model endpoints, with environment-variable defaults and API-key redaction in HTTP responses.【F:src/okcvm/config.py†L1-L163】
+
 ## Planned and In-Progress Work
 
 ### Richer browser automation
@@ -49,8 +55,8 @@ Synthetic image and audio outputs are deterministic placeholders, so we aim to i
 - Evaluate lightweight diffusion or TTS backends that can run locally while offering significant quality improvements over hashed textures and sine-wave synthesis.
 - Define caching and asset management conventions to keep generated media organised for downstream sharing tools.
 
-### Local control plane & configuration UI
-The repository currently only ships a static in-browser mock experience that is not wired to the virtual machine or runtime configuration helpers, so we need a real deployment surface.【F:frontend/index.html†L1-L114】【F:frontend/app.js†L1-L200】【F:src/okcvm/config.py†L1-L150】
-- Build a lightweight web service/CLI that launches the OKCVM backend, serves the frontend on a local port, and proxies chat/tool requests to the Python runtime.
-- Introduce a persisted configuration file (e.g., YAML/JSON) that maps chat/image/audio model endpoints onto `okcvm.config` so the UI can manage credentials without relying solely on environment variables.
-- Extend the frontend with forms for editing the configuration, persisting changes, and reflecting connection status so users can test their setup before chatting through the browser.
+### Persisted orchestration state
+With the in-browser control plane wired to the backend, the next iteration focuses on durability and richer integrations.
+- Add optional disk-backed configuration (e.g., TOML/YAML) so saved endpoints survive process restarts while keeping API keys encrypted or masked at rest.
+- Allow the chat workflow to call real OKCVM tools by attaching planner/agent logic and streaming tool history back to the UI.
+- Surface health indicators for each configured endpoint (ping tests, latency sampling) so operators can validate deployments before exposing them to end users.

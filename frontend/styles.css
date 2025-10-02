@@ -85,6 +85,11 @@ body {
   font-size: 0.85rem;
 }
 
+.status-pill[data-busy='true'] {
+  background: var(--accent);
+  color: white;
+}
+
 .app-main {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
@@ -96,6 +101,98 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+.settings-card {
+  gap: 1rem;
+}
+
+.settings-header {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.settings-header p {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 0.9rem;
+}
+
+.config-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.config-group {
+  border: 1px solid var(--border);
+  border-radius: 1.1rem;
+  padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.config-group legend {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.config-group label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+}
+
+.config-group input {
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.config-group input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.config-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.config-status {
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+  min-height: 1.2em;
+}
+
+.config-status.success {
+  color: #047857;
+}
+
+.config-status.error {
+  color: #dc2626;
+}
+
+.primary-button {
+  border: none;
+  border-radius: 0.85rem;
+  font-size: 0.95rem;
+  padding: 0.75rem 1.3rem;
+  cursor: pointer;
+  font-weight: 600;
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 10px 20px -12px rgba(79, 70, 229, 0.8);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.primary-button:active {
+  transform: translateY(1px);
 }
 
 .chat-panel {

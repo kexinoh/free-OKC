@@ -41,6 +41,99 @@
         </section>
 
         <aside class="insight-panel">
+          <section class="insight-card settings-card">
+            <div class="settings-header">
+              <h2>模型配置</h2>
+              <p>为聊天、图像、语音与音频工具填写推理端点信息。</p>
+            </div>
+            <form class="config-form" id="config-form">
+              <fieldset class="config-group">
+                <legend>聊天模型</legend>
+                <label>
+                  模型 ID
+                  <input type="text" data-service="chat" data-field="model" placeholder="moonshot-chat" />
+                </label>
+                <label>
+                  Base URL
+                  <input type="url" data-service="chat" data-field="base_url" placeholder="https://api.example.com/v1/chat" />
+                </label>
+                <label>
+                  API Key
+                  <input type="password" data-service="chat" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </label>
+              </fieldset>
+
+              <fieldset class="config-group">
+                <legend>图像生成</legend>
+                <label>
+                  模型 ID
+                  <input type="text" data-service="image" data-field="model" placeholder="moonshot-image" />
+                </label>
+                <label>
+                  Base URL
+                  <input type="url" data-service="image" data-field="base_url" placeholder="https://api.example.com/v1/images" />
+                </label>
+                <label>
+                  API Key
+                  <input type="password" data-service="image" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </label>
+              </fieldset>
+
+              <fieldset class="config-group">
+                <legend>语音合成</legend>
+                <label>
+                  模型 ID
+                  <input type="text" data-service="speech" data-field="model" placeholder="moonshot-tts" />
+                </label>
+                <label>
+                  Base URL
+                  <input type="url" data-service="speech" data-field="base_url" placeholder="https://api.example.com/v1/speech" />
+                </label>
+                <label>
+                  API Key
+                  <input type="password" data-service="speech" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </label>
+              </fieldset>
+
+              <fieldset class="config-group">
+                <legend>音效生成</legend>
+                <label>
+                  模型 ID
+                  <input type="text" data-service="sound_effects" data-field="model" placeholder="moonshot-sfx" />
+                </label>
+                <label>
+                  Base URL
+                  <input type="url" data-service="sound_effects" data-field="base_url" placeholder="https://api.example.com/v1/sfx" />
+                </label>
+                <label>
+                  API Key
+                  <input type="password" data-service="sound_effects" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </label>
+              </fieldset>
+
+              <fieldset class="config-group">
+                <legend>语音识别</legend>
+                <label>
+                  模型 ID
+                  <input type="text" data-service="asr" data-field="model" placeholder="moonshot-asr" />
+                </label>
+                <label>
+                  Base URL
+                  <input type="url" data-service="asr" data-field="base_url" placeholder="https://api.example.com/v1/asr" />
+                </label>
+                <label>
+                  API Key
+                  <input type="password" data-service="asr" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </label>
+              </fieldset>
+
+              <div class="config-actions">
+                <span class="config-status" id="config-status" role="status"></span>
+                <button type="submit" class="primary-button">保存配置</button>
+              </div>
+            </form>
+          </section>
+
           <section class="insight-card">
             <h2>当前模型调用</h2>
             <ul class="model-log" id="model-log"></ul>
