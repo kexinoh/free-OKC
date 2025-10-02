@@ -1,0 +1,386 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f5f6fb;
+  --panel: #ffffffdd;
+  --border: #e0e2ec;
+  --accent: #4f46e5;
+  --accent-soft: #eef2ff;
+  --text: #1f2933;
+  --text-subtle: #6b7280;
+  --chat-user: #e8f7ff;
+  --chat-assistant: #f3f1ff;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(135deg, #eef2ff, #fdf2f8 60%, #f5f6fb);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.app-shell {
+  width: min(1200px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem clamp(1rem, 4vw, 2rem) 3rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--panel);
+  padding: 1.5rem;
+  border-radius: 1.5rem;
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 35px -30px rgba(65, 65, 110, 0.45);
+  backdrop-filter: blur(12px);
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo {
+  width: 3rem;
+  height: 3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 1.25rem;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.app-header p {
+  margin: 0.25rem 0 0;
+  color: var(--text-subtle);
+}
+
+.status-pill {
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.app-main {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 1.5rem;
+}
+
+.chat-panel,
+.insight-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.chat-panel {
+  background: var(--panel);
+  border-radius: 1.5rem;
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 35px -32px rgba(65, 65, 110, 0.4);
+  backdrop-filter: blur(12px);
+  padding: 1.5rem;
+}
+
+.chat-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-right: 0.75rem;
+}
+
+.message {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  max-width: 92%;
+}
+
+.message.user {
+  margin-left: auto;
+  background: var(--chat-user);
+  border-top-right-radius: 0.25rem;
+}
+
+.message.assistant {
+  background: var(--chat-assistant);
+  border-top-left-radius: 0.25rem;
+}
+
+.message header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+}
+
+.message p {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.chat-input {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.chat-input textarea {
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 0.9rem 1.1rem;
+  font-size: 1rem;
+  font-family: inherit;
+  background: white;
+  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.chat-input textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.send-button,
+.ghost-button {
+  border: none;
+  border-radius: 0.85rem;
+  font-size: 0.95rem;
+  padding: 0.75rem 1.3rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.send-button {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 10px 20px -12px rgba(79, 70, 229, 0.8);
+}
+
+.send-button:active {
+  transform: translateY(1px);
+}
+
+.ghost-button {
+  background: transparent;
+  color: var(--accent);
+}
+
+.send-button:disabled,
+.ghost-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.insight-panel {
+  position: sticky;
+  top: 2rem;
+}
+
+.insight-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  padding: 1.25rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 16px 30px -32px rgba(65, 65, 110, 0.55);
+  backdrop-filter: blur(12px);
+}
+
+.insight-card h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.model-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.model-log-item {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.model-log-item header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+}
+
+.model-name {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.model-summary {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.model-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.model-meta dt {
+  font-size: 0.7rem;
+  color: var(--text-subtle);
+}
+
+.model-meta dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.preview-frame {
+  position: relative;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  min-height: 240px;
+  background: rgba(249, 250, 255, 0.7);
+}
+
+.preview-frame iframe {
+  width: 100%;
+  height: 320px;
+  border: none;
+  background: white;
+}
+
+.ppt-preview {
+  display: grid;
+  gap: 0.75rem;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.ppt-preview.carousel {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 1rem;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 0.5rem;
+}
+
+.ppt-preview.carousel .ppt-slide {
+  flex: 0 0 260px;
+  scroll-snap-align: start;
+}
+
+.ppt-slide {
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #ede9fe, #f5f3ff 70%);
+  padding: 1.5rem;
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  box-shadow: 0 18px 30px -28px rgba(79, 70, 229, 0.6);
+}
+
+.ppt-slide h3 {
+  margin: 0 0 0.85rem;
+  font-size: 1.05rem;
+}
+
+.ppt-slide ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.empty-state {
+  margin: 0;
+  text-align: center;
+  color: var(--text-subtle);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 1080px) {
+  .app-main {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 1.5rem 1rem 2.5rem;
+  }
+
+  .app-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .chat-input {
+    grid-template-columns: 1fr;
+  }
+
+  .send-button {
+    width: 100%;
+  }
+}

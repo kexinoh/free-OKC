@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OK Computer 创意工坊</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="logo-area">
+          <span class="logo">OK</span>
+          <div>
+            <h1>OK Computer 创意工坊</h1>
+            <p>以对话驱动的多模态内容生成体验</p>
+          </div>
+        </div>
+        <div class="status-pill" id="status-pill">待命中…</div>
+      </header>
+
+      <main class="app-main">
+        <section class="chat-panel">
+          <div class="chat-messages" id="chat-messages"></div>
+          <form class="chat-input" id="chat-form">
+            <label for="user-input" class="sr-only">用户输入</label>
+            <textarea
+              id="user-input"
+              rows="2"
+              placeholder="试着说：帮我创建一个个人简历网页"
+              required
+            ></textarea>
+            <button type="submit" class="send-button">发送</button>
+          </form>
+        </section>
+
+        <aside class="insight-panel">
+          <section class="insight-card">
+            <h2>当前模型调用</h2>
+            <ul class="model-log" id="model-log"></ul>
+            <p class="empty-state" id="model-log-empty">暂无调用记录</p>
+          </section>
+
+          <section class="insight-card">
+            <div class="preview-header">
+              <h2>网页预览</h2>
+              <button class="ghost-button" id="open-web-preview" type="button" disabled>
+                新窗口打开
+              </button>
+            </div>
+            <div class="preview-frame">
+              <iframe id="web-preview-frame" title="网页预览" sandbox></iframe>
+              <p class="empty-state" id="web-preview-empty">
+                生成内容后将在这里展示网页效果。
+              </p>
+            </div>
+          </section>
+
+          <section class="insight-card">
+            <div class="preview-header">
+              <h2>PPT 预览</h2>
+              <button class="ghost-button" id="toggle-ppt-mode" type="button" disabled>
+                幻灯模式
+              </button>
+            </div>
+            <div class="ppt-preview" id="ppt-preview"></div>
+            <p class="empty-state" id="ppt-preview-empty">
+              等待生成幻灯片内容…
+            </p>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <template id="model-log-item-template">
+      <li class="model-log-item">
+        <header>
+          <span class="model-name"></span>
+          <time class="model-time"></time>
+        </header>
+        <p class="model-summary"></p>
+        <dl class="model-meta">
+          <div>
+            <dt>输入 Token</dt>
+            <dd class="meta-input"></dd>
+          </div>
+          <div>
+            <dt>输出 Token</dt>
+            <dd class="meta-output"></dd>
+          </div>
+          <div>
+            <dt>耗时</dt>
+            <dd class="meta-latency"></dd>
+          </div>
+        </dl>
+      </li>
+    </template>
+
+    <template id="ppt-slide-template">
+      <section class="ppt-slide">
+        <h3></h3>
+        <ul></ul>
+      </section>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
