@@ -38,6 +38,24 @@ OKCVM is an open-source virtual machine container orchestration layer that repro
    ```
 6. **Configure optional media endpoints** when integrating real image, speech, or sound-effect providers by exporting the appropriate `OKCVM_*` environment variables or supplying the configuration programmatically.
 
+### Web Orchestrator & Configuration
+
+The repository now bundles a FastAPI service that exposes the virtual machine together with a web-based control panel.
+
+1. **Start the service**:
+   ```bash
+   python -m okcvm.server
+   ```
+2. **Open the UI** at [http://localhost:8000/ui/](http://localhost:8000/ui/). The landing page provides a chat-first workflow that mirrors the reference "OK Computer" experience.
+3. **Populate model endpoints** in the "模型配置" form. Supply model identifiers, base URLs, and API keys for:
+   - Chat completions
+   - Image generation
+   - Text-to-speech
+   - Sound-effect synthesis
+   - Automatic speech recognition
+4. **Save the configuration**. Credentials are stored in-process only; API keys are never echoed back to the browser, so re-enter them when making changes.
+5. **Start chatting**. Messages posted in the UI are relayed to the FastAPI backend, which returns curated previews and sample slide manifests.
+
 ---
 
 ## OKCVM 项目指南（中文）
@@ -77,3 +95,16 @@ OKCVM 是一个开源的虚拟机容器编排层，用于复现 Moonshot AI “O
    pytest
    ```
 6. **需要真实的多媒体能力时**，通过环境变量或代码配置 `OKCVM_*` 模型端点，例如图像生成、语音合成或音效服务。
+
+### Web 服务与配置面板
+
+仓库新增了一个基于 FastAPI 的本地服务，提供图形化的调度与配置界面。
+
+1. **启动服务**：
+   ```bash
+   python -m okcvm.server
+   ```
+2. **访问界面**：打开 [http://localhost:8000/ui/](http://localhost:8000/ui/)，即可进入与「OK Computer」交互一致的对话工作台。
+3. **填写模型端点**：在“模型配置”区域填写聊天、图像、语音合成、音效生成以及语音识别模型的 ID、Base URL 与 API Key。
+4. **保存配置**：配置信息仅保存在当前进程内，API Key 不会回传至前端，如需修改请重新输入。
+5. **开始对话**：在网页中发起对话后，后端会返回示例网页预览与幻灯片结构，演示多模态调度效果。
