@@ -28,6 +28,7 @@ Current date: 2025年10月02日
 Files uploaded by users will also be provided to you
 
 Available Tools JSON
+```
 {
   "functions": [
     {
@@ -128,6 +129,4 @@ Available Tools JSON
     }
   ]
 }
-    </div>
-</body>
-</html>
+```
