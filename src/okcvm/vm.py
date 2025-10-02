@@ -22,7 +22,7 @@ class VirtualMachine:
     def __init__(self, system_prompt: str, registry: ToolRegistry):
         self.system_prompt = system_prompt
         self.registry = registry
-        self.history: list[ToolInvocation] = []
+        self.history: "deque[ToolInvocation]" = deque(maxlen=1000)
 
     def call_tool(self, name: str, **kwargs) -> ToolResult:
         result = self.registry.call(name, **kwargs)
