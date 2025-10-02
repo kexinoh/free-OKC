@@ -371,7 +371,7 @@ function simulateModelResponse(message) {
     <p>集结 120 位设计师与开发者，48 小时共创多模态未来体验。</p>
     <div class="cta">
       <a href="#">立即报名</a>
-      <a href="#" style="background: transparent; border: 2px solid rgba(255,255,255,.7); color: white;">下载日程</a>
+      <a href="#" class="cta-secondary">下载日程</a>
     </div>
   </div>
   <footer>合作伙伴：Moonshot AI · Figma · Notion</footer>
