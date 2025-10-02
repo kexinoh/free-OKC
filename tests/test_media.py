@@ -50,7 +50,11 @@ def test_generate_image_and_audio():
     assert speech.success
     audio_bytes = _decode_audio(speech.data["base64"])
     assert audio_bytes[:4] == b"RIFF"
-    assert speech.data["provider"]["model"] == "stub-model"
+    assert speech.data["provider"] == {
+        "model": "stub-model",
+        "base_url": "https://example.invalid/v1",
+        "api_key_present": True,
+    }
 
     effect = registry.call("mshtools-generate_sound_effects", description="gentle rain", duration=1.0)
     assert effect.success
