@@ -2,4 +2,6 @@ __pycache__/
 *.pyc
 .mypy_cache/
 pytest_cache/
-.mypy_cache/
+deployments/
+src/okcvm.egg-info/
+.pytest_cache/
