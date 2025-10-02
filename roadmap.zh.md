@@ -18,7 +18,7 @@ VirtualMachine 负责调度工具调用、维护最近历史，并向宿主应�
 我们实现了 OK Computer 规范中的待办、文件、Shell 与 IPython 执行工具，满足日常协作场景。
 - 待办工具以 JSON 形式持久化任务，支持全量重写与追加写入，贴近上游行为。【F:src/okcvm/tools/todo.py†L1-L88】
 - 文件工具强制使用绝对路径，支持二进制安全读写，并提供带保护的编辑操作，保持良好的人机体验。【F:src/okcvm/tools/files.py†L1-L93】
-- Shell 与 IPython 工具支持命令输出捕获、环境重置以及 `!` 前缀的行内 Shell 指令，便于快速实验。【F:src/okcvm/tools/shell.py†L1-L32】【F:src/okcvm/tools/ipython.py†L1-L60】
+- Shell 与 IPython 工具支持命令输出捕获、环境重置以及 `` `!` `` 前缀的行内 Shell 指令，便于快速实验。【F:src/okcvm/tools/shell.py†L1-L32】【F:src/okcvm/tools/ipython.py†L1-L60】
 
 ### Web、媒体与部署工具
 项目内置轻量的浏览模拟、搜索/媒体合成、部署与幻灯生成工具，与 OKC 规范保持一致。
