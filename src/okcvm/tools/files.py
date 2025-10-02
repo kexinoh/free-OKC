@@ -38,11 +38,10 @@ class ReadFileTool(Tool):
             output = f"data:{mime};base64,{data}"
             return ToolResult(success=True, data={"mime": mime, "base64": data}, output=output)
 
-        text = path.read_text(encoding="utf-8", errors="replace")
-        if offset:
-            text = "\n".join(text.splitlines()[offset:])
-        if limit_int is not None:
-            text = "\n".join(text.splitlines()[:limit_int])
+        with path.open("r", encoding="utf-8", errors="replace") as f:
+            import itertools
+            sliced_lines = itertools.islice(f, offset, (offset + limit_int) if limit_int is not None else None)
+            text = "".join(sliced_lines)
         return ToolResult(success=True, data=text, output=text)
 
 
