@@ -1,0 +1,16 @@
+[project]
+name = "okcvm"
+version = "0.1.0"
+description = "Open-source virtual machine container calling scheme inspired by Kimi's tool ecosystem"
+readme = "README_PROJECT.md"
+authors = [{name = "OK Computer"}]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
