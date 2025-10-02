@@ -4,7 +4,7 @@
 
 ### 系统提示与工具清单打包
 我们内置上游的系统提示词和工具清单，并提供加载辅助函数，方便客户端零配置启动 OKCVM。
-- `okcvm.spec` 提供数据类和加载器，读取打包在项目中的 `system_prompt.md` 与 `tools.json`，并返回结构化的工具规范供下游使用。【F:src/okcvm/spec.py†L1-L57】
+- `okcvm.spec` 提供数据类和加载器，读取打包在项目中的 `system_prompt.md` 与 `tools.json`，并返回结构化的工具规范供下游使用。([`src/okcvm/spec.py#L1-L57`](./src/okcvm/spec.py#L1-L57))
 
 ### 默认绑定的工具注册表
 ToolRegistry 会自动把清单里的每个工具绑定到具体实现或占位桩对象，确保与规范保持一致。
