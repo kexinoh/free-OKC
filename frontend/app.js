@@ -123,7 +123,7 @@ openWebPreviewButton.addEventListener('click', () => {
   const blob = new Blob([currentWebPreview.html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
 function simulateModelResponse(message) {
