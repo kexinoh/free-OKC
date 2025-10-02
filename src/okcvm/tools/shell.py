@@ -16,9 +16,9 @@ class ShellTool(Tool):
         if not command:
             raise ValueError("'command' argument is required")
         timeout: Optional[float] = kwargs.get("timeout")
+        import shlex
         completed = subprocess.run(
-            command,
-            shell=True,
+            shlex.split(command),
             capture_output=True,
             text=True,
             timeout=timeout,
