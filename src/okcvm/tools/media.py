@@ -161,8 +161,9 @@ def _require_media_service(service: str, friendly: str) -> ModelEndpointConfig:
     if config is None:
         prefix = service.upper()
         raise ToolError(
-            f"{friendly} requires configuration. Set okcvm.config.configure(media=MediaConfig({service}=ModelEndpointConfig(...))) "
-            f"or provide the environment variables OKCVM_{prefix}_MODEL, OKCVM_{prefix}_BASE_URL and optionally OKCVM_{prefix}_API_KEY."
+            f"{friendly} requires configuration. Either configure programmatically via "
+            f"`okcvm.config.configure(media=MediaConfig({service}=...))` or set the "
+            f"`OKCVM_{prefix}_MODEL` and `OKCVM_{prefix}_BASE_URL` environment variables."
         )
     return config
 
