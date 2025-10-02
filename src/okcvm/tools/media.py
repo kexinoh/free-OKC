@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .base import Tool, ToolError, ToolResult
+from ..config import get_config, ModelEndpointConfig
 
 
 def _hash_colour(prompt: str) -> tuple[int, int, int]:
@@ -155,6 +156,18 @@ VOICES: Dict[str, Voice] = {
 }
 
 
+def _require_media_service(service: str, friendly: str) -> ModelEndpointConfig:
+    config = get_config().media.for_service(service)
+    if config is None:
+        prefix = service.upper()
+        raise ToolError(
+            f"{friendly} requires configuration. Either configure programmatically via "
+            f"`okcvm.config.configure(media=MediaConfig({service}=...))` or set the "
+            f"`OKCVM_{prefix}_MODEL` and `OKCVM_{prefix}_BASE_URL` environment variables."
+        )
+    return config
+
+
 class GenerateImageTool(Tool):
     name = "mshtools-generate_image"
 
@@ -162,12 +175,17 @@ class GenerateImageTool(Tool):
         prompt = kwargs.get("prompt") or kwargs.get("description")
         if not prompt:
             raise ToolError("'prompt' is required")
+        endpoint = _require_media_service("image", "Image generation")
         data = _image_from_prompt(str(prompt))
         encoded = base64.b64encode(data).decode("ascii")
         return ToolResult(
             success=True,
             output="Generated synthetic image",
-            data={"base64": encoded, "mime": "image/png"},
+            data={
+                "base64": encoded,
+                "mime": "image/png",
+                "provider": endpoint.describe(),
+            },
         )
 
 
@@ -189,6 +207,7 @@ class GenerateSpeechTool(Tool):
             raise ToolError("'text' is required")
         if not voice_id:
             raise ToolError("'voice_id' is required")
+        endpoint = _require_media_service("speech", "Speech synthesis")
         voice = VOICES.get(str(voice_id))
         if not voice:
             raise ToolError(f"Unknown voice_id '{voice_id}'")
@@ -197,7 +216,12 @@ class GenerateSpeechTool(Tool):
         return ToolResult(
             success=True,
             output="Generated speech audio",
-            data={"base64": encoded, "mime": "audio/wav", "voice": voice.serialize()},
+            data={
+                "base64": encoded,
+                "mime": "audio/wav",
+                "voice": voice.serialize(),
+                "provider": endpoint.describe(),
+            },
         )
 
 
@@ -211,12 +235,18 @@ class GenerateSoundEffectsTool(Tool):
         duration = float(kwargs.get("duration", 3.0))
         if not 0.5 <= duration <= 22.0:
             raise ToolError("duration must be between 0.5 and 22 seconds")
+        endpoint = _require_media_service("sound_effects", "Sound effect generation")
         audio = _synth_effect(str(description), duration)
         encoded = base64.b64encode(audio).decode("ascii")
         return ToolResult(
             success=True,
             output="Generated synthetic sound effect",
-            data={"base64": encoded, "mime": "audio/wav", "duration": duration},
+            data={
+                "base64": encoded,
+                "mime": "audio/wav",
+                "duration": duration,
+                "provider": endpoint.describe(),
+            },
         )
 
 

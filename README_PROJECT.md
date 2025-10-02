@@ -33,6 +33,45 @@ print(result.output)
 pytest
 ```
 
+## Configuring media generation
+
+The reference media tools (image generation, speech synthesis, sound effect
+generation and future ASR helpers) assume you have access to a model endpoint.
+Provide the connection details by either setting environment variables or by
+configuring the library programmatically:
+
+```bash
+export OKCVM_IMAGE_MODEL=my-image-model
+export OKCVM_IMAGE_BASE_URL=https://api.example.com/v1/images
+export OKCVM_IMAGE_API_KEY=sk-example
+```
+
+```python
+from okcvm.config import MediaConfig, ModelEndpointConfig, configure
+
+configure(
+    media=MediaConfig(
+        image=ModelEndpointConfig(
+            model="my-image-model",
+            base_url="https://api.example.com/v1/images",
+            api_key="sk-example",
+        ),
+        speech=ModelEndpointConfig(
+            model="my-tts-model",
+            base_url="https://api.example.com/v1/speech",
+        ),
+        sound_effects=ModelEndpointConfig(
+            model="my-sfx-model",
+            base_url="https://api.example.com/v1/audio",
+        ),
+    ),
+)
+```
+
+The built-in implementations still return deterministic mock data for
+repeatable tests, but the configuration metadata is now available for projects
+that want to proxy requests to real providers.
+
 ## License
 
 MIT
