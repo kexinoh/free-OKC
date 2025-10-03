@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from . import constants, spec
 from .config import get_config
+from .logging_utils import get_logger
 from .registry import ToolRegistry
 from .vm import VirtualMachine
+
+
+logger = get_logger(__name__)
+
 
 class SessionState:
     """Manages the state and logic for a user session."""
 
     def __init__(self) -> None:
+        logger.debug("Initialising SessionState and tool registry")
         self.registry = ToolRegistry.from_default_spec()
         self.vm = VirtualMachine(
             system_prompt=spec.load_system_prompt(),
@@ -43,11 +48,12 @@ class SessionState:
     def respond(self, message: str) -> Dict[str, object]:
         
         # 调用 VM 来获取真实的 LLM 响应
+        logger.info("Session respond invoked with: %s", message[:120])
         vm_result = self.vm.execute(message)
-        
+
         # 从 VM 的结果中提取信息
         reply = vm_result.get("reply", "An error occurred.")
-        
+
         # [TODO] 这里我们需要一种机制来从工具调用结果中提取网页和PPT内容
         web_preview = None
         ppt_slides = []
@@ -58,7 +64,14 @@ class SessionState:
             # 假设最后一个工具调用生成了主要内容
             last_call = tool_calls[-1]
             summary = f"Executed tool: {last_call['tool_name']}"
-            output = last_call.get("tool_output", {})
+            tool_output = last_call.get("tool_output", {})
+            output_keys = list(tool_output.keys()) if isinstance(tool_output, dict) else None
+            logger.debug(
+                "Tool execution summary tool=%s keys=%s",
+                last_call.get("tool_name"),
+                output_keys,
+            )
+            output = tool_output
             if isinstance(output, dict):
                 if "html" in output:
                     web_preview = {"html": output["html"]}
@@ -69,7 +82,14 @@ class SessionState:
         cfg = get_config()
         model_name = cfg.chat.model if cfg.chat else "Unconfigured chat model"
         meta = self._meta(model_name, summary)
-        
+
+        logger.info(
+            "Session response ready (model=%s history=%s tool_calls=%s)",
+            model_name,
+            len(self.vm.history),
+            len(tool_calls),
+        )
+
         return {
             "reply": reply,
             "meta": meta,
@@ -84,10 +104,12 @@ class SessionState:
         It simply initializes the state.
         """
         self.reset()
-        
+
         # 引导信息仍然可以是静态的
         boot_reply = constants.WELCOME_MESSAGE
         self.vm.history.append({"role": "assistant", "content": boot_reply})
+
+        logger.info("Session booted (history=%s)", len(self.vm.history))
 
         meta = self._meta("OKC-Orchestrator", "Workbench Initialized")
         return {
