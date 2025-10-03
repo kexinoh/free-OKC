@@ -46,6 +46,21 @@ metadata for the UI to render richer previews.
 - `/api/session/*` and `/api/chat` endpoints expose boot, info, and chat
   workflows, trimming payloads and surfacing validation feedback. ([`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
 
+### Session virtual workspace isolation
+Every conversation is backed by an ephemeral sandbox so file tools operate in a
+predictable "virtual space" that mirrors the original OK Computer behaviour.
+- `okcvm.workspace.WorkspaceManager` mints randomised mount points, rewrites the
+  legacy system prompt to reference them, and resolves agent-supplied paths into
+  per-session storage on disk. ([`src/okcvm/workspace.py`](./src/okcvm/workspace.py))
+- The workspace manager is injected into the default tool registry, ensuring
+  helpers like `mshtools-write_file` automatically stay inside the session
+  sandbox. ([`src/okcvm/session.py`](./src/okcvm/session.py))
+- Regression tests assert that both absolute and relative paths are safely
+  anchored inside the workspace root. ([`tests/test_workspace.py`](./tests/test_workspace.py))
+- Documentation now spells out the virtual mount contract so operators know how
+  paths such as `/mnt/okcvm-xxxx/output/` appear in prompts and responses.
+  ([`README.md`](./README.md), [`README_ZH.md`](./README_ZH.md))
+
 ### Frontend control panel enhancements
 The bundled UI matured into a productivity dashboard with persistent
 conversations, configuration drawer, and multi-modal previews.
