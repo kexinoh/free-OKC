@@ -286,6 +286,12 @@ body.no-scroll { overflow: hidden; }
   overflow-y: auto;
 }
 
+.conversation-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .conversation-item {
   width: 100%;
   border: 1px solid transparent;
@@ -300,6 +306,7 @@ body.no-scroll { overflow: hidden; }
   font-size: 0.9rem;
   cursor: pointer;
   transition: all var(--transition-fast);
+  flex: 1;
 }
 
 .conversation-item:hover,
@@ -326,6 +333,30 @@ body.no-scroll { overflow: hidden; }
 .conversation-meta {
   font-size: 0.75rem;
   color: var(--text-tertiary);
+}
+
+.conversation-delete {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  padding: 0.35rem;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.conversation-delete:hover,
+.conversation-delete:focus-visible {
+  color: var(--text-primary);
+  background: rgba(99, 102, 241, 0.12);
+  outline: none;
+}
+
+.conversation-delete:focus-visible {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.45);
 }
 
 .app-main {

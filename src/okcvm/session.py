@@ -9,7 +9,7 @@ from .config import get_config
 from .logging_utils import get_logger
 from .registry import ToolRegistry
 from .vm import VirtualMachine
-from .workspace import WorkspaceManager
+from .workspace import WorkspaceError, WorkspaceManager
 
 
 logger = get_logger(__name__)
@@ -35,7 +35,29 @@ class SessionState:
             registry=self.registry,
         )
 
+    def _cleanup_workspace(self) -> Dict[str, object] | None:
+        workspace = getattr(self, "workspace", None)
+        if workspace is None:
+            return None
+
+        paths = workspace.paths
+        details: Dict[str, object] = {
+            "mount": str(paths.mount),
+            "output": str(paths.output),
+            "internal_root": str(paths.internal_root),
+            "internal_output": str(paths.internal_output),
+        }
+
+        try:
+            details["removed"] = workspace.cleanup()
+        except WorkspaceError as exc:  # pragma: no cover - defensive guard
+            details["removed"] = False
+            details["error"] = str(exc)
+            logger.exception("Workspace cleanup failed")
+        return details
+
     def reset(self) -> None:
+        self._cleanup_workspace()
         self._initialise_vm()
 
     def _meta(self, model: str, summary: str) -> Dict[str, str]:
@@ -124,6 +146,21 @@ class SessionState:
                 {"title": "灵感孵化室能力", "bullets": ["网页 / PPT 一体生成", "模型调用透明可追踪", "可视化实时预览"]},
                 {"title": "示例需求", "bullets": ["品牌落地页", "产品发布会演示", "活动招募物料"]},
             ],
+            "vm": self.vm.describe(),
+        }
+
+    def delete_history(self) -> Dict[str, object]:
+        """Clear the session history and remove any associated workspace."""
+
+        logger.info("Session history deletion requested")
+        history_length = len(self.vm.history)
+        workspace_details = self._cleanup_workspace() or {"removed": False}
+        self._initialise_vm()
+
+        return {
+            "history_cleared": True,
+            "cleared_messages": history_length,
+            "workspace": workspace_details,
             "vm": self.vm.describe(),
         }
 

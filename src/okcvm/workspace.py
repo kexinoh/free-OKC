@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import secrets
 import tempfile
+import shutil
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -54,6 +55,7 @@ class WorkspaceManager:
             internal_root=internal_root,
             internal_output=internal_output,
         )
+        self._cleaned = False
 
     @property
     def paths(self) -> WorkspacePaths:
@@ -96,4 +98,27 @@ class WorkspaceManager:
         prompt = prompt.replace(LEGACY_OUTPUT_PATH, f"{output_str}/")
         prompt = prompt.replace(LEGACY_MOUNT_PATH, f"{mount_str}/")
         return prompt
+
+    def cleanup(self) -> bool:
+        """Remove the workspace directory from disk.
+
+        Returns ``True`` if the directory existed and was removed, otherwise
+        ``False``. Subsequent calls are no-ops.
+        """
+
+        if self._cleaned:
+            return False
+
+        internal_root = self._paths.internal_root
+        if not internal_root.exists():
+            self._cleaned = True
+            return False
+
+        try:
+            shutil.rmtree(internal_root)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            raise WorkspaceError(f"Failed to remove workspace: {exc}") from exc
+
+        self._cleaned = True
+        return True
 

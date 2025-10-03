@@ -143,3 +143,23 @@ def test_session_endpoints_use_session_state(monkeypatch, client):
     info = client.get("/api/session/info")
     assert info.status_code == 200
     assert "system_prompt" in info.json()
+
+
+def test_delete_session_history_removes_workspace(client):
+    boot = client.get("/api/session/boot")
+    assert boot.status_code == 200
+
+    previous_root = main.state.workspace.paths.internal_root
+    assert previous_root.exists()
+
+    response = client.delete("/api/session/history")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["history_cleared"] is True
+    assert payload["workspace"]["removed"] is True
+    assert payload["cleared_messages"] >= 1
+
+    assert not previous_root.exists()
+    assert main.state.workspace.paths.internal_root != previous_root
+    assert len(main.state.vm.history) == 0
