@@ -138,6 +138,7 @@ def test_deploy_website_without_starting_server(tmp_path):
     # 验证没有服务器信息
     assert manifest_data["server_info"] is None
     assert manifest_data.get("server_preview_url") is None
+    assert manifest_data["preview_url"].endswith("&path=index.html")
     # 验证 PID 不存在（以防万一）
     assert not psutil.pid_exists(manifest_data.get("server_info", {}).get("pid", -1))
 
