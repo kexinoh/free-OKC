@@ -21,6 +21,7 @@ class WorkspacePaths:
     output: PurePosixPath
     internal_root: Path
     internal_output: Path
+    session_id: str
 
 
 class WorkspaceManager:
@@ -50,11 +51,19 @@ class WorkspaceManager:
             output=mount_path / "output",
             internal_root=internal_root,
             internal_output=internal_output,
+            session_id=mount_path.name,
         )
+        self._session_id = mount_path.name
 
     @property
     def paths(self) -> WorkspacePaths:
         return self._paths
+
+    @property
+    def session_id(self) -> str:
+        """Return the unique session identifier tied to this workspace."""
+
+        return self._session_id
 
     def resolve(self, raw_path: str) -> Path:
         """Map a user-provided path to the internal workspace location."""
