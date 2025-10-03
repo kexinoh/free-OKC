@@ -1,73 +1,100 @@
-"""High-level virtual machine facade for interacting with tools."""
-
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import dataclass
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Dict, List
 
+from langchain_core.messages import AIMessage, HumanMessage
+
+from . import spec
+from .llm import create_llm_chain # 导入我们新的 chain 创建函数
 from .registry import ToolRegistry
-from .tools.base import ToolResult
-
-
-@dataclass
-class ToolInvocation:
-    name: str
-    arguments: Dict[str, Any]
-    result: ToolResult
 
 
 class VirtualMachine:
-    """Facade bundling the system prompt with a tool registry."""
+    """Orchestrates LLM interactions and tool usage using LangChain."""
 
-    def __init__(self, system_prompt: str, registry: ToolRegistry):
+    def __init__(
+        self,
+        system_prompt: str,
+        registry: ToolRegistry,
+    ) -> None:
         self.system_prompt = system_prompt
         self.registry = registry
-        self.history: Deque[ToolInvocation] = deque(maxlen=1000)
+        # 注意：history现在需要遵循LangChain的BaseMessage格式
+        self.history: List[Dict[str, Any]] = []
+        self._chain = None # 延迟初始化 chain
+        print("VirtualMachine initialized.")
 
-    def call_tool(self, name: str, **kwargs) -> ToolResult:
-        result = self.registry.call(name, **kwargs)
-        self.history.append(ToolInvocation(name=name, arguments=kwargs, result=result))
-        return result
-
-    def describe(self) -> Dict[str, Any]:
-        return {
-            "system_prompt": self.system_prompt,
-            "tools": self.registry.described_tools(),
-        }
+    @property
+    def chain(self):
+        """Lazy-loads the LangChain agent executor."""
+        if self._chain is None:
+            print("Creating LangChain agent executor for the first time...")
+            self._chain = create_llm_chain(self.registry)
+            print("LangChain agent executor created successfully.")
+        return self._chain
 
     def reset_history(self) -> None:
+        """Clears the conversation history."""
         self.history.clear()
+        print("VM history has been reset.")
 
-    def get_history(self, limit: Optional[int] = None) -> List[ToolInvocation]:
-        """Return a copy of the invocation history."""
+    def execute(self, utterance: str) -> Dict[str, Any]:
+        """
+        Processes a user utterance using the LangChain agent.
+        Handles LLM calls and tool executions.
+        """
+        print(f"VM executing with utterance: '{utterance}'")
+        
+        # 将历史转换为 LangChain 格式
+        langchain_history = [
+            HumanMessage(content=msg["content"]) if msg["role"] == "user"
+            else AIMessage(content=msg["content"])
+            for msg in self.history
+        ]
+        
+        # 调用 LangChain Agent Executor
+        try:
+            response = self.chain.invoke({
+                "input": utterance,
+                "history": langchain_history
+            })
+        except Exception as e:
+            # 捕获并返回错误信息，防止服务崩溃
+            print(f"Error invoking LangChain agent: {e}")
+            return {
+                "reply": f"An error occurred: {e}",
+                "tool_calls": [],
+            }
+        
+        # 从 Agent 的响应中提取最终答复
+        final_reply = response.get("output", "I'm not sure how to respond to that.")
+        
+        # 更新我们的内部历史记录
+        self.history.append({"role": "user", "content": utterance})
+        self.history.append({"role": "assistant", "content": final_reply})
+        
+        # 从LangChain的中间步骤提取工具调用信息（可选，但对于调试很有用）
+        tool_calls_info = []
+        if "intermediate_steps" in response:
+            for step in response["intermediate_steps"]:
+                action, observation = step
+                tool_calls_info.append({
+                    "tool_name": action.tool,
+                    "tool_input": action.tool_input,
+                    "tool_output": observation
+                })
 
-        items = list(self.history)
-        if limit is not None:
-            return items[-limit:]
-        return items
+        return {
+            "reply": final_reply,
+            "tool_calls": tool_calls_info,
+        }
 
-    def describe_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Return a JSON-serialisable description of recent tool calls."""
+    def describe(self) -> Dict[str, object]:
+        return {
+            "system_prompt": self.system_prompt,
+            "tools": [tool.name for tool in self.registry.get_langchain_tools()],
+            "history_length": len(self.history),
+        }
 
-        serialised: List[Dict[str, Any]] = []
-        for invocation in self.get_history(limit):
-            serialised.append(
-                {
-                    "name": invocation.name,
-                    "arguments": invocation.arguments,
-                    "result": {
-                        "success": invocation.result.success,
-                        "output": invocation.result.output,
-                        "error": invocation.result.error,
-                    },
-                }
-            )
-        return serialised
-
-    def last_result(self) -> Optional[ToolResult]:
-        """Return the most recent tool result if present."""
-
-        if not self.history:
-            return None
-        return self.history[-1].result
+    def describe_history(self, limit: int = 25) -> List[Dict[str, object]]:
+        return self.history[-limit:]
