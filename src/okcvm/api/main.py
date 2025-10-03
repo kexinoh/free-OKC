@@ -169,6 +169,16 @@ def create_app() -> FastAPI:
         )
         return response
 
+    @app.delete("/api/session/history")
+    async def delete_session_history() -> Dict[str, object]:
+        logger.info("Session history deletion endpoint called")
+        result = state.delete_history()
+        logger.debug(
+            "Session history cleared (workspace_removed=%s)",
+            result.get("workspace", {}).get("removed"),
+        )
+        return result
+
     return app
 
 

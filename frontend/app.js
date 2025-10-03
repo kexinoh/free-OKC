@@ -325,6 +325,8 @@ function renderConversationList() {
 
   conversations.forEach((conversation) => {
     const item = document.createElement('li');
+    item.className = 'conversation-entry';
+
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'conversation-item';
@@ -343,6 +345,23 @@ function renderConversationList() {
 
     button.append(title, meta);
     item.appendChild(button);
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'conversation-delete';
+    deleteButton.dataset.action = 'delete';
+    deleteButton.dataset.conversationId = conversation.id;
+    deleteButton.setAttribute(
+      'aria-label',
+      `删除会话 ${conversation.title ?? ''}`.trim() || '删除会话',
+    );
+
+    const deleteIcon = document.createElement('span');
+    deleteIcon.setAttribute('aria-hidden', 'true');
+    deleteIcon.textContent = '🗑️';
+    deleteButton.appendChild(deleteIcon);
+
+    item.appendChild(deleteButton);
     conversationList.appendChild(item);
   });
 }
@@ -487,6 +506,46 @@ function startNewConversation() {
   bootSession();
 }
 
+async function deleteConversation(conversationId) {
+  if (!conversationId) return;
+  const index = conversations.findIndex((conversation) => conversation.id === conversationId);
+  if (index === -1) return;
+
+  const [removed] = conversations.splice(index, 1);
+  const wasCurrent = removed.id === currentSessionId;
+
+  if (wasCurrent) {
+    currentSessionId = null;
+    setStatus('清理会话…', true);
+  }
+
+  saveConversationsToStorage();
+  renderConversationList();
+
+  if (!wasCurrent) {
+    return;
+  }
+
+  resetSessionOutputs();
+  renderConversation(null);
+
+  try {
+    await deleteSessionHistory();
+  } catch (error) {
+    console.error(error);
+    conversations.splice(index, 0, removed);
+    selectConversation(removed.id);
+    addAndRenderMessage('assistant', `清理会话失败：${error.message || '未知错误'}`);
+    return;
+  }
+
+  const conversation = createConversation();
+  renderConversation(conversation);
+  closeHistoryOnMobile();
+  setStatus('连接工作台…', true);
+  bootSession();
+}
+
 if (historyToggle) {
   historyToggle.addEventListener('click', () => {
     const isOpen = toggleHistoryPanel();
@@ -498,9 +557,24 @@ if (historyToggle) {
 
 if (conversationList) {
   conversationList.addEventListener('click', (event) => {
-    const target = event.target instanceof HTMLElement ? event.target.closest('.conversation-item') : null;
+    const target = event.target instanceof HTMLElement ? event.target : null;
     if (!target) return;
-    const { conversationId } = target.dataset;
+
+    const deleteButton = target.closest('button[data-action="delete"]');
+    if (deleteButton instanceof HTMLElement && conversationList.contains(deleteButton)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const { conversationId } = deleteButton.dataset;
+      if (conversationId) {
+        deleteConversation(conversationId).catch((error) => console.error(error));
+      }
+      return;
+    }
+
+    const conversationButton = target.closest('.conversation-item');
+    if (!conversationButton || !conversationList.contains(conversationButton)) return;
+
+    const { conversationId } = conversationButton.dataset;
     if (conversationId) {
       selectConversation(conversationId);
     }
@@ -805,6 +879,10 @@ async function bootSession() {
   } finally {
     setStatus('待命中…');
   }
+}
+
+async function deleteSessionHistory() {
+  return fetchJson('/api/session/history', { method: 'DELETE' });
 }
 
 async function sendChat(message) {
