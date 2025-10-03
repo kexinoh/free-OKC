@@ -37,10 +37,8 @@ def create_llm_chain(registry: ToolRegistry):
     # 这使得LLM知道哪些工具是可用的，并以它期望的格式输出
     tools = []
     for tool in registry.get_langchain_tools():
-        if hasattr(type(tool), "__len__"):
-            tools.append(tool)
-        else:
-            tools.append(_LenFriendlyToolProxy(tool))
+        _ensure_len_method(tool)
+        tools.append(tool)
     llm_with_tools = llm.bind_tools(tools)
 
     # 4. 创建提示词模板 (Prompt Template)
@@ -64,42 +62,22 @@ def create_llm_chain(registry: ToolRegistry):
     return agent_executor
 
 
-class _LenFriendlyToolProxy:
-    """Proxy tool that adds ``__len__`` for tests without altering behaviour."""
+def _ensure_len_method(tool: Any) -> None:
+    """Ensure ``tool`` provides a ``__len__`` implementation expected by LangChain."""
 
-    def __init__(self, tool: Any) -> None:
-        self._tool = tool
+    tool_cls = type(tool)
+    if "__len__" in getattr(tool_cls, "__dict__", {}):
+        return
 
-    def __getattr__(self, item: str) -> Any:
-        if item == "__name__":
-            if hasattr(self._tool, "__name__"):
-                return getattr(self._tool, "__name__")
-            if hasattr(self._tool, "name"):
-                return getattr(self._tool, "name")
-            return type(self._tool).__name__
-        if item == "__qualname__":
-            if hasattr(self._tool, "__qualname__"):
-                return getattr(self._tool, "__qualname__")
-            name = getattr(self, "__name__")
-            module = getattr(self._tool, "__module__", None)
-            if module:
-                return f"{module}.{name}"
-            return name
-        return getattr(self._tool, item)
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        if callable(self._tool):
-            return self._tool(*args, **kwargs)
-        raise TypeError(f"Wrapped tool {self._tool!r} is not callable")
-
-    def __len__(self) -> int:
-        args = getattr(self._tool, "args", None)
+    def _len_impl(self: Any) -> int:
+        args = getattr(self, "args", None)
         if args is not None:
             try:
                 return len(args)  # type: ignore[arg-type]
             except TypeError:
                 pass
-        schema = getattr(self._tool, "args_schema", None)
+
+        schema = getattr(self, "args_schema", None)
         if schema is not None:
             fields = getattr(schema, "__fields__", None) or getattr(schema, "model_fields", None)
             if fields is not None:
@@ -107,10 +85,10 @@ class _LenFriendlyToolProxy:
                     return len(fields)
                 except TypeError:
                     pass
+
         # LangChain expects ``len(tool)`` to be >= 2 when constructing default prompts.
         # Falling back to 2 keeps compatibility with existing tests and agent logic
         # while providing a deterministic value when the schema is unavailable.
         return 2
 
-    def __repr__(self) -> str:
-        return repr(self._tool)
+    setattr(tool_cls, "__len__", _len_impl)
