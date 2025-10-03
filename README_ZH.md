@@ -2,10 +2,6 @@
 
 <a id="top"></a>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/moonshot-ai/ok-computer-vm/main/frontend/assets/okcvm-logo-dark.svg">
-</picture>
-
 # OK Computer Virtual Machine (OKCVM)
 
 ### ✨ OK Computer in a Box: Your Self-Hosted Agent Workflow Layer ✨
