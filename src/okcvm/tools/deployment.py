@@ -94,7 +94,12 @@ class DeployWebsiteTool(Tool):
     name = "mshtools-deploy_website"
 
     def call(self, **kwargs) -> ToolResult:  # type: ignore[override]
-        directory = kwargs.get("directory") or kwargs.get("path")
+        directory = (
+            kwargs.get("directory")
+            or kwargs.get("path")
+            or kwargs.get("local_dir")
+            or kwargs.get("source_dir")
+        )
         name = kwargs.get("site_name") or kwargs.get("name")
         force = bool(kwargs.get("force", False))
         # 新增参数：控制是否自动启动服务器，默认为 True
