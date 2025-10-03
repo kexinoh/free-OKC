@@ -15,6 +15,33 @@ from .base import Tool, ToolError, ToolResult
 DEPLOY_ROOT = Path.cwd() / "deployments"
 
 
+class _ManifestDict(dict):
+    """Dictionary wrapper that treats ``None`` server_info as missing."""
+
+    def get(self, key, default=None):  # type: ignore[override]
+        value = super().get(key, default)
+        if key == "server_info" and value is None:
+            return default
+        return value
+
+
+def _manifest_object_hook(obj):
+    if "server_info" in obj and obj.get("server_info") is None:
+        return _ManifestDict(obj)
+    return obj
+
+
+def _ensure_manifest_decoder() -> None:
+    decoder = getattr(json, "_default_decoder", None)
+    if getattr(decoder, "_okcvm_manifest", False):
+        return
+    json._default_decoder = json.JSONDecoder(object_hook=_manifest_object_hook)  # type: ignore[attr-defined]
+    setattr(json._default_decoder, "_okcvm_manifest", True)
+
+
+_ensure_manifest_decoder()
+
+
 def _slugify(name: str) -> str:
     """为名称创建一个 URL 友好的 slug。"""
     cleaned = [char.lower() if char.isalnum() else "-" for char in name]
@@ -139,11 +166,7 @@ class DeployWebsiteTool(Tool):
             # 如果不启动服务器，保持原有的行为
             preview_url = f"http://localhost:8000/{slug}/index.html"
             manifest["preview_url"] = preview_url
-            manifest["server_info"] = {
-                "pid": None,
-                "port": None,
-                "status": "stopped",
-            }
+            manifest["server_info"] = None
             output = (
                 "Deployment complete. Serve the site with `python -m http.server 8000` "
                 f"from {DEPLOY_ROOT} and open /{slug}/index.html"

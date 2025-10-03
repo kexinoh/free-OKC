@@ -9,7 +9,7 @@ from .config import get_config
 from .logging_utils import get_logger
 from .registry import ToolRegistry
 from .vm import VirtualMachine
-from .workspace import WorkspaceError, WorkspaceManager
+from .workspace import WorkspaceError, WorkspaceManager, WorkspaceStateError
 
 
 logger = get_logger(__name__)
@@ -34,6 +34,20 @@ class SessionState:
             system_prompt=system_prompt,
             registry=self.registry,
         )
+
+    def _workspace_state_summary(self, *, latest: Optional[str] = None, limit: int = 10) -> Dict[str, object]:
+        state = getattr(self.workspace, "state", None)
+        enabled = bool(getattr(state, "enabled", False))
+        if not enabled:
+            return {"enabled": False, "snapshots": []}
+
+        snapshots = state.list_snapshots(limit=limit) if state else []
+        summary: Dict[str, object] = {"enabled": True, "snapshots": snapshots}
+        if latest:
+            summary["latest_snapshot"] = latest
+        elif snapshots:
+            summary["latest_snapshot"] = snapshots[0]["id"]
+        return summary
 
     def _cleanup_workspace(self) -> Dict[str, object] | None:
         workspace = getattr(self, "workspace", None)
@@ -116,12 +130,22 @@ class SessionState:
             len(tool_calls),
         )
 
+        snapshot_id: Optional[str] = None
+        state = getattr(self.workspace, "state", None)
+        if getattr(state, "enabled", False):
+            label_seed = message.strip().splitlines()[0] if message.strip() else "message"
+            label = f"After: {label_seed[:60]}"
+            snapshot_id = state.snapshot(label)
+
+        workspace_state = self._workspace_state_summary(latest=snapshot_id)
+
         return {
             "reply": reply,
             "meta": meta,
             "web_preview": web_preview,
             "ppt_slides": ppt_slides,
             "vm_history": self.vm.describe_history(limit=25),
+            "workspace_state": workspace_state,
         }
 
     def boot(self) -> Dict[str, object]:
@@ -138,6 +162,7 @@ class SessionState:
         logger.info("Session booted (history=%s)", len(self.vm.history))
 
         meta = self._meta("OKC-Orchestrator", "Workbench Initialized")
+        workspace_state = self._workspace_state_summary()
         return {
             "reply": boot_reply,
             "meta": meta,
@@ -147,6 +172,7 @@ class SessionState:
                 {"title": "示例需求", "bullets": ["品牌落地页", "产品发布会演示", "活动招募物料"]},
             ],
             "vm": self.vm.describe(),
+            "workspace_state": workspace_state,
         }
 
     def delete_history(self) -> Dict[str, object]:
@@ -163,5 +189,24 @@ class SessionState:
             "workspace": workspace_details,
             "vm": self.vm.describe(),
         }
+
+    def snapshot_workspace(self, label: Optional[str] = None, *, limit: int = 20) -> Dict[str, object]:
+        state = getattr(self.workspace, "state", None)
+        if not getattr(state, "enabled", False):
+            return {"enabled": False, "snapshots": []}
+
+        snapshot_id = state.snapshot(label)
+        return self._workspace_state_summary(latest=snapshot_id, limit=limit)
+
+    def list_workspace_snapshots(self, *, limit: int = 20) -> Dict[str, object]:
+        return self._workspace_state_summary(limit=limit)
+
+    def restore_workspace(self, snapshot_id: str, *, limit: int = 20) -> Dict[str, object]:
+        state = getattr(self.workspace, "state", None)
+        if not getattr(state, "enabled", False):
+            raise WorkspaceStateError("Workspace snapshots are disabled")
+
+        state.restore(snapshot_id)
+        return self._workspace_state_summary(latest=snapshot_id, limit=limit)
 
     # _demo_response 方法现在可以移除了，因为它不再被 respond 方法调用

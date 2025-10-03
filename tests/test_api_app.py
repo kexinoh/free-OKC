@@ -163,3 +163,37 @@ def test_delete_session_history_removes_workspace(client):
     assert not previous_root.exists()
     assert main.state.workspace.paths.internal_root != previous_root
     assert len(main.state.vm.history) == 0
+
+
+def test_workspace_snapshot_endpoints(client):
+    boot = client.get("/api/session/boot")
+    assert boot.status_code == 200
+
+    snapshot_meta = client.get("/api/session/workspace/snapshots")
+    assert snapshot_meta.status_code == 200
+    payload = snapshot_meta.json()
+
+    if not payload["enabled"]:
+        pytest.skip("Git snapshots are disabled in this environment")
+
+    workspace_path = main.state.workspace.resolve("report.md")
+    workspace_path.write_text("draft v1", encoding="utf-8")
+
+    created = client.post("/api/session/workspace/snapshots", json={"label": "Draft"})
+    assert created.status_code == 200
+    created_payload = created.json()
+    latest = created_payload.get("latest_snapshot") or created_payload["snapshots"][0]["id"]
+
+    workspace_path.write_text("draft v2", encoding="utf-8")
+    updated = client.post("/api/session/workspace/snapshots", json={"label": "Revision"})
+    assert updated.status_code == 200
+    updated_payload = updated.json()
+    second_snapshot = updated_payload.get("latest_snapshot")
+    assert second_snapshot and second_snapshot != latest
+
+    restored = client.post(
+        "/api/session/workspace/restore",
+        json={"snapshot_id": latest},
+    )
+    assert restored.status_code == 200
+    assert workspace_path.read_text(encoding="utf-8") == "draft v1"

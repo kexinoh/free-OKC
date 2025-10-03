@@ -39,6 +39,22 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="User utterance to process")
 
 
+class SnapshotCreatePayload(BaseModel):
+    """Payload to manually snapshot the current workspace state."""
+
+    label: Optional[str] = Field(
+        default=None,
+        description="Optional label describing the snapshot",
+        max_length=200,
+    )
+
+
+class SnapshotRestorePayload(BaseModel):
+    """Payload to restore the workspace to an earlier snapshot."""
+
+    snapshot_id: str = Field(..., description="Git commit identifier to restore")
+
+
 def build_media_config(payload: ConfigUpdatePayload) -> MediaConfig:
     """Helper to build MediaConfig from a payload."""
     return MediaConfig(

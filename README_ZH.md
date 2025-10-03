@@ -146,6 +146,7 @@ okcvm-server
 #### 5. 常见工具错误排查 (Troubleshooting Tool Errors)
 
 - **会话工作区路径 (Session workspace paths)**：每次会话都会自动分配一个随机的虚拟挂载路径，例如 `/mnt/okcvm-12ab34cd/`。`mshtools-write_file`、`mshtools-read_file` 和 `mshtools-edit_file` 会自动将相对路径映射到该工作区，因此可以直接写入 `resume-website/index.html` 等相对路径；如果传入的路径不在当前会话的挂载目录下，工具会提示路径越界错误。当前会话的真实文件将被保存在后端临时目录中，互不干扰。
+- **状态快照 (State snapshots)**：工作区默认由 Git 管理。系统会在每次助手回复后自动创建快照，并提供 API 让你查看快照列表或一键回滚到之前的版本，长链路协作时出错也能快速恢复。
 
 ---
 
