@@ -1255,7 +1255,7 @@ chatForm.addEventListener('submit', handleUserSubmit);
 if (chatMessages) {
   chatMessages.addEventListener('click', (event) => {
     const target = event.target instanceof HTMLElement ? event.target.closest('button.message-action') : null;
-    if (!target || !(target instanceof HTMLElement)) return;
+    if (!target) return;
 
     const action = target.dataset.action;
     if (!action) return;
