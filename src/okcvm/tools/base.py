@@ -46,5 +46,7 @@ class Tool:
         return {
             "name": self.spec.name,
             "description": self.spec.description,
+            "parameters": self.spec.parameters,
+            "returns": self.spec.returns,
             "implementation": self.__class__.__name__,
         }
