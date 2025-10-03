@@ -116,8 +116,12 @@ function handleOpenPreview() {
 }
 
 export function initializePreviewControls() {
-  togglePptModeButton.addEventListener('click', togglePptMode);
-  openWebPreviewButton.addEventListener('click', handleOpenPreview);
+  if (togglePptModeButton instanceof HTMLElement) {
+    togglePptModeButton.addEventListener('click', togglePptMode);
+  }
+  if (openWebPreviewButton instanceof HTMLElement) {
+    openWebPreviewButton.addEventListener('click', handleOpenPreview);
+  }
 }
 
 export function resetPreviews() {

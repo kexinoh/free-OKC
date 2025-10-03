@@ -26,10 +26,16 @@ function populateConfigForm(data) {
     const fields = serviceInputs[service];
     if (!fields) return;
     const entry = data?.[service];
-    fields.model.value = entry?.model ?? '';
-    fields.base_url.value = entry?.base_url ?? '';
-    fields.api_key.value = '';
-    fields.api_key.placeholder = entry?.api_key_present ? '已保存，更新请重新输入' : '••••••';
+    if (fields.model) {
+      fields.model.value = entry?.model ?? '';
+    }
+    if (fields.base_url) {
+      fields.base_url.value = entry?.base_url ?? '';
+    }
+    if (fields.api_key) {
+      fields.api_key.value = '';
+      fields.api_key.placeholder = entry?.api_key_present ? '已保存，更新请重新输入' : '••••••';
+    }
   });
 }
 
@@ -39,9 +45,9 @@ function collectConfigPayload() {
     const fields = serviceInputs[service];
     if (!fields) return;
     const entry = {};
-    const model = fields.model.value.trim();
-    const baseUrl = fields.base_url.value.trim();
-    const apiKey = fields.api_key.value.trim();
+    const model = fields.model?.value?.trim?.() ?? '';
+    const baseUrl = fields.base_url?.value?.trim?.() ?? '';
+    const apiKey = fields.api_key?.value?.trim?.() ?? '';
     if (model) entry.model = model;
     if (baseUrl) entry.base_url = baseUrl;
     if (apiKey) entry.api_key = apiKey;

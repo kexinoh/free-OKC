@@ -908,9 +908,28 @@ async function sendChat(message) {
   }
 }
 
+function resolveUserInputField(form) {
+  if (userInput instanceof HTMLTextAreaElement || userInput instanceof HTMLInputElement) {
+    return userInput;
+  }
+  if (form instanceof HTMLFormElement) {
+    const fallback = form.querySelector('#user-input, textarea[name="message"]');
+    if (fallback instanceof HTMLTextAreaElement || fallback instanceof HTMLInputElement) {
+      return fallback;
+    }
+  }
+  const globalFallback = document.getElementById('user-input');
+  return globalFallback instanceof HTMLTextAreaElement || globalFallback instanceof HTMLInputElement
+    ? globalFallback
+    : null;
+}
+
 function handleUserSubmit(event) {
   event.preventDefault();
-  const value = userInput.value.trim();
+  const form = event.currentTarget instanceof HTMLFormElement ? event.currentTarget : chatForm;
+  const input = resolveUserInputField(form);
+  if (!input) return;
+  const value = typeof input.value === 'string' ? input.value.trim() : '';
   if (!value) return;
   addAndRenderMessage('user', value);
   sendChat(value);
