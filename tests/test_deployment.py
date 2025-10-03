@@ -136,3 +136,25 @@ def test_deploy_website_without_starting_server(tmp_path):
     assert manifest_data["server_info"] is None
     # 验证 PID 不存在（以防万一）
     assert not psutil.pid_exists(manifest_data.get("server_info", {}).get("pid", -1))
+
+
+def test_deploy_website_creates_index_from_single_html(tmp_path):
+    site = tmp_path / "site"
+    site.mkdir()
+    original = site / "hello-world.html"
+    original.write_text("<html><body><h1>Hello</h1></body></html>", encoding="utf-8")
+
+    registry = ToolRegistry.from_default_spec()
+
+    result = registry.call(
+        "mshtools-deploy_website",
+        directory=str(site),
+        site_name="Auto-Index",
+        force=True,
+        start_server=False,
+    )
+
+    assert result.success
+    index_path = site / "index.html"
+    assert index_path.exists()
+    assert index_path.read_text(encoding="utf-8") == original.read_text(encoding="utf-8")
