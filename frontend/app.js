@@ -1,5 +1,8 @@
 import { cloneMessageActionIcon } from './messageActionIcons.js';
 
+const DEFAULT_CONVERSATION_TITLE = '新的会话';
+const CONVERSATION_TITLE_MAX_LENGTH = 20;
+
 const chatMessages = document.getElementById('chat-messages');
 const chatForm = document.getElementById('chat-form');
 const userInput = document.getElementById('user-input');
@@ -155,6 +158,7 @@ function setMessageActionsDisabled(messageElement, disabled) {
 }
 
 const messageActionStatusTimers = new WeakMap();
+const messageActionFeedbackTimers = new WeakMap();
 
 function setMessageActionStatus(button, text) {
   if (!(button instanceof HTMLElement)) return;
@@ -204,6 +208,33 @@ function flashMessageActionStatus(button, text, duration = 1200) {
   }
 }
 
+function setMessageActionFeedback(button, { status, message, duration = 1200 } = {}) {
+  if (!(button instanceof HTMLElement)) return;
+
+  const existingTimer = messageActionFeedbackTimers.get(button);
+  if (typeof existingTimer === 'number') {
+    clearTimeout(existingTimer);
+    messageActionFeedbackTimers.delete(button);
+  }
+
+  if (typeof message === 'string') {
+    flashMessageActionStatus(button, message, duration);
+  }
+
+  if (typeof status === 'string' && status.length > 0) {
+    button.dataset.feedback = status;
+    if (duration > 0) {
+      const timeoutId = window.setTimeout(() => {
+        delete button.dataset.feedback;
+        messageActionFeedbackTimers.delete(button);
+      }, duration);
+      messageActionFeedbackTimers.set(button, timeoutId);
+    }
+  } else {
+    delete button.dataset.feedback;
+  }
+}
+
 function markMessagePending(messageElement, placeholderText) {
   if (!(messageElement instanceof HTMLElement)) return;
   messageElement.dataset.pending = 'true';
@@ -236,6 +267,17 @@ function findPreviousUserMessage(conversation, fromIndex) {
     }
   }
   return null;
+}
+
+function generateConversationTitle(content) {
+  const snippet = typeof content === 'string' ? content.trim() : '';
+  if (snippet.length === 0) {
+    return DEFAULT_CONVERSATION_TITLE;
+  }
+  if (snippet.length > CONVERSATION_TITLE_MAX_LENGTH) {
+    return `${snippet.slice(0, CONVERSATION_TITLE_MAX_LENGTH)}…`;
+  }
+  return snippet;
 }
 
 async function writeToClipboard(text) {
@@ -296,10 +338,10 @@ async function handleCopyMessageAction(messageId, button) {
 
   try {
     await writeToClipboard(content);
-    flashButtonFeedback(button, '已复制', 'success');
+    setMessageActionFeedback(button, { status: 'success', message: '已复制' });
   } catch (error) {
     console.error(error);
-    flashButtonFeedback(button, '复制失败', 'error', 1500);
+    setMessageActionFeedback(button, { status: 'error', message: '复制失败', duration: 1500 });
   }
 }
 
@@ -352,7 +394,7 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
 
   const precedingUserMessage = findPreviousUserMessage(conversation, messageIndex);
   if (!precedingUserMessage) {
-    flashButtonFeedback(button, '无法刷新', 'error', 1500);
+    setMessageActionFeedback(button, { status: 'error', message: '无法刷新', duration: 1500 });
     return;
   }
 
@@ -386,11 +428,11 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
     }
     updateWebPreview(data.web_preview);
     updatePptPreview(data.ppt_slides);
-    flashButtonFeedback(button, '已刷新', 'success', 1500);
+    setMessageActionFeedback(button, { status: 'success', message: '已刷新', duration: 1500 });
   } catch (error) {
     console.error(error);
     finalizePendingMessage(messageElement, `重新生成失败：${error.message}`, messageId);
-    flashButtonFeedback(button, '刷新失败', 'error', 1500);
+    setMessageActionFeedback(button, { status: 'error', message: '刷新失败', duration: 1500 });
   } finally {
     setStatus('待命中…');
     setInteractionDisabled(false);
@@ -520,7 +562,7 @@ function normalizeConversation(entry) {
     title:
       typeof entry.title === 'string' && entry.title.trim().length > 0
         ? entry.title.trim()
-        : '新的会话',
+        : DEFAULT_CONVERSATION_TITLE,
     createdAt: typeof entry.createdAt === 'string' && !Number.isNaN(Date.parse(entry.createdAt)) ? entry.createdAt : now,
     updatedAt: typeof entry.updatedAt === 'string' && !Number.isNaN(Date.parse(entry.updatedAt)) ? entry.updatedAt : (entry.createdAt ?? now),
     messages: [],
@@ -602,7 +644,7 @@ function createConversation(options = {}) {
   const now = new Date().toISOString();
   const conversation = {
     id: generateId(),
-    title: options.title ?? '新的会话',
+    title: options.title ?? DEFAULT_CONVERSATION_TITLE,
     createdAt: now,
     updatedAt: now,
     messages: [],
@@ -651,7 +693,7 @@ function renderConversationList() {
 
     const title = document.createElement('span');
     title.className = 'conversation-title';
-    title.textContent = conversation.title ?? '新的会话';
+    title.textContent = conversation.title ?? DEFAULT_CONVERSATION_TITLE;
 
     const meta = document.createElement('span');
     meta.className = 'conversation-meta';
@@ -744,8 +786,8 @@ function appendMessageToConversation(role, content, options = {}) {
   conversation.updatedAt = timestamp;
 
   if (role === 'user') {
-    const nextTitle = generateConversationTitle(message.content, { fallbackToDefault: false });
-    if (typeof nextTitle === 'string') {
+    const nextTitle = generateConversationTitle(message.content);
+    if (nextTitle !== DEFAULT_CONVERSATION_TITLE) {
       conversation.title = nextTitle;
     }
   }
