@@ -6,7 +6,6 @@ import requests
 import pytest
 
 from okcvm import ToolRegistry
-from okcvm.tools.deployment import ManifestJSONDecoder
 
 def kill_proc_tree(pid, sig=9, include_parent=True):
     """
@@ -75,7 +74,7 @@ def test_deploy_website_and_start_server(tmp_path, deployed_site_pid):
 
     # --- 4. 验证服务器相关的清单数据 ---
     with open(manifest_path, 'r') as f:
-        manifest_data = json.load(f, cls=ManifestJSONDecoder)
+        manifest_data = json.load(f)
 
     assert "server_info" in manifest_data
     server_info = manifest_data["server_info"]
@@ -130,7 +129,7 @@ def test_deploy_website_without_starting_server(tmp_path):
     assert "Serve the site with `python -m http.server" in result.output
 
     with open(Path(result.data["target"]) / "deployment.json", 'r') as f:
-        manifest_data = json.load(f, cls=ManifestJSONDecoder)
+        manifest_data = json.load(f)
 
     # 验证没有服务器信息
     assert manifest_data["server_info"] is None
