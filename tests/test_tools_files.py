@@ -33,7 +33,7 @@ def test_ensure_absolute_rejects_relative_path() -> None:
 
 def test_ensure_absolute_errors_when_workspace_rejects_absolute() -> None:
     class RejectingWorkspace:
-        def resolve(self, raw_path: str):  # pragma: no cover - simple stub
+        def resolve(self, raw_path: str) -> Path:  # pragma: no cover - simple stub
             raise WorkspaceError("outside of workspace")
 
     with pytest.raises(files.ToolError) as exc:
