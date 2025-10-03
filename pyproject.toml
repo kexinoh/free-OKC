@@ -13,6 +13,11 @@ dependencies = [
   "python-pptx>=0.6.23",
   "fastapi>=0.110",
   "uvicorn>=0.23",
+  "PyYAML>=6.0",
+  "psutil>=5.9",
+  "langchain-core>=0.2",
+  "langchain-openai>=0.1",
+  "langchain>=0.2",
 ]
 
 [project.optional-dependencies]
