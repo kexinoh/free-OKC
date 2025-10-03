@@ -108,7 +108,6 @@ The service will start on `http://localhost:8000`.
 Navigate to the following URL in your browser: **[http://localhost:8000/ui/](http://localhost:8000/ui/)**
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/moonshot-ai/ok-computer-vm/main/frontend/assets/ui-screenshot.png" alt="OKCVM Web UI Screenshot" width="80%">
   <br/>
   <em>The OKCVM Web Control Panel</em>
 </div>
