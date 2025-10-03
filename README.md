@@ -106,6 +106,24 @@ This console script wraps the same Typer entry point as `python -m okcvm.server`
 so you can launch the service directly from the project root without changing
 directories. The service will start on `http://localhost:8000`.
 
+> **Windows troubleshooting**
+>
+> If PowerShell reports `ModuleNotFoundError: No module named 'okcvm'` when you
+> try `python -m okcvm.server`, the interpreter being used to start the server
+> is not the one where the package was installed. Double-check that your virtual
+> environment is activated (the prompt should include its name, for example
+> `(free-OKC)`) before running the command. If the problem persists, reinstall
+> the project in editable mode from the repository root so that the
+> `okcvm-server` entry point is registered in the current environment:
+>
+> ```powershell
+> pip install -e .
+> okcvm-server
+> ```
+>
+> You can always fall back to `python -m okcvm.server` after confirming you are
+> using the correct interpreter.
+
 #### 2. Open the UI
 
 Navigate to the following URL in your browser: **[http://localhost:8000/ui/](http://localhost:8000/ui/)**

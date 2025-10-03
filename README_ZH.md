@@ -101,6 +101,22 @@ okcvm-server
 因此无需再切换目录，直接在项目根目录即可启动服务，默认地址为
 `http://localhost:8000`。
 
+> **Windows 常见问题排查**
+>
+> 如果在 PowerShell 中执行 `python -m okcvm.server` 出现
+> `ModuleNotFoundError: No module named 'okcvm'`，通常说明当前用于启动服务
+> 的解释器与安装 `okcvm` 的解释器不一致。请确认已经激活安装依赖时使用
+> 的虚拟环境（命令行提示符应包含环境名称，例如 `(free-OKC)`）。若仍然报
+> 错，可以在项目根目录重新以可编辑模式安装，确保在当前环境中注册
+> `okcvm-server` 命令：
+>
+> ```powershell
+> pip install -e .
+> okcvm-server
+> ```
+>
+> 检查解释器无误后，也可以继续使用 `python -m okcvm.server` 来启动服务。
+
 #### 2. 打开用户界面 (Open the UI)
 
 在浏览器中访问: **[http://localhost:8000/ui/](http://localhost:8000/ui/)**
