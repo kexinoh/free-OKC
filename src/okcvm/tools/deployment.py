@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import shutil
 import time
 from pathlib import Path
@@ -8,11 +9,10 @@ import socket
 import subprocess
 import sys
 from contextlib import closing
+from typing import Any, Dict, List, Optional
 
+from ..workspace import WorkspaceError, WorkspaceManager
 from .base import Tool, ToolError, ToolResult
-
-
-DEPLOY_ROOT = Path.cwd() / "deployments"
 
 
 class _ManifestDict(dict):
@@ -54,6 +54,7 @@ def _slugify(name: str) -> str:
         slug = slug.replace("--", "-")
     return slug
 
+
 def _find_free_port(start_port: int = 8000) -> int:
     """
     查找一个从 start_port 开始的可用 TCP 端口。
@@ -71,27 +72,112 @@ def _find_free_port(start_port: int = 8000) -> int:
                 if port > 65535:
                     raise RuntimeError("Could not find any free port.")
 
+
 def _start_http_server(directory: Path, port: int) -> subprocess.Popen:
     """
     在后台为指定目录启动一个 Python HTTP 服务器。
     返回子进程对象。
     """
-    # 使用 sys.executable 确保我们用的是当前运行的 Python 解释器
-    # Popen 会在后台启动进程，不会阻塞主程序
-    # cwd 参数让服务器在正确的目录下运行
     process = subprocess.Popen(
         [sys.executable, "-m", "http.server", str(port)],
         cwd=directory,
-        stdout=subprocess.DEVNULL, # 将输出重定向，避免污染主程序输出
+        stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    # 给服务器一点启动时间
     time.sleep(1)
     return process
 
 
+def _load_index(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    if isinstance(data, list):
+        filtered: List[Dict[str, Any]] = [entry for entry in data if isinstance(entry, dict)]
+        return filtered
+    return []
+
+
+def _write_index(path: Path, entries: List[Dict[str, Any]]) -> None:
+    path.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+
+
+def _generate_deployment_id(existing: set[str]) -> str:
+    while True:
+        token = secrets.randbelow(900000) + 100000
+        deployment_id = str(token)
+        if deployment_id not in existing:
+            return deployment_id
+
+
+def _summarise_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": manifest.get("id"),
+        "name": manifest.get("name"),
+        "slug": manifest.get("slug"),
+        "timestamp": manifest.get("timestamp"),
+        "preview_url": manifest.get("preview_url"),
+        "server_info": manifest.get("server_info"),
+        "target": manifest.get("target"),
+    }
+
+
 class DeployWebsiteTool(Tool):
     name = "mshtools-deploy_website"
+    requires_workspace = True
+
+    def __init__(self, spec, workspace: WorkspaceManager | None = None):
+        super().__init__(spec)
+        self._workspace = workspace or WorkspaceManager()
+        self._deploy_root = self._workspace.paths.internal_output / "deployments"
+        self._deploy_root.mkdir(parents=True, exist_ok=True)
+        self._manifest_index = self._deploy_root / "manifest.json"
+        self._server_process: Optional[subprocess.Popen] = None
+        self._server_port: Optional[int] = None
+
+    def _resolve_source(self, directory: str) -> Path:
+        if not directory:
+            raise ToolError("'directory' is required")
+        raw = str(directory)
+        candidate = Path(raw).expanduser()
+        if candidate.is_absolute() and candidate.exists():
+            return candidate.resolve()
+        try:
+            resolved = self._workspace.resolve(raw)
+        except WorkspaceError:
+            resolved = None
+        if resolved and resolved.exists():
+            return resolved
+        if candidate.exists():
+            return candidate.resolve()
+        return candidate.resolve(strict=False)
+
+    def _ensure_unique_target(self, deployment_id: str | None = None) -> tuple[str, Path]:
+        existing = {path.name for path in self._deploy_root.iterdir() if path.is_dir()}
+        if deployment_id and deployment_id not in existing:
+            target = self._deploy_root / deployment_id
+            return deployment_id, target
+        deployment_id = _generate_deployment_id(existing)
+        target = self._deploy_root / deployment_id
+        return deployment_id, target
+
+    def _ensure_server(self) -> tuple[Optional[subprocess.Popen], Optional[int]]:
+        if self._server_process and self._server_process.poll() is None:
+            return self._server_process, self._server_port
+        port = _find_free_port()
+        process = _start_http_server(self._deploy_root, port)
+        self._server_process = process
+        self._server_port = port
+        return process, port
+
+    def _update_index(self, manifest: Dict[str, Any]) -> None:
+        entries = _load_index(self._manifest_index)
+        entries = [entry for entry in entries if entry.get("id") != manifest.get("id")]
+        entries.insert(0, _summarise_manifest(manifest))
+        _write_index(self._manifest_index, entries)
 
     def call(self, **kwargs) -> ToolResult:  # type: ignore[override]
         directory = (
@@ -102,12 +188,9 @@ class DeployWebsiteTool(Tool):
         )
         name = kwargs.get("site_name") or kwargs.get("name")
         force = bool(kwargs.get("force", False))
-        # 新增参数：控制是否自动启动服务器，默认为 True
         start_server = bool(kwargs.get("start_server", True))
 
-        if not directory:
-            raise ToolError("'directory' is required")
-        source = Path(directory).expanduser().resolve()
+        source = self._resolve_source(directory)
         if not source.is_dir():
             raise ToolError(f"Directory not found: {source}")
         index = source / "index.html"
@@ -115,7 +198,7 @@ class DeployWebsiteTool(Tool):
             raise ToolError("index.html must exist in the specified directory")
 
         slug = _slugify(name or source.name)
-        target = DEPLOY_ROOT / slug
+        deployment_id, target = self._ensure_unique_target()
         if target.exists():
             if not force:
                 raise ToolError(
@@ -123,68 +206,68 @@ class DeployWebsiteTool(Tool):
                 )
             shutil.rmtree(target)
 
-        DEPLOY_ROOT.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, target)
 
-        # 准备清单数据
-        manifest = {
+        manifest: Dict[str, Any] = {
+            "id": deployment_id,
             "name": name or source.name,
             "slug": slug,
             "timestamp": int(time.time()),
             "source": str(source),
             "target": str(target),
+            "session_id": self._workspace.session_id,
         }
 
-        # 如果需要，启动服务器
         if start_server:
             try:
-                # 1. 避免端口冲突
-                port = _find_free_port()
-                # 2. 自动启动网站
-                server_process = _start_http_server(DEPLOY_ROOT, port)
-
-                preview_url = f"http://localhost:{port}/{slug}/index.html"
+                process, port = self._ensure_server()
+                preview_url = f"http://127.0.0.1:{port}/{deployment_id}/index.html"
                 manifest["preview_url"] = preview_url
-                # 记录服务器信息以便管理
                 manifest["server_info"] = {
-                    "pid": server_process.pid,
+                    "pid": process.pid if process else None,
                     "port": port,
-                    "status": "running",
+                    "status": "running" if process and process.poll() is None else "unknown",
                 }
-                
                 output = (
-                    f"Deployment complete. Site is now being served.\n"
-                    f"  PID: {server_process.pid}\n"
+                    "Deployment complete. Site is now being served.\n"
+                    f"  Deployment ID: {deployment_id}\n"
                     f"  Port: {port}\n"
                     f"  Preview URL: {preview_url}"
                 )
-            except Exception as e:
-                # 如果服务器启动失败，给出错误提示，但部署本身仍然是成功的
-                output = (
-                    f"Deployment of files complete, but failed to start server: {e}\n"
-                    f"Serve the site manually with `python -m http.server 8000` "
-                    f"from {DEPLOY_ROOT} and open /{slug}/index.html"
-                )
-                manifest["preview_url"] = f"http://localhost:8000/{slug}/index.html" # 提供一个默认URL
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                manifest["preview_url"] = f"http://127.0.0.1:8000/{deployment_id}/index.html"
                 manifest["server_info"] = {
                     "pid": None,
                     "port": None,
                     "status": "error",
+                    "message": str(exc),
                 }
+                output = (
+                    f"Deployment of files complete, but failed to start server: {exc}\n"
+                    f"Serve the site manually with `python -m http.server 8000` from {self._deploy_root}"
+                    f" and open /{deployment_id}/index.html"
+                ).format(exc=exc)
         else:
-            # 如果不启动服务器，保持原有的行为
-            preview_url = f"http://localhost:8000/{slug}/index.html"
-            manifest["preview_url"] = preview_url
+            manifest["preview_url"] = f"http://127.0.0.1:8000/{deployment_id}/index.html"
             manifest["server_info"] = None
             output = (
                 "Deployment complete. Serve the site with `python -m http.server 8000` "
-                f"from {DEPLOY_ROOT} and open /{slug}/index.html"
+                f"from {self._deploy_root} and open /{deployment_id}/index.html"
             )
 
-        # 写入清单文件
-        (target / "deployment.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        deployment_manifest_path = target / "deployment.json"
+        deployment_manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        self._update_index(manifest)
 
-        return ToolResult(success=True, output=output, data=manifest)
+        data = {
+            "deployment": manifest,
+            "deployment_id": deployment_id,
+            "manifest_path": str(deployment_manifest_path),
+            "index_path": str(self._manifest_index),
+            "target": manifest["target"],
+            "preview_url": manifest["preview_url"],
+        }
+        return ToolResult(success=True, output=output, data=data)
 
 
 __all__ = ["DeployWebsiteTool"]
