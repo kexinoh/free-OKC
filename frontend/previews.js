@@ -54,6 +54,37 @@ export function resetModelLogs() {
   }
 }
 
+function normalizeWebPreview(preview) {
+  if (!preview || typeof preview !== 'object') {
+    return null;
+  }
+
+  const normalized = {};
+  const htmlCandidate =
+    typeof preview.html === 'string'
+      ? preview.html
+      : typeof preview.content === 'string'
+        ? preview.content
+        : null;
+  if (htmlCandidate && htmlCandidate.trim()) {
+    normalized.html = htmlCandidate;
+  }
+
+  const urlCandidate =
+    typeof preview.url === 'string'
+      ? preview.url
+      : typeof preview.preview_url === 'string'
+        ? preview.preview_url
+        : typeof preview.server_preview_url === 'string'
+          ? preview.server_preview_url
+          : null;
+  if (urlCandidate && urlCandidate.trim()) {
+    normalized.url = urlCandidate;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
 export function updateWebPreview(preview) {
   currentWebPreview = preview;
   const hasContent = Boolean(preview?.html);
@@ -122,11 +153,25 @@ function togglePptMode() {
 }
 
 function handleOpenPreview() {
-  if (!currentWebPreview?.html) return;
-  const blob = new Blob([currentWebPreview.html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (!currentWebPreview) return;
+
+  if (typeof currentWebPreview.url === 'string' && currentWebPreview.url.trim()) {
+    const newWindow = window.open(currentWebPreview.url, '_blank');
+    if (newWindow) {
+      newWindow.opener = null;
+    }
+    return;
+  }
+
+  if (typeof currentWebPreview.html === 'string' && currentWebPreview.html.trim()) {
+    const blob = new Blob([currentWebPreview.html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const newWindow = window.open(url, '_blank');
+    if (newWindow) {
+      newWindow.opener = null;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 export function initializePreviewControls() {
