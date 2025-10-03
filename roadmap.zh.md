@@ -2,61 +2,71 @@
 
 ## 已实现的能力
 
-### 系统提示与工具清单打包
-我们内置上游的系统提示词和工具清单，并提供加载辅助函数，方便客户端零配置启动 OKCVM。
-- `okcvm.spec` 提供数据类和加载器，读取打包在项目中的 `system_prompt.md` 与 `tools.json`，并返回结构化的工具规范供下游使用。([`src/okcvm/spec.py#L1-L57`](./src/okcvm/spec.py#L1-L57))
+### 系统提示词与工具规范打包
+项目仍然随包提供 OK Computer 的系统提示词和工具清单，方便集成方开箱即用。
+- `okcvm.spec` 提供数据类与加载辅助函数，读取内置的 `system_prompt.md` 和
+  `tools.json` 并返回结构化规范供下游消费。([`src/okcvm/spec.py`](./src/okcvm/spec.py))
 
-### 默认绑定的工具注册表
-ToolRegistry 会自动把清单里的每个工具绑定到具体实现或占位桩对象，确保与规范保持一致。
-- 默认构造流程会加载清单、注册所有随包提供的工具类，并为缺口注入带提示信息的桩工具，让公共 API 在规范扩展时依旧可用。【F:src/okcvm/registry.py†L25-L110】
+### 基于 LangChain 的虚拟机运行时
+我们用真实的 LangChain 工具调用代理替换了早期的桩实现，让会话可以路由到
+可配置的聊天模型并驱动所有工具。
+- `okcvm.llm.create_llm_chain` 将 LangChain 的 `ChatOpenAI` 客户端与注册表中的
+  工具绑定，构建遵循历史上下文的工具调用模板。([`src/okcvm/llm.py`](./src/okcvm/llm.py))
+- `okcvm.vm.VirtualMachine` 负责把内部历史转成 LangChain 消息、执行代理、记录
+  中间工具调用并维护可追踪的执行日志。([`src/okcvm/vm.py`](./src/okcvm/vm.py))
 
-### 虚拟机外观层
-VirtualMachine 负责调度工具调用、维护最近历史，并向宿主应用暴露可序列化的描述接口。
-- 每次调用都会通过注册表路由、记录参数与结果，并通过 `describe`、`describe_history`、`last_result` 等辅助方法供智能体集成使用。【F:src/okcvm/vm.py†L1-L73】
+### 运行时配置与 CLI 体验
+我们新增了线程安全的配置层、YAML/环境变量加载能力以及 Typer CLI，运维人员
+无需改代码即可管理各类推理端点。
+- `okcvm.config` 提供聊天与多媒体端点的数据类、环境变量/YAML 加载器以及
+  原子更新方法，为 API 与运行时提供统一来源。([`src/okcvm/config.py`](./src/okcvm/config.py))
+- 顶层 `main.py` 暴露启动服务、校验配置、列出工具的命令，同时完成依赖检查
+  与环境加载。([`main.py`](./main.py))
 
-### 生产力工具链覆盖
-我们实现了 OK Computer 规范中的待办、文件、Shell 与 IPython 执行工具，满足日常协作场景。
-- 待办工具以 JSON 形式持久化任务，支持全量重写与追加写入，贴近上游行为。【F:src/okcvm/tools/todo.py†L1-L88】
-- 文件工具强制使用绝对路径，支持二进制安全读写，并提供带保护的编辑操作，保持良好的人机体验。【F:src/okcvm/tools/files.py†L1-L93】
-- Shell 与 IPython 工具支持命令输出捕获、环境重置以及 `` `!` `` 前缀的行内 Shell 指令，便于快速实验。【F:src/okcvm/tools/shell.py†L1-L32】【F:src/okcvm/tools/ipython.py†L1-L60】
+### 可观测性与 HTTP 接入层
+编排服务现在默认输出结构化日志与请求链路，便于排查线上问题。
+- `okcvm.logging_utils` 配置 Rich 控制台输出与滚动文件日志，`okcvm.api.main`
+  则在 FastAPI 之上增加请求日志中间件并挂载前端资源。([`src/okcvm/logging_utils.py`](./src/okcvm/logging_utils.py)、
+  [`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
 
-### Web、媒体与部署工具
-项目内置轻量的浏览模拟、搜索/媒体合成、部署与幻灯生成工具，与 OKC 规范保持一致。
-- 浏览器模块提供基于 HTTP 的确定性导航、元素发现与内存态会话模型，用于脚本化探索流程。【F:src/okcvm/tools/browser.py†L1-L143】
-- 搜索工具通过确定性的 HTTP 客户端封装 DuckDuckGo 的网页与图像检索接口，支持资料调研场景。【F:src/okcvm/tools/search.py†L1-L144】
-- 媒体与幻灯工具可生成合成图像、语音、音效及 PPTX 文稿，使智能体无需外部服务即可完成创意任务。【F:src/okcvm/tools/media.py†L1-L200】【F:src/okcvm/tools/slides.py†L1-L74】
-- 数据源与部署助手覆盖雅虎财经行情接口和静态站点发布，复刻常见的 OK Computer 工作流。【F:src/okcvm/tools/data_sources.py†L1-L96】【F:src/okcvm/tools/deployment.py†L1-L66】
+### 会话管理与对话工作流
+Session 层不再使用静态示例，所有请求都会通过 VM，返回的工具元数据驱动 UI
+生成更丰富的预览。
+- `okcvm.session.SessionState` 负责串联注册表、VM 与配置，向前端回传工具摘要、
+  模型指标和预览内容。([`src/okcvm/session.py`](./src/okcvm/session.py))
+- `/api/session/*` 与 `/api/chat` 路由提供启动、查询与聊天接口，对输入做裁剪
+  并在失败时返回明确的校验信息。([`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
 
-### 本地控制平面与 Web 界面
-我们提供基于 FastAPI 的本地服务与浏览器端操作台，让团队可以配置模型端点并通过对话驱动虚拟机。
-- `okcvm.server` 负责挂载 `frontend/` 资源，开放配置、对话与 VM 检索的 REST 接口，并以确定性示例响应演示多模态流程。【F:src/okcvm/server.py†L1-L269】
-- 更新后的 `frontend/` 资源可从后端读取与保存配置，通过新 API 驱动对话，并实时更新网页预览与幻灯片面板。【F:frontend/index.html†L1-L160】【F:frontend/app.js†L1-L219】
-- 运行时配置新增聊天、图像、语音、音效与语音识别端点支持，默认读取环境变量，并在 HTTP 响应中隐藏 API Key 明文。【F:src/okcvm/config.py†L1-L163】
+### 控制台前端升级
+随包 UI 现已发展为集历史记录、配置面板与多模态预览于一体的工作台。
+- `frontend/index.html` 新增历史侧栏、配置抽屉以及聊天记录、网页预览、幻灯
+  预览等信息面板。
+- `frontend/app.js` 与后端同步配置、使用 localStorage 缓存会话、处理辅助功能
+  快捷键，并在工具输出抵达时刷新预览区。
+
+### 完整的回归测试
+单元测试覆盖 API、配置助手、LangChain 链路与工具注册表，保障后续改动安全。
+- `tests/` 目录验证 FastAPI 应用、配置加载逻辑、LangChain 集成以及各工具实现。
 
 ## 规划与进行中的工作
 
-### 更高保真度的浏览器自动化
-当前基于 HTTP 的抓取器刻意省略 JavaScript、多标签和复杂表单，我们计划引入无头浏览器后端以提升逼真度。【F:src/okcvm/tools/browser.py†L1-L22】
-- 评估在保留测试友好的确定性模式下，引入可配置资源限制的 Playwright 或 Selenium 驱动。
-- 扩展会话模型，覆盖 Cookie、本地存储与导航历史，支持带身份的工作流。
+### 更丰富的工具输出渲染
+工具返回的数据仍需统一适配，以便前端无需手动解析即可展示网页与 PPT 资源。
+- 设计网页/幻灯素材的标准 schema，并扩展 `SessionState.respond` 自动生成预览。
 
-### 更丰富的数据源目录
-目前数据源注册表仅包含雅虎财经报价接口，仍缺少大量上游集成能力。【F:src/okcvm/tools/data_sources.py†L22-L96】
-- 新增更多行情、新闻与知识类 API，并统一序列化格式以扩大分析覆盖面。
-- 引入 API 密钥与限流配置机制，满足生产部署的安全与稳定需求。
+### 流式与多轮体验
+当前代理同步执行，只返回最终回答。
+- 评估 LangChain 的流式回调，把增量回复与工具进度推送给前端。
+- 在服务端持久化会话历史，支持刷新或多终端共享上下文。
 
-### 持续追平工具规范
-注册表已为缺失实现的规范项预留桩实现，提示我们需要在规范增长时及时补齐新工具。【F:src/okcvm/registry.py†L72-L91】
-- 跟踪 OK Computer 工具合同的上游变更，快速落地原生实现，避免桩响应。
-- 提供贡献指南与脚手架生成器，降低社区工具开发门槛。
+### 扩展媒体与部署集成
+目前仅有部分 OK Computer 媒体端点具备参考实现。
+- 持续补充语音、音效、部署等参考集成，并统一凭据与限流管理。
 
-### 更高质量的媒体生成
-现有图像和音频输出是确定性占位符，我们计划接入可选的模型管线以获得更真实的创作效果。【F:src/okcvm/tools/media.py†L37-L200】
-- 评估可本地运行的轻量扩散或 TTS 引擎，以显著提升相较于哈希纹理和正弦波合成的质量。
-- 制定缓存与素材管理约定，方便与后续分享类工具协同。
+### 高阶浏览器自动化
+HTTP 抓取器仍然是轻量实现。
+- 在保留确定性模式的前提下探索 Playwright/Selenium 后端，并提供资源限制选项。
 
-### 持久化的编排状态
-随着浏览器工作台与后端打通，下一阶段聚焦于持久化与更强的集成能力。
-- 新增可选的磁盘配置文件（如 TOML/YAML），在保证 API Key 安全的前提下支持重启后恢复端点。
-- 将真实的 OKCVM 工具调用纳入对话循环，引入规划/代理逻辑并把工具历史流式反馈到界面。
-- 在界面中展示端点健康状况（连通性测试、延迟采样等），帮助运维在对外开放前完成验证。
+### 发布与分发
+希望让运维无需克隆仓库即可体验。
+- 打包包含 CLI、API 与前端资源的容器镜像与 PyPI 发行版，并提供默认配置。
