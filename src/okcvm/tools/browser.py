@@ -309,30 +309,27 @@ def _parse_page() -> BrowserSession:
 
 
 def _navigate(url: str) -> BrowserSession:
-    """使用 WebDriver 导航到指定的 URL。"""
-    if _manager.use_static_mode():
+    """使用 WebDriver 导航到指定的 URL, 并在失败时回退到静态模式。"""
+    last_exception: Optional[Exception] = None
+
+    if not _manager.use_static_mode():
         try:
-            return _manager.navigate_static(url)
-        except Exception as exc:
-            raise ToolError(f"导航到 {url} 时出错: {exc}") from exc
+            driver = _manager.driver
+            driver.get(url)
+            driver.implicitly_wait(5)
+            session = _parse_page()
+            _manager.session = session
+            return session
+        except Exception as exc:  # noqa: BLE001 - we need to attempt fallback
+            last_exception = exc
 
     try:
-        driver = _manager.driver
-        driver.get(url)
-        driver.implicitly_wait(5)
-        session = _parse_page()
-        _manager.session = session
-        return session
-    except ToolError:
-        try:
-            return _manager.navigate_static(url)
-        except Exception as exc:
-            raise ToolError(f"导航到 {url} 时出错: {exc}") from exc
-    except Exception as exc:
-        try:
-            return _manager.navigate_static(url)
-        except Exception as fallback_exc:
-            raise ToolError(f"导航到 {url} 时出错: {fallback_exc}") from exc
+        return _manager.navigate_static(url)
+    except Exception as static_exc:  # noqa: BLE001 - surface combined error
+        message = f"导航到 {url} 时出错: {static_exc}"
+        if last_exception is not None:
+            raise ToolError(message) from last_exception
+        raise ToolError(message) from static_exc
 
 # --- 工具类实现 ---
 

@@ -31,15 +31,19 @@ def _manifest_object_hook(obj):
     return obj
 
 
-def _ensure_manifest_decoder() -> None:
-    decoder = getattr(json, "_default_decoder", None)
-    if getattr(decoder, "_okcvm_manifest", False):
-        return
-    json._default_decoder = json.JSONDecoder(object_hook=_manifest_object_hook)  # type: ignore[attr-defined]
-    setattr(json._default_decoder, "_okcvm_manifest", True)
+class ManifestJSONDecoder(json.JSONDecoder):
+    """JSON decoder that protects optional ``server_info`` sections."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("object_hook", _manifest_object_hook)
+        super().__init__(*args, **kwargs)
 
 
-_ensure_manifest_decoder()
+def load_manifest(path: Path) -> dict:
+    """Load a deployment manifest using :class:`ManifestJSONDecoder`."""
+
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle, cls=ManifestJSONDecoder)
 
 
 def _slugify(name: str) -> str:

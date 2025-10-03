@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
 from ..config import ModelEndpointConfig, configure, get_config
@@ -192,18 +192,30 @@ def create_app() -> FastAPI:
         return state.list_workspace_snapshots(limit=limit)
 
     @app.post("/api/session/workspace/snapshots")
-    async def create_workspace_snapshot(payload: SnapshotCreatePayload) -> Dict[str, object]:
-        logger.info("Workspace snapshot creation requested label=%s", payload.label)
+    async def create_workspace_snapshot(
+        payload: SnapshotCreatePayload, limit: int = 20
+    ) -> Dict[str, object]:
+        logger.info(
+            "Workspace snapshot creation requested label=%s, limit=%s",
+            payload.label,
+            limit,
+        )
         try:
-            return state.snapshot_workspace(payload.label, limit=20)
+            return state.snapshot_workspace(payload.label, limit=limit)
         except WorkspaceStateError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/session/workspace/restore")
-    async def restore_workspace_snapshot(payload: SnapshotRestorePayload) -> Dict[str, object]:
-        logger.info("Workspace restore requested snapshot=%s", payload.snapshot_id)
+    async def restore_workspace_snapshot(
+        payload: SnapshotRestorePayload, limit: int = 20
+    ) -> Dict[str, object]:
+        logger.info(
+            "Workspace restore requested snapshot=%s, limit=%s",
+            payload.snapshot_id,
+            limit,
+        )
         try:
-            return state.restore_workspace(payload.snapshot_id, limit=20)
+            return state.restore_workspace(payload.snapshot_id, limit=limit)
         except WorkspaceStateError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
