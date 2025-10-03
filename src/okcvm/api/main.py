@@ -151,6 +151,29 @@ def create_app() -> FastAPI:
             return FileResponse(asset)
         return RedirectResponse(url="/ui/")
 
+    def _deployment_file_response(
+        deployment_id: str,
+        relative_path: str | None,
+    ) -> FileResponse:
+        asset = _resolve_deployment_asset(deployment_id, relative_path)
+        media_type = None
+        if asset.suffix.lower() in {".html", ".htm"}:
+            media_type = "text/html"
+        return FileResponse(asset, media_type=media_type)
+
+    @app.get("/{deployment_id:int}", include_in_schema=False)
+    async def deployment_index(deployment_id: int) -> Response:
+        return _deployment_file_response(str(deployment_id), None)
+
+    @app.get("/{deployment_id:int}/", include_in_schema=False)
+    async def deployment_index_trailing_slash(deployment_id: int) -> Response:
+        return _deployment_file_response(str(deployment_id), None)
+
+    @app.get("/{deployment_id:int}/{asset_path:path}", include_in_schema=False)
+    async def deployment_asset(deployment_id: int, asset_path: str) -> Response:
+        normalised = asset_path.lstrip("/") or None
+        return _deployment_file_response(str(deployment_id), normalised)
+
     # --- API Routes ---
     @app.get("/api/config")
     async def read_config() -> Dict[str, object]:

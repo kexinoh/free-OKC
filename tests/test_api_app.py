@@ -39,6 +39,36 @@ def test_root_redirects_to_frontend(client):
     assert response.headers["location"] == "/ui/"
 
 
+def test_deployment_assets_accessible_via_query_and_direct_paths(client):
+    deployment_id = "123456"
+    deployments_root = main.state.workspace.paths.internal_output / "deployments"
+    site_dir = deployments_root / deployment_id
+    site_dir.mkdir(parents=True, exist_ok=True)
+    (site_dir / "index.html").write_text(
+        "<html><body><h1>Preview</h1><link rel=\"stylesheet\" href=\"styles.css\"></body></html>",
+        encoding="utf-8",
+    )
+    (site_dir / "styles.css").write_text("body { background: #fff; }", encoding="utf-8")
+
+    via_query = client.get("/", params={"s": deployment_id, "path": "index.html"})
+    assert via_query.status_code == 200
+    assert "<h1>Preview</h1>" in via_query.text
+
+    direct_html = client.get(f"/{deployment_id}/index.html")
+    assert direct_html.status_code == 200
+    assert direct_html.headers["content-type"].startswith("text/html")
+    assert "<h1>Preview</h1>" in direct_html.text
+
+    direct_asset = client.get(f"/{deployment_id}/styles.css")
+    assert direct_asset.status_code == 200
+    assert direct_asset.headers["content-type"].startswith("text/css")
+    assert "background" in direct_asset.text
+
+    trailing_slash = client.get(f"/{deployment_id}/")
+    assert trailing_slash.status_code == 200
+    assert "<h1>Preview</h1>" in trailing_slash.text
+
+
 def test_read_config_endpoint_returns_current_settings(client):
     image = ModelEndpointConfig(
         model="image-alpha",
