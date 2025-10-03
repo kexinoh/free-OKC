@@ -426,18 +426,18 @@ function appendMessageToConversation(role, content, options = {}) {
 function resolvePendingConversationMessage(messageId, content) {
   if (!messageId) return;
   const timestamp = new Date().toISOString();
-  for (const conversation of conversations) {
-    const message = conversation.messages.find((entry) => entry.id === messageId);
-    if (message) {
-      message.content = typeof content === 'string' ? content : '';
-      message.pending = false;
-      message.timestamp = timestamp;
-      conversation.updatedAt = timestamp;
-      bumpConversation(conversation.id);
-      saveConversationsToStorage();
-      renderConversationList();
-      break;
-    }
+  const conversation = conversations.find(c => c.messages.some(m => m.id === messageId));
+  if (!conversation) return;
+
+  const message = conversation.messages.find((entry) => entry.id === messageId);
+  if (message) {
+    message.content = typeof content === 'string' ? content : '';
+    message.pending = false;
+    message.timestamp = timestamp;
+    conversation.updatedAt = timestamp;
+    bumpConversation(conversation.id);
+    saveConversationsToStorage();
+    renderConversationList();
   }
 }
 
