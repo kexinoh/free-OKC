@@ -102,6 +102,18 @@ function setInteractionDisabled(disabled) {
   }
 }
 
+const CONVERSATION_TITLE_MAX_LENGTH = 20;
+
+function generateConversationTitle(content, { fallbackToDefault = true } = {}) {
+  const normalized = typeof content === 'string' ? content.trim() : '';
+  if (!normalized) {
+    return fallbackToDefault ? '新的会话' : null;
+  }
+  return normalized.length > CONVERSATION_TITLE_MAX_LENGTH
+    ? `${normalized.slice(0, CONVERSATION_TITLE_MAX_LENGTH)}…`
+    : normalized;
+}
+
 function createMessageActionButton(label, action, iconName) {
   const button = document.createElement('button');
   button.type = 'button';
@@ -301,6 +313,18 @@ async function writeToClipboard(text) {
       selection.removeAllRanges();
       selection.addRange(previousRange);
     }
+  }
+}
+
+function flashButtonFeedback(button, message, feedback, duration = 1200) {
+  if (!(button instanceof HTMLElement)) return;
+  flashMessageActionStatus(button, message, duration);
+  if (!feedback) return;
+  button.dataset.feedback = feedback;
+  if (duration > 0) {
+    window.setTimeout(() => {
+      delete button.dataset.feedback;
+    }, duration);
   }
 }
 
