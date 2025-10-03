@@ -28,5 +28,8 @@ dev = [
   "pytest>=7.0",
 ]
 
+[project.scripts]
+okcvm-server = "okcvm.server:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
