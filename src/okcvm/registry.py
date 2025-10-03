@@ -225,7 +225,7 @@ class ToolRegistry:
 
                 def _make_invoker(current_tool: Tool, tool_name: str):
                     def _invoke(**kwargs: Any) -> str:
-                        result = current_tool.call(**dict(kwargs))
+                        result = current_tool.call(**kwargs)
                         if not result.success:
                             raise ToolException(result.error or f"{tool_name} failed")
 
