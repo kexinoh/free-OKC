@@ -115,9 +115,9 @@ class VirtualMachine:
         return self._last_tool_result
 
     def get_history(self) -> List[Dict[str, Any]]:
-        """Return a shallow copy of the internal history."""
-
-        return list(self.history)
+        """Return a deep copy of the internal history to prevent mutation."""
+        import copy
+        return copy.deepcopy(self.history)
 
     def describe(self) -> Dict[str, object]:
         return {
