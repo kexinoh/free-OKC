@@ -102,6 +102,7 @@ class BrowserSession:
             "current_url": self.current_url,
             "title": self.title,
             "scroll_position": self.scroll_position,
+            "html": self.html,
             "clickable_elements": [item.serialize() for item in self.clickables],
             "inputs": [item.serialize() for item in self.inputs],
             "last_find_results": list(self.last_find_results),
@@ -113,8 +114,12 @@ class BrowserSessionManager:
     def __init__(self) -> None:
         self._session = BrowserSession()
         self._driver: Optional[webdriver.Chrome] = None
+        self._mode = "selenium"
 
     def _init_driver(self) -> webdriver.Chrome:
+        if self._mode == "static":
+            raise ToolError("浏览器当前处于静态模式，不可用 WebDriver")
+
         if self._driver is None:
             options = Options()
             options.add_argument("--headless")
@@ -125,7 +130,11 @@ class BrowserSessionManager:
                 service = Service(ChromeDriverManager().install())
                 self._driver = webdriver.Chrome(service=service, options=options)
             except Exception as e:
-                raise ToolError(f"无法初始化 Chrome WebDriver: {e}。请确保 Chrome 已安装。")
+                self._driver = None
+                self._mode = "static"
+                raise ToolError(
+                    f"无法初始化 Chrome WebDriver: {e}。请确保 Chrome 已安装。"
+                ) from e
         return self._driver
 
     def reset(self) -> None:
@@ -134,7 +143,8 @@ class BrowserSessionManager:
             self._driver.quit()
             self._driver = None
         self._session = BrowserSession()
-    
+        # 如果之前降级到静态模式，则保持静态，避免反复尝试失败的 WebDriver 初始化
+
     @property
     def driver(self) -> webdriver.Chrome:
         return self._init_driver()
@@ -146,6 +156,17 @@ class BrowserSessionManager:
     @session.setter
     def session(self, new_session: BrowserSession):
         self._session = new_session
+
+    def use_static_mode(self) -> bool:
+        return self._mode == "static"
+
+    def navigate_static(self, url: str) -> BrowserSession:
+        self._mode = "static"
+        response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=15)
+        response.raise_for_status()
+        session = _build_session_from_html(response.text, url, driver=None)
+        self._session = session
+        return session
 
 
 _manager = BrowserSessionManager()
@@ -164,64 +185,154 @@ def _ensure_session_initialized() -> BrowserSession:
         raise ToolError("没有活动的浏览器会话。请先调用 browser_visit。")
     return session
 
-def _parse_page() -> BrowserSession:
-    """使用当前的 WebDriver 状态解析页面。"""
-    driver = _manager.driver
-    html = driver.page_source
+def _build_session_from_html(html: str, current_url: str, driver: Optional[webdriver.Chrome]) -> BrowserSession:
     soup = BeautifulSoup(html, "html.parser")
+    title_tag = soup.find("title")
+    title = None
+    if title_tag and title_tag.string:
+        title = title_tag.get_text(strip=True)
+    elif driver is not None:
+        title = driver.title
 
     clickables: List[ElementInfo] = []
-    # 使用 Selenium 查找元素，以确保它们是可交互的
-    selenium_clickables = driver.find_elements(By.CSS_SELECTOR, "a[href], button, input[type=submit], input[type=button]")
-    for index, element in enumerate(selenium_clickables):
-        tag_name = element.tag_name or "element"
-        text = element.text.strip() or element.get_attribute("aria-label") or ""
-        href = element.get_attribute("href")
-        attrs = {key: value for key, value in element.get_property("attributes").items() if isinstance(value, str)}
-        clickables.append(
-            ElementInfo(index=index, tag=tag_name, text=text, href=href, attributes=attrs, _webelement=element)
+    if driver is not None:
+        selenium_clickables = driver.find_elements(
+            By.CSS_SELECTOR,
+            "a[href], button, input[type=submit], input[type=button]",
         )
+        for index, element in enumerate(selenium_clickables):
+            tag_name = element.tag_name or "element"
+            text = element.text.strip() or element.get_attribute("aria-label") or ""
+            href = element.get_attribute("href")
+            attrs = {
+                key: value
+                for key, value in element.get_property("attributes").items()
+                if isinstance(value, str)
+            }
+            clickables.append(
+                ElementInfo(
+                    index=index,
+                    tag=tag_name,
+                    text=text,
+                    href=href,
+                    attributes=attrs,
+                    _webelement=element,
+                )
+            )
+    else:
+        for index, element in enumerate(
+            soup.select("a[href], button, input[type=submit], input[type=button]")
+        ):
+            tag_name = element.name or "element"
+            text = element.get_text(strip=True) or element.get("aria-label", "")
+            href = element.get("href")
+            absolute_href = urljoin(current_url, href) if href else None
+            attrs = {
+                key: value for key, value in element.attrs.items() if isinstance(value, str)
+            }
+            clickables.append(
+                ElementInfo(
+                    index=index,
+                    tag=tag_name,
+                    text=text,
+                    href=absolute_href,
+                    attributes=attrs,
+                )
+            )
 
     inputs: List[InputInfo] = []
-    # 使用 Selenium 查找输入元素
-    selenium_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type=text], input:not([type]), textarea")
-    for index, element in enumerate(selenium_inputs):
-        input_type = element.get_attribute("type") or ("textarea" if element.tag_name == "textarea" else "text")
-        inputs.append(
-            InputInfo(
-                index=index,
-                name=element.get_attribute("name"),
-                input_type=input_type,
-                placeholder=element.get_attribute("placeholder"),
-                _webelement=element,
+    if driver is not None:
+        selenium_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type=text], input:not([type]), textarea")
+        for index, element in enumerate(selenium_inputs):
+            input_type = element.get_attribute("type") or (
+                "textarea" if element.tag_name == "textarea" else "text"
             )
-        )
+            inputs.append(
+                InputInfo(
+                    index=index,
+                    name=element.get_attribute("name"),
+                    input_type=input_type,
+                    placeholder=element.get_attribute("placeholder"),
+                    _webelement=element,
+                )
+            )
+    else:
+        for index, element in enumerate(
+            soup.select("input[type=text], input:not([type]), textarea")
+        ):
+            input_type = element.get("type") or (
+                "textarea" if element.name == "textarea" else "text"
+            )
+            inputs.append(
+                InputInfo(
+                    index=index,
+                    name=element.get("name"),
+                    input_type=input_type,
+                    placeholder=element.get("placeholder"),
+                    value=element.get("value", ""),
+                )
+            )
 
-    scroll_pos = driver.execute_script("return window.pageYOffset;")
-    
     session = BrowserSession(
-        current_url=driver.current_url,
-        title=driver.title,
+        current_url=current_url,
+        title=title,
         html=html,
-        scroll_position=scroll_pos,
+        scroll_position=0,
         clickables=clickables,
         inputs=inputs,
     )
     return session
 
 
+def _parse_page() -> BrowserSession:
+    """根据当前模式解析页面。"""
+    if _manager.use_static_mode():
+        session = _manager.session
+        if not session.current_url or session.html is None:
+            raise ToolError("没有活动的浏览器会话。请先调用 browser_visit。")
+        refreshed = _build_session_from_html(session.html, session.current_url, driver=None)
+        existing_values = {item.index: item.value for item in session.inputs if item.value}
+        for input_info in refreshed.inputs:
+            if input_info.index in existing_values:
+                input_info.value = existing_values[input_info.index]
+        refreshed.scroll_position = session.scroll_position
+        refreshed.last_find_results = list(session.last_find_results)
+        _manager.session = refreshed
+        return refreshed
+
+    driver = _manager.driver
+    html = driver.page_source
+    session = _build_session_from_html(html, driver.current_url, driver)
+    session.scroll_position = driver.execute_script("return window.pageYOffset;")
+    _manager.session = session
+    return session
+
+
 def _navigate(url: str) -> BrowserSession:
     """使用 WebDriver 导航到指定的 URL。"""
+    if _manager.use_static_mode():
+        try:
+            return _manager.navigate_static(url)
+        except Exception as exc:
+            raise ToolError(f"导航到 {url} 时出错: {exc}") from exc
+
     try:
         driver = _manager.driver
         driver.get(url)
-        # 等待页面加载（一个简单的隐式等待）
         driver.implicitly_wait(5)
         session = _parse_page()
         _manager.session = session
         return session
-    except Exception as e:
-        raise ToolError(f"导航到 {url} 时出错: {e}")
+    except ToolError:
+        try:
+            return _manager.navigate_static(url)
+        except Exception as exc:
+            raise ToolError(f"导航到 {url} 时出错: {exc}") from exc
+    except Exception as exc:
+        try:
+            return _manager.navigate_static(url)
+        except Exception as fallback_exc:
+            raise ToolError(f"导航到 {url} 时出错: {fallback_exc}") from exc
 
 # --- 工具类实现 ---
 
@@ -309,9 +420,27 @@ class BrowserClickTool(Tool):
 
         element_info = session.clickables[index_int]
         webelement = element_info._webelement
-        
+
+        if _manager.use_static_mode():
+            target_url = element_info.href or session.current_url
+            if target_url:
+                new_session = _navigate(target_url)
+            else:
+                new_session = session
+            _manager.session = new_session
+            summary = f"已点击元素 {index_int} ('{element_info.text[:30]}...')"
+            if target_url and target_url != session.current_url:
+                summary += f" 并导航到 {target_url}"
+            return ToolResult(
+                success=True,
+                output=summary,
+                data=new_session.serialize(),
+            )
+
         if not webelement:
-             raise ToolError(f"无法找到索引为 {index_int} 的 Selenium 元素。请先调用 browser_state 刷新状态。")
+            raise ToolError(
+                f"无法找到索引为 {index_int} 的 Selenium 元素。请先调用 browser_state 刷新状态。"
+            )
 
         try:
             webelement.click()
@@ -351,8 +480,17 @@ class BrowserInputTool(Tool):
         input_info = session.inputs[index_int]
         webelement = input_info._webelement
 
+        if _manager.use_static_mode():
+            input_info.value = str(value)
+            session.inputs[index_int] = input_info
+            _manager.session = session
+            summary = f"已向输入框 {index_int} 中填入文本"
+            return ToolResult(success=True, output=summary, data=input_info.serialize())
+
         if not webelement:
-             raise ToolError(f"无法找到索引为 {index_int} 的 Selenium 元素。请先调用 browser_state 刷新状态。")
+            raise ToolError(
+                f"无法找到索引为 {index_int} 的 Selenium 元素。请先调用 browser_state 刷新状态。"
+            )
 
         try:
             webelement.clear()
@@ -370,17 +508,27 @@ class BrowserScrollTool(Tool):
     direction: int = 1
 
     def call(self, **kwargs) -> ToolResult:
-        _ensure_session_initialized()
-        driver = _manager.driver
+        session = _ensure_session_initialized()
         amount = kwargs.get("scroll_amount", 400)
         try:
             amount_int = int(amount)
         except (TypeError, ValueError) as exc:
             raise ToolError("'scroll_amount' 必须是整数") from exc
-        
+
+        if _manager.use_static_mode():
+            if self.direction > 0:
+                new_scroll_pos = session.scroll_position + amount_int
+            else:
+                new_scroll_pos = max(session.scroll_position - amount_int, 0)
+            session.scroll_position = new_scroll_pos
+            _manager.session = session
+            summary = f"已{'向下' if self.direction > 0 else '向上'}滚动到位置 {new_scroll_pos}"
+            return ToolResult(success=True, output=summary, data=session.serialize())
+
+        driver = _manager.driver
         # 使用 JavaScript 执行滚动
         driver.execute_script(f"window.scrollBy(0, {self.direction * amount_int});")
-        
+
         # 更新滚动位置
         new_scroll_pos = driver.execute_script("return window.pageYOffset;")
         _manager.session.scroll_position = new_scroll_pos

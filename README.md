@@ -154,6 +154,7 @@ Once configured, you're ready to interact with the agent in the chat interface! 
 #### 5. Troubleshooting Tool Errors
 
 - **Session workspace paths**: Every chat session is assigned a random virtual mount such as `/mnt/okcvm-12ab34cd/`. The file tools (`mshtools-write_file`, `mshtools-read_file`, `mshtools-edit_file`) automatically resolve relative paths inside this mount, so commands like `resume-website/index.html` are stored safely without leaking across sessions. Passing a path outside the mount will raise a "path outside workspace" error.
+- **State snapshots**: Each workspace is Git-backed. OKCVM automatically checkpoints the sandbox after every assistant reply and exposes API endpoints so you can list snapshots or roll back to a previous turn—perfect for "oops" moments in long multi-turn projects.
 
 ---
 

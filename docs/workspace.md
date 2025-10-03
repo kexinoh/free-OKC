@@ -27,6 +27,18 @@ experience with a per-session "virtual space" managed by
   why the UI and CLI display randomised workspace IDs in session metadata.
   【F:src/okcvm/workspace.py†L99-L108】【F:src/okcvm/vm.py†L163-L176】
 
+## Git-backed state management
+- Workspaces now bootstrap a lightweight Git repository through
+  `GitWorkspaceState`, enabling snapshot/restore without leaking outside the
+  sandbox. The manager falls back gracefully when Git is unavailable.
+  【F:src/okcvm/workspace.py†L15-L167】
+- `SessionState` publishes snapshot metadata with every response and exposes
+  helpers for manual snapshots or rollbacks, making "虚拟空间" time travelable in
+  multi-turn sessions. 【F:src/okcvm/session.py†L25-L164】
+- FastAPI endpoints surface the snapshot list, creation, and restore actions for
+  the frontend; end-to-end tests cover both the backend API and Git round trip.
+  【F:src/okcvm/api/main.py†L17-L205】【F:tests/test_api_app.py†L1-L142】【F:tests/test_workspace.py†L1-L62】
+
 ## User-facing documentation
 - Both READMEs explain the virtual workspace contract, highlighting that file
   tools stay within the sandbox and that crossing the boundary yields an error.

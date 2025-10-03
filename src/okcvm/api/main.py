@@ -15,7 +15,14 @@ from starlette.responses import Response
 from ..config import ModelEndpointConfig, configure, get_config
 from ..logging_utils import get_logger, setup_logging
 from ..session import SessionState
-from .models import ChatRequest, ConfigUpdatePayload, build_media_config
+from ..workspace import WorkspaceStateError
+from .models import (
+    ChatRequest,
+    ConfigUpdatePayload,
+    SnapshotCreatePayload,
+    SnapshotRestorePayload,
+    build_media_config,
+)
 
 # --- Frontend Setup ---
 FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
@@ -178,6 +185,27 @@ def create_app() -> FastAPI:
             result.get("workspace", {}).get("removed"),
         )
         return result
+
+    @app.get("/api/session/workspace/snapshots")
+    async def list_workspace_snapshots(limit: int = 20) -> Dict[str, object]:
+        logger.debug("Workspace snapshot list requested limit=%s", limit)
+        return state.list_workspace_snapshots(limit=limit)
+
+    @app.post("/api/session/workspace/snapshots")
+    async def create_workspace_snapshot(payload: SnapshotCreatePayload) -> Dict[str, object]:
+        logger.info("Workspace snapshot creation requested label=%s", payload.label)
+        try:
+            return state.snapshot_workspace(payload.label, limit=20)
+        except WorkspaceStateError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/session/workspace/restore")
+    async def restore_workspace_snapshot(payload: SnapshotRestorePayload) -> Dict[str, object]:
+        logger.info("Workspace restore requested snapshot=%s", payload.snapshot_id)
+        try:
+            return state.restore_workspace(payload.snapshot_id, limit=20)
+        except WorkspaceStateError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return app
 
