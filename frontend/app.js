@@ -207,8 +207,8 @@ function normalizeConversation(entry) {
       typeof entry.title === 'string' && entry.title.trim().length > 0
         ? entry.title.trim()
         : '新的会话',
-    createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : now,
-    updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : entry.createdAt ?? now,
+    createdAt: typeof entry.createdAt === 'string' && !Number.isNaN(Date.parse(entry.createdAt)) ? entry.createdAt : now,
+    updatedAt: typeof entry.updatedAt === 'string' && !Number.isNaN(Date.parse(entry.updatedAt)) ? entry.updatedAt : (entry.createdAt ?? now),
     messages: [],
   };
 
