@@ -102,8 +102,6 @@ function setInteractionDisabled(disabled) {
   }
 }
 
-const CONVERSATION_TITLE_MAX_LENGTH = 20;
-
 function generateConversationTitle(content, { fallbackToDefault = true } = {}) {
   const normalized = typeof content === 'string' ? content.trim() : '';
   if (!normalized) {
@@ -112,6 +110,248 @@ function generateConversationTitle(content, { fallbackToDefault = true } = {}) {
   return normalized.length > CONVERSATION_TITLE_MAX_LENGTH
     ? `${normalized.slice(0, CONVERSATION_TITLE_MAX_LENGTH)}…`
     : normalized;
+}
+
+function cloneMessages(messages) {
+  return (Array.isArray(messages) ? messages : []).map((entry) => ({
+    id: entry?.id ?? generateId(),
+    role: entry?.role === 'assistant' ? 'assistant' : 'user',
+    content: typeof entry?.content === 'string' ? entry.content : '',
+    timestamp: typeof entry?.timestamp === 'string' ? entry.timestamp : new Date().toISOString(),
+    pending: Boolean(entry?.pending),
+  }));
+}
+
+function computeMessageSignature(messages) {
+  const payload = (Array.isArray(messages) ? messages : []).map((entry) => [
+    entry?.id ?? '',
+    entry?.role === 'assistant' ? 'assistant' : 'user',
+    typeof entry?.content === 'string' ? entry.content : '',
+    typeof entry?.timestamp === 'string' ? entry.timestamp : '',
+    entry?.pending ? 1 : 0,
+  ]);
+  return JSON.stringify(payload);
+}
+
+function captureBranchSelections(branches, overrides = {}) {
+  if (!branches || typeof branches !== 'object') return {};
+  const selections = {};
+  Object.entries(branches).forEach(([messageId, state]) => {
+    if (!state || !Array.isArray(state.versions) || state.versions.length === 0) return;
+    const override = overrides[messageId];
+    const index = Number.isInteger(override)
+      ? override
+      : Number.isInteger(state.activeIndex)
+        ? state.activeIndex
+        : 0;
+    selections[messageId] = Math.max(0, Math.min(index, state.versions.length - 1));
+  });
+  return selections;
+}
+
+function ensureBranchState(conversation, messageId) {
+  if (!conversation || !messageId) return null;
+  if (!conversation.branches || typeof conversation.branches !== 'object') {
+    conversation.branches = {};
+  }
+  if (!conversation.branches[messageId]) {
+    conversation.branches[messageId] = {
+      messageId,
+      versions: [],
+      activeIndex: 0,
+    };
+  }
+  return conversation.branches[messageId];
+}
+
+function ensureBranchBaseline(conversation, messageId) {
+  const state = ensureBranchState(conversation, messageId);
+  if (!state) return null;
+  if (!Array.isArray(state.versions) || state.versions.length === 0) {
+    const snapshot = cloneMessages(conversation.messages);
+    const signature = computeMessageSignature(snapshot);
+    const selections = captureBranchSelections(conversation.branches, { [messageId]: 0 });
+    state.versions = [
+      {
+        id: generateId(),
+        signature,
+        messages: snapshot,
+        selections,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    state.activeIndex = 0;
+  }
+  return state;
+}
+
+function commitBranchTransition(conversation, messageId, previousMessages, previousSelections = {}) {
+  if (!conversation || !messageId) return;
+  const state = ensureBranchState(conversation, messageId);
+  if (!state) return;
+
+  const timestamp = new Date().toISOString();
+  const previousSnapshot = cloneMessages(previousMessages);
+  const previousSignature = computeMessageSignature(previousSnapshot);
+  let previousIndex = state.versions.findIndex((version) => version.signature === previousSignature);
+  if (previousIndex === -1) {
+    state.versions.push({
+      id: generateId(),
+      signature: previousSignature,
+      messages: previousSnapshot,
+      selections: { ...previousSelections },
+      createdAt: timestamp,
+    });
+    previousIndex = state.versions.length - 1;
+  }
+
+  const nextSnapshot = cloneMessages(conversation.messages);
+  const nextSignature = computeMessageSignature(nextSnapshot);
+  let nextIndex = state.versions.findIndex((version) => version.signature === nextSignature);
+  if (nextIndex === -1) {
+    const overrideIndex = state.versions.length;
+    const nextSelections = captureBranchSelections(conversation.branches, { [messageId]: overrideIndex });
+    state.versions.push({
+      id: generateId(),
+      signature: nextSignature,
+      messages: nextSnapshot,
+      selections: nextSelections,
+      createdAt: timestamp,
+    });
+    nextIndex = state.versions.length - 1;
+  }
+
+  if (previousIndex !== -1 && nextIndex !== -1 && previousIndex > nextIndex) {
+    const [previousVersion] = state.versions.splice(previousIndex, 1);
+    state.versions.splice(nextIndex, 0, previousVersion);
+    previousIndex = nextIndex;
+    nextIndex += 1;
+  }
+
+  const boundedNextIndex = Math.max(0, Math.min(nextIndex, state.versions.length - 1));
+  state.activeIndex = boundedNextIndex;
+  const activeSelections = captureBranchSelections(conversation.branches);
+  const activeVersion = state.versions[state.activeIndex];
+  if (activeVersion) {
+    activeVersion.messages = cloneMessages(conversation.messages);
+    activeVersion.signature = computeMessageSignature(activeVersion.messages);
+    activeVersion.selections = activeSelections;
+    activeVersion.createdAt = activeVersion.createdAt ?? timestamp;
+  }
+}
+
+function syncActiveBranchSnapshots(conversation) {
+  if (!conversation?.branches || typeof conversation.branches !== 'object') return;
+  const activeSelections = captureBranchSelections(conversation.branches);
+  const snapshot = cloneMessages(conversation.messages);
+  const signature = computeMessageSignature(snapshot);
+  Object.values(conversation.branches).forEach((state) => {
+    if (!state || !Array.isArray(state.versions) || state.versions.length === 0) return;
+    const index = Number.isInteger(state.activeIndex) ? state.activeIndex : 0;
+    const targetIndex = Math.max(0, Math.min(index, state.versions.length - 1));
+    state.activeIndex = targetIndex;
+    const version = state.versions[targetIndex];
+    if (version) {
+      version.messages = cloneMessages(snapshot);
+      version.signature = signature;
+      version.selections = { ...activeSelections };
+    }
+  });
+}
+
+function refreshMessageBranchNavigation(messageElement, messageId, conversation = getCurrentConversation()) {
+  if (!(messageElement instanceof HTMLElement) || !messageId) return;
+  const nav = messageElement.querySelector('.branch-navigation');
+  if (!(nav instanceof HTMLElement)) return;
+  if (messageElement.classList.contains('assistant')) {
+    nav.hidden = true;
+    return;
+  }
+
+  const label = nav.querySelector('.branch-navigation-label');
+  const prevButton = nav.querySelector('button[data-direction="prev"]');
+  const nextButton = nav.querySelector('button[data-direction="next"]');
+  const branchState = conversation?.branches?.[messageId];
+
+  if (!branchState || !Array.isArray(branchState.versions) || branchState.versions.length <= 1) {
+    nav.hidden = true;
+    if (label) label.textContent = '1/1';
+    if (prevButton) prevButton.disabled = true;
+    if (nextButton) nextButton.disabled = true;
+    return;
+  }
+
+  const total = branchState.versions.length;
+  const activeIndex = Math.max(
+    0,
+    Math.min(Number.isInteger(branchState.activeIndex) ? branchState.activeIndex : 0, total - 1),
+  );
+
+  nav.hidden = false;
+  if (label) {
+    label.textContent = `${activeIndex + 1}/${total}`;
+  }
+  if (prevButton) {
+    prevButton.disabled = activeIndex <= 0;
+  }
+  if (nextButton) {
+    nextButton.disabled = activeIndex >= total - 1;
+  }
+}
+
+function refreshConversationBranchNavigation(conversation = getCurrentConversation()) {
+  if (!chatMessages) return;
+  const targetConversation = conversation ?? getCurrentConversation();
+  const userMessages = chatMessages.querySelectorAll('.message.user');
+  userMessages.forEach((element) => {
+    const messageId = element?.dataset?.messageId;
+    if (messageId) {
+      refreshMessageBranchNavigation(element, messageId, targetConversation);
+    }
+  });
+}
+
+function handleBranchNavigation(messageId, delta) {
+  if (!messageId || !Number.isInteger(delta)) return;
+  const conversation = getCurrentConversation();
+  if (!conversation) return;
+
+  const branchState = conversation.branches?.[messageId];
+  if (!branchState || !Array.isArray(branchState.versions) || branchState.versions.length === 0) return;
+
+  const currentIndex = Number.isInteger(branchState.activeIndex) ? branchState.activeIndex : 0;
+  const nextIndex = currentIndex + delta;
+  if (nextIndex < 0 || nextIndex >= branchState.versions.length) return;
+
+  const snapshot = branchState.versions[nextIndex];
+  if (!snapshot) return;
+
+  const restoredMessages = cloneMessages(snapshot.messages);
+  conversation.messages = restoredMessages;
+
+  const selections = snapshot.selections && typeof snapshot.selections === 'object' ? snapshot.selections : {};
+  Object.entries(conversation.branches ?? {}).forEach(([key, state]) => {
+    if (!state || !Array.isArray(state.versions) || state.versions.length === 0) return;
+    if (key === messageId) return;
+    const selection = selections[key];
+    if (typeof selection === 'number' && selection >= 0 && selection < state.versions.length) {
+      state.activeIndex = selection;
+    }
+  });
+
+  const selectedIndex = selections[messageId];
+  if (typeof selectedIndex === 'number' && selectedIndex >= 0 && selectedIndex < branchState.versions.length) {
+    branchState.activeIndex = selectedIndex;
+  } else {
+    branchState.activeIndex = nextIndex;
+  }
+
+  conversation.updatedAt = new Date().toISOString();
+  bumpConversation(conversation.id);
+  syncActiveBranchSnapshots(conversation);
+  saveConversationsToStorage();
+  renderConversationList();
+  renderConversation(conversation);
 }
 
 function createMessageActionButton(label, action, iconName) {
@@ -353,6 +593,9 @@ function handleEditMessageAction(messageElement, messageId) {
   const message = conversation.messages[messageIndex];
   if (!message || message.role !== 'user') return;
 
+  const previousMessages = cloneMessages(conversation.messages);
+  const previousSelections = captureBranchSelections(conversation.branches);
+
   const body = messageElement.querySelector('p');
   const currentContent = typeof message.content === 'string' ? message.content : body?.textContent ?? '';
   const nextContent = window.prompt('编辑这条消息', currentContent ?? '');
@@ -380,8 +623,11 @@ function handleEditMessageAction(messageElement, messageId) {
 
   conversation.title = generateConversationTitle(normalized);
 
+  commitBranchTransition(conversation, message.id, previousMessages, previousSelections);
+  syncActiveBranchSnapshots(conversation);
   saveConversationsToStorage();
   renderConversationList();
+  refreshConversationBranchNavigation(conversation);
 }
 
 async function regenerateAssistantMessage(messageElement, messageId, button) {
@@ -397,6 +643,10 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
     setMessageActionFeedback(button, { status: 'error', message: '无法刷新', duration: 1500 });
     return;
   }
+
+  const previousMessages = cloneMessages(conversation.messages);
+  const previousSelections = captureBranchSelections(conversation.branches);
+  ensureBranchBaseline(conversation, precedingUserMessage.id);
 
   button.dataset.loading = 'true';
   setMessageActionStatus(button, '刷新中…');
@@ -416,6 +666,17 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
   saveConversationsToStorage();
   renderConversationList();
 
+  let branchTransitionCommitted = false;
+  const finalizeBranchTransition = () => {
+    if (branchTransitionCommitted) return;
+    branchTransitionCommitted = true;
+    commitBranchTransition(conversation, precedingUserMessage.id, previousMessages, previousSelections);
+    syncActiveBranchSnapshots(conversation);
+    saveConversationsToStorage();
+    renderConversationList();
+    refreshConversationBranchNavigation(conversation);
+  };
+
   try {
     const data = await fetchJson('/api/chat', {
       method: 'POST',
@@ -429,10 +690,12 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
     updateWebPreview(data.web_preview);
     updatePptPreview(data.ppt_slides);
     setMessageActionFeedback(button, { status: 'success', message: '已刷新', duration: 1500 });
+    finalizeBranchTransition();
   } catch (error) {
     console.error(error);
     finalizePendingMessage(messageElement, `重新生成失败：${error.message}`, messageId);
     setMessageActionFeedback(button, { status: 'error', message: '刷新失败', duration: 1500 });
+    finalizeBranchTransition();
   } finally {
     setStatus('待命中…');
     setInteractionDisabled(false);
@@ -557,36 +820,89 @@ function formatConversationTime(isoString) {
 function normalizeConversation(entry) {
   if (!entry || typeof entry !== 'object') return null;
   const now = new Date().toISOString();
+
+  const normalizeMessage = (message) => {
+    if (!message || typeof message !== 'object') return null;
+    const role = message.role === 'assistant' ? 'assistant' : 'user';
+    const content = typeof message.content === 'string' ? message.content : '';
+    const timestamp =
+      typeof message.timestamp === 'string' && !Number.isNaN(Date.parse(message.timestamp))
+        ? message.timestamp
+        : now;
+    return {
+      id: typeof message.id === 'string' && message.id ? message.id : generateId(),
+      role,
+      content,
+      timestamp,
+      pending: Boolean(message.pending),
+    };
+  };
+
   const normalized = {
     id: typeof entry.id === 'string' && entry.id ? entry.id : generateId(),
     title:
       typeof entry.title === 'string' && entry.title.trim().length > 0
         ? entry.title.trim()
         : DEFAULT_CONVERSATION_TITLE,
-    createdAt: typeof entry.createdAt === 'string' && !Number.isNaN(Date.parse(entry.createdAt)) ? entry.createdAt : now,
-    updatedAt: typeof entry.updatedAt === 'string' && !Number.isNaN(Date.parse(entry.updatedAt)) ? entry.updatedAt : (entry.createdAt ?? now),
-    messages: [],
+    createdAt:
+      typeof entry.createdAt === 'string' && !Number.isNaN(Date.parse(entry.createdAt))
+        ? entry.createdAt
+        : now,
+    updatedAt:
+      typeof entry.updatedAt === 'string' && !Number.isNaN(Date.parse(entry.updatedAt))
+        ? entry.updatedAt
+        : entry.createdAt ?? now,
+    messages: Array.isArray(entry.messages)
+      ? entry.messages.map((message) => normalizeMessage(message)).filter(Boolean)
+      : [],
+    branches: {},
   };
 
-  if (Array.isArray(entry.messages)) {
-    normalized.messages = entry.messages
-      .map((message) => {
-        if (!message || typeof message !== 'object') return null;
-        const role = message.role === 'assistant' ? 'assistant' : 'user';
-        const content = typeof message.content === 'string' ? message.content : '';
-        const timestamp =
-          typeof message.timestamp === 'string' && !Number.isNaN(Date.parse(message.timestamp))
-            ? message.timestamp
-            : now;
-        return {
-          id: typeof message.id === 'string' && message.id ? message.id : generateId(),
-          role,
-          content,
-          timestamp,
-          pending: Boolean(message.pending),
-        };
-      })
-      .filter(Boolean);
+  if (entry.branches && typeof entry.branches === 'object') {
+    Object.entries(entry.branches).forEach(([messageId, state]) => {
+      if (!state || typeof state !== 'object') return;
+      const normalizedState = ensureBranchState({ branches: {} }, messageId);
+      normalizedState.activeIndex = Number.isInteger(state.activeIndex) ? state.activeIndex : 0;
+      normalizedState.versions = Array.isArray(state.versions)
+        ? state.versions
+            .map((version) => {
+              if (!version || typeof version !== 'object') return null;
+              const messages = Array.isArray(version.messages)
+                ? version.messages.map((message) => normalizeMessage(message)).filter(Boolean)
+                : [];
+              const signature = typeof version.signature === 'string'
+                ? version.signature
+                : computeMessageSignature(messages);
+              const selections =
+                version.selections && typeof version.selections === 'object'
+                  ? Object.entries(version.selections).reduce((acc, [key, value]) => {
+                      if (typeof value === 'number' && Number.isFinite(value)) {
+                        acc[key] = Math.max(0, Math.floor(value));
+                      }
+                      return acc;
+                    }, {})
+                  : {};
+              const createdAt =
+                typeof version.createdAt === 'string' && !Number.isNaN(Date.parse(version.createdAt))
+                  ? version.createdAt
+                  : now;
+              return {
+                id: typeof version.id === 'string' && version.id ? version.id : generateId(),
+                messages,
+                signature,
+                selections,
+                createdAt,
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+      if (normalizedState.versions.length > 0) {
+        const boundedIndex = Math.max(0, Math.min(normalizedState.activeIndex, normalizedState.versions.length - 1));
+        normalizedState.activeIndex = boundedIndex;
+        normalized.branches[messageId] = normalizedState;
+      }
+    });
   }
 
   return normalized;
@@ -601,6 +917,9 @@ function loadConversationsFromStorage() {
         conversations = parsed
           .map((entry) => normalizeConversation(entry))
           .filter((entry) => entry !== null);
+        conversations.forEach((conversation) => {
+          syncActiveBranchSnapshots(conversation);
+        });
       }
     } catch (error) {
       conversations = [];
@@ -648,6 +967,7 @@ function createConversation(options = {}) {
     createdAt: now,
     updatedAt: now,
     messages: [],
+    branches: {},
   };
   conversations.unshift(conversation);
   currentSessionId = conversation.id;
@@ -757,6 +1077,7 @@ function renderConversation(conversation) {
   });
   chatMessages.scrollTop = chatMessages.scrollHeight;
   lastRenderedConversationId = target.id;
+  refreshConversationBranchNavigation(target);
 
   if (userInput) {
     userInput.value = '';
@@ -793,6 +1114,7 @@ function appendMessageToConversation(role, content, options = {}) {
   }
 
   bumpConversation(conversation.id);
+  syncActiveBranchSnapshots(conversation);
   saveConversationsToStorage();
   renderConversationList();
   return message.id;
@@ -804,16 +1126,24 @@ function resolvePendingConversationMessage(messageId, content) {
   const conversation = conversations.find(c => c.messages.some(m => m.id === messageId));
   if (!conversation) return;
 
-  const message = conversation.messages.find((entry) => entry.id === messageId);
-  if (message) {
-    message.content = typeof content === 'string' ? content : '';
-    message.pending = false;
-    message.timestamp = timestamp;
-    conversation.updatedAt = timestamp;
-    bumpConversation(conversation.id);
-    saveConversationsToStorage();
-    renderConversationList();
+  const messageIndex = conversation.messages.findIndex((entry) => entry.id === messageId);
+  if (messageIndex === -1) return;
+  const message = conversation.messages[messageIndex];
+  message.content = typeof content === 'string' ? content : '';
+  message.pending = false;
+  message.timestamp = timestamp;
+  conversation.updatedAt = timestamp;
+
+  const precedingUserMessage = findPreviousUserMessage(conversation, messageIndex);
+  if (precedingUserMessage) {
+    ensureBranchBaseline(conversation, precedingUserMessage.id);
   }
+
+  bumpConversation(conversation.id);
+  syncActiveBranchSnapshots(conversation);
+  saveConversationsToStorage();
+  renderConversationList();
+  refreshConversationBranchNavigation(conversation);
 }
 
 function initializeConversationState() {
@@ -977,7 +1307,40 @@ function addMessage(role, text, options = {}) {
     actions.appendChild(createMessageActionButton('刷新', 'refresh', 'refresh'));
   }
 
-  message.append(header, body, actions);
+  const footer = document.createElement('div');
+  footer.className = 'message-footer';
+
+  const branchNavigation = document.createElement('div');
+  branchNavigation.className = 'branch-navigation';
+  if (role !== 'user') {
+    branchNavigation.hidden = true;
+  } else {
+    const prevButton = document.createElement('button');
+    prevButton.type = 'button';
+    prevButton.className = 'branch-nav-button';
+    prevButton.dataset.direction = 'prev';
+    prevButton.textContent = '<';
+    prevButton.setAttribute('aria-label', '查看上一版本');
+    prevButton.disabled = true;
+
+    const label = document.createElement('span');
+    label.className = 'branch-navigation-label';
+    label.textContent = '1/1';
+
+    const nextButton = document.createElement('button');
+    nextButton.type = 'button';
+    nextButton.className = 'branch-nav-button';
+    nextButton.dataset.direction = 'next';
+    nextButton.textContent = '>';
+    nextButton.setAttribute('aria-label', '查看下一版本');
+    nextButton.disabled = true;
+
+    branchNavigation.append(prevButton, label, nextButton);
+  }
+
+  footer.append(branchNavigation, actions);
+
+  message.append(header, body, footer);
 
   if (pending) {
     markMessagePending(message, body.textContent || '正在生成回复…');
@@ -994,6 +1357,9 @@ function addAndRenderMessage(role, text, options = {}) {
   const messageElement = addMessage(role, text, options);
   if (messageElement instanceof HTMLElement && messageId) {
     messageElement.dataset.messageId = messageId;
+    if (role === 'user') {
+      refreshMessageBranchNavigation(messageElement, messageId);
+    }
   }
   return { messageId, messageElement };
 }
@@ -1297,8 +1663,25 @@ chatForm.addEventListener('submit', handleUserSubmit);
 
 if (chatMessages) {
   chatMessages.addEventListener('click', (event) => {
-    const target = event.target instanceof HTMLElement ? event.target.closest('button.message-action') : null;
-    if (!target) return;
+    const origin = event.target instanceof HTMLElement ? event.target : null;
+    if (!origin) return;
+
+    const navButton = origin.closest('button.branch-nav-button');
+    if (navButton instanceof HTMLElement && chatMessages.contains(navButton)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const direction = navButton.dataset.direction;
+      const messageElement = navButton.closest('.message');
+      const messageId = messageElement?.dataset?.messageId;
+      if (messageId && (direction === 'prev' || direction === 'next')) {
+        const delta = direction === 'prev' ? -1 : 1;
+        handleBranchNavigation(messageId, delta);
+      }
+      return;
+    }
+
+    const target = origin.closest('button.message-action');
+    if (!target || !chatMessages.contains(target)) return;
 
     const action = target.dataset.action;
     if (!action) return;
