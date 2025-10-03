@@ -71,6 +71,20 @@ class _LenFriendlyToolProxy:
         self._tool = tool
 
     def __getattr__(self, item: str) -> Any:
+        if item == "__name__":
+            if hasattr(self._tool, "__name__"):
+                return getattr(self._tool, "__name__")
+            if hasattr(self._tool, "name"):
+                return getattr(self._tool, "name")
+            return type(self._tool).__name__
+        if item == "__qualname__":
+            if hasattr(self._tool, "__qualname__"):
+                return getattr(self._tool, "__qualname__")
+            name = getattr(self, "__name__")
+            module = getattr(self._tool, "__module__", None)
+            if module:
+                return f"{module}.{name}"
+            return name
         return getattr(self._tool, item)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
