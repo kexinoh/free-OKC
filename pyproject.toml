@@ -21,6 +21,8 @@ dependencies = [
   "langchain-openai>=0.1.8",
   "selenium>=4.36.0",
   "webdriver-manager>=4.0.2",
+  "pytest>=8.4.2",
+  "psutil>=7.1.0",
 ]
 
 [project.optional-dependencies]
