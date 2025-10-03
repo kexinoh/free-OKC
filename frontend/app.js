@@ -97,7 +97,8 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-function addMessage(role, text) {
+function addMessage(role, text, options = {}) {
+  const { pending = false } = options;
   const message = document.createElement('article');
   message.className = `message ${role}`;
 
@@ -113,19 +114,52 @@ function addMessage(role, text) {
   header.append(name, time);
 
   const body = document.createElement('p');
-  body.textContent = text;
+  if (typeof text === 'string' && text.length > 0) {
+    body.textContent = text;
+  } else {
+    body.textContent = '';
+  }
+
+  if (pending) {
+    message.dataset.pending = 'true';
+    message.classList.add('pending');
+    body.classList.add('pending');
+    if (!body.textContent) {
+      body.textContent = '正在生成回复…';
+    }
+  }
 
   message.append(header, body);
   chatMessages.appendChild(message);
   chatMessages.scrollTop = chatMessages.scrollHeight;
+  return message;
+}
+
+function finalizePendingMessage(message, text) {
+  if (!(message instanceof HTMLElement)) {
+    addMessage('assistant', text);
+    return;
+  }
+
+  const body = message.querySelector('p');
+  if (body) {
+    body.textContent = typeof text === 'string' ? text : '';
+    body.classList.remove('pending');
+  }
+
+  message.classList.remove('pending');
+  if (message.dataset) {
+    delete message.dataset.pending;
+  }
+  message.removeAttribute('data-pending');
 }
 
 function logModelInvocation(meta) {
   if (!meta) return;
-  modelLogs.unshift(meta);
+  modelLogs.push(meta);
   const limit = 6;
   if (modelLogs.length > limit) {
-    modelLogs.length = limit;
+    modelLogs.splice(0, modelLogs.length - limit);
   }
 
   modelLogList.innerHTML = '';
@@ -141,6 +175,9 @@ function logModelInvocation(meta) {
   });
 
   modelLogEmpty.hidden = modelLogs.length > 0;
+  if (modelLogs.length > 0) {
+    modelLogList.scrollTop = modelLogList.scrollHeight;
+  }
 }
 
 function updateWebPreview(preview) {
@@ -327,19 +364,20 @@ async function sendChat(message) {
   setStatus('创意生成中…', true);
   chatForm.querySelector('button').disabled = true;
   userInput.disabled = true;
+  const pendingMessage = addMessage('assistant', '正在生成回复…', { pending: true });
   try {
     const data = await fetchJson('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message }),
     });
-    addMessage('assistant', data.reply);
+    finalizePendingMessage(pendingMessage, data.reply);
     logModelInvocation(data.meta);
     updateWebPreview(data.web_preview);
     updatePptPreview(data.ppt_slides);
   } catch (error) {
     console.error(error);
-    addMessage('assistant', `抱歉，发生错误：${error.message}`);
+    finalizePendingMessage(pendingMessage, `抱歉，发生错误：${error.message}`);
   } finally {
     setStatus('待命中…');
     chatForm.querySelector('button').disabled = false;
