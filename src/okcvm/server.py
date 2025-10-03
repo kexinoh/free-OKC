@@ -21,7 +21,7 @@ def _get_default_config_path() -> Path:
 
 @cli.command()
 def main(
-    host: str = typer.Option("0.0.0.0", "--host", "-h", help="The host to bind the server to."),
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="The host to bind the server to."),
     port: int = typer.Option(8000, "--port", "-p", help="The port to run the server on."),
     config: Optional[Path] = typer.Option(
         None, # Default to None, so we can calculate it dynamically
