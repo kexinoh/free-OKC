@@ -534,11 +534,7 @@ async function deleteConversation(conversationId) {
   } catch (error) {
     console.error(error);
     conversations.splice(index, 0, removed);
-    currentSessionId = removed.id;
-    saveConversationsToStorage();
-    renderConversationList();
-    renderConversation(removed);
-    setStatus('待命中…');
+    selectConversation(removed.id);
     addAndRenderMessage('assistant', `清理会话失败：${error.message || '未知错误'}`);
     return;
   }
