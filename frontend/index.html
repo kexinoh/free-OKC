@@ -23,7 +23,7 @@
           aria-controls="history-panel"
           aria-label="切换历史会话侧栏"
         >
-          <span class="history-toggle-icon" aria-hidden="true">💾</span>
+          <span class="history-toggle-icon" aria-hidden="true">三</span>
           <span class="history-toggle-label">历史会话</span>
         </button>
         <div class="history-panel" id="history-panel" tabindex="-1">
@@ -84,7 +84,7 @@
             <p class="empty-state" id="model-log-empty">暂无调用记录</p>
           </section>
 
-          <section class="insight-card">
+          <section class="insight-card" id="web-preview-card" hidden>
             <div class="preview-header">
               <h2>网页预览</h2>
               <button class="ghost-button" id="open-web-preview" type="button" disabled>
@@ -99,7 +99,7 @@
             </div>
           </section>
 
-          <section class="insight-card">
+          <section class="insight-card" id="ppt-preview-card" hidden>
             <div class="preview-header">
               <h2>PPT 预览</h2>
               <button class="ghost-button" id="toggle-ppt-mode" type="button" disabled>

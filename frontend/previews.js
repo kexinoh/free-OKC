@@ -2,9 +2,11 @@ import {
   modelLogList,
   modelLogEmpty,
   modelLogTemplate,
+  webPreviewCard,
   webPreviewFrame,
   webPreviewEmpty,
   openWebPreviewButton,
+  pptPreviewCard,
   pptPreviewContainer,
   pptPreviewEmpty,
   togglePptModeButton,
@@ -54,7 +56,13 @@ export function resetModelLogs() {
 
 export function updateWebPreview(preview) {
   currentWebPreview = preview;
-  if (preview?.html) {
+  const hasContent = Boolean(preview?.html);
+
+  if (webPreviewCard) {
+    webPreviewCard.hidden = !hasContent;
+  }
+
+  if (hasContent) {
     webPreviewFrame.srcdoc = preview.html;
     webPreviewFrame.hidden = false;
     webPreviewEmpty.hidden = true;
@@ -62,7 +70,7 @@ export function updateWebPreview(preview) {
   } else {
     webPreviewFrame.srcdoc = '';
     webPreviewFrame.hidden = true;
-    webPreviewEmpty.hidden = false;
+    webPreviewEmpty.hidden = true;
     openWebPreviewButton.disabled = true;
   }
 }
@@ -71,8 +79,14 @@ export function updatePptPreview(slides) {
   currentPptSlides = Array.isArray(slides) ? slides : [];
   pptPreviewContainer.innerHTML = '';
 
-  if (currentPptSlides.length === 0) {
-    pptPreviewEmpty.hidden = false;
+  const hasSlides = currentPptSlides.length > 0;
+
+  if (pptPreviewCard) {
+    pptPreviewCard.hidden = !hasSlides;
+  }
+
+  if (!hasSlides) {
+    pptPreviewEmpty.hidden = true;
     pptPreviewContainer.hidden = true;
     togglePptModeButton.disabled = true;
     if (isCarouselMode) {
