@@ -71,10 +71,12 @@ class WorkspaceManager:
         if posix_path.is_absolute():
             try:
                 relative = posix_path.relative_to(self._paths.mount)
-            except ValueError as exc:
-                raise WorkspaceError(
-                    f"Path '{raw_path}' is outside of the session workspace {self._paths.mount}"
-                ) from exc
+            except ValueError:
+                # The agent is using a generic absolute path (e.g. "/tmp/foo").
+                # Anchor it inside the session workspace so that the random
+                # workspace identifier does not need to be known a priori.
+                parts = posix_path.parts[1:]
+                relative = PurePosixPath(*parts)
         else:
             relative = posix_path
 
