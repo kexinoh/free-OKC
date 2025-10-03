@@ -517,7 +517,7 @@ class BrowserScrollTool(Tool):
 
         if _manager.use_static_mode():
             if self.direction > 0:
-                new_scroll_pos = min(session.scroll_position + amount_int, amount_int)
+                new_scroll_pos = session.scroll_position + amount_int
             else:
                 new_scroll_pos = max(session.scroll_position - amount_int, 0)
             session.scroll_position = new_scroll_pos
