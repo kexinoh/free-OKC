@@ -449,6 +449,16 @@ function initializeConversationState() {
   return getCurrentConversation();
 }
 
+function closeHistoryOnMobile() {
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    const mediaQuery = window.matchMedia('(max-width: 1080px)');
+    if (mediaQuery.matches) {
+      setHistoryOpen(false);
+      historyToggle?.focus();
+    }
+  }
+}
+
 function selectConversation(conversationId) {
   if (!conversationId) return;
   const conversation = conversations.find((entry) => entry.id === conversationId);
@@ -459,13 +469,7 @@ function selectConversation(conversationId) {
   renderConversationList();
   renderConversation(conversation);
 
-  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    const mediaQuery = window.matchMedia('(max-width: 1080px)');
-    if (mediaQuery.matches) {
-      setHistoryOpen(false);
-      historyToggle?.focus();
-    }
-  }
+  closeHistoryOnMobile();
 
   setStatus('待命中…');
   if (userInput) {
@@ -477,13 +481,7 @@ function startNewConversation() {
   const conversation = createConversation();
   renderConversation(conversation);
 
-  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    const mediaQuery = window.matchMedia('(max-width: 1080px)');
-    if (mediaQuery.matches) {
-      setHistoryOpen(false);
-      historyToggle?.focus();
-    }
-  }
+  closeHistoryOnMobile();
 
   setStatus('连接工作台…', true);
   bootSession();
@@ -551,23 +549,31 @@ function addMessage(role, text, options = {}) {
   return message;
 }
 
+function addAndRenderMessage(role, text, options = {}) {
+  const messageId = appendMessageToConversation(role, text, options);
+  const messageElement = addMessage(role, text, options);
+  if (messageElement instanceof HTMLElement && messageId) {
+    messageElement.dataset.messageId = messageId;
+  }
+  return { messageId, messageElement };
+}
+
 function finalizePendingMessage(message, text, messageId) {
   const finalText = typeof text === 'string' ? text : '';
   if (!(message instanceof HTMLElement)) {
     if (messageId) {
       resolvePendingConversationMessage(messageId, finalText);
-    } else {
-      const fallbackId = appendMessageToConversation('assistant', finalText);
-      const fallbackMessage = addMessage('assistant', finalText);
-      if (fallbackMessage instanceof HTMLElement && fallbackId) {
-        fallbackMessage.dataset.messageId = fallbackId;
+      const messageConversation = conversations.find((conversation) =>
+        conversation.messages.some((entry) => entry.id === messageId),
+      );
+      if (messageConversation && messageConversation.id === lastRenderedConversationId) {
+        const restoredMessage = addMessage('assistant', finalText);
+        if (restoredMessage instanceof HTMLElement) {
+          restoredMessage.dataset.messageId = messageId;
+        }
       }
-      return;
-    }
-
-    const restoredMessage = addMessage('assistant', finalText);
-    if (restoredMessage instanceof HTMLElement && messageId) {
-      restoredMessage.dataset.messageId = messageId;
+    } else {
+      addAndRenderMessage('assistant', finalText);
     }
     return;
   }
@@ -789,22 +795,13 @@ if (configForm) {
 async function bootSession() {
   try {
     const data = await fetchJson('/api/session/boot');
-    const messageId = appendMessageToConversation('assistant', data.reply);
-    const messageElement = addMessage('assistant', data.reply);
-    if (messageElement instanceof HTMLElement && messageId) {
-      messageElement.dataset.messageId = messageId;
-    }
+    addAndRenderMessage('assistant', data.reply);
     logModelInvocation(data.meta);
     updateWebPreview(data.web_preview);
     updatePptPreview(data.ppt_slides);
   } catch (error) {
     console.error(error);
-    const fallbackText = '无法连接到后端服务，请确认已启动。';
-    const messageId = appendMessageToConversation('assistant', fallbackText);
-    const messageElement = addMessage('assistant', fallbackText);
-    if (messageElement instanceof HTMLElement && messageId) {
-      messageElement.dataset.messageId = messageId;
-    }
+    addAndRenderMessage('assistant', '无法连接到后端服务，请确认已启动。');
   } finally {
     setStatus('待命中…');
   }
@@ -814,13 +811,11 @@ async function sendChat(message) {
   setStatus('创意生成中…', true);
   chatForm.querySelector('button').disabled = true;
   userInput.disabled = true;
-  const pendingMessageId = appendMessageToConversation('assistant', '正在生成回复…', {
-    pending: true,
-  });
-  const pendingMessage = addMessage('assistant', '正在生成回复…', { pending: true });
-  if (pendingMessage instanceof HTMLElement && pendingMessageId) {
-    pendingMessage.dataset.messageId = pendingMessageId;
-  }
+  const { messageId: pendingMessageId, messageElement: pendingMessage } = addAndRenderMessage(
+    'assistant',
+    '正在生成回复…',
+    { pending: true },
+  );
   try {
     const data = await fetchJson('/api/chat', {
       method: 'POST',
@@ -851,11 +846,7 @@ function handleUserSubmit(event) {
   event.preventDefault();
   const value = userInput.value.trim();
   if (!value) return;
-  const messageId = appendMessageToConversation('user', value);
-  const messageElement = addMessage('user', value);
-  if (messageElement instanceof HTMLElement && messageId) {
-    messageElement.dataset.messageId = messageId;
-  }
+  addAndRenderMessage('user', value);
   sendChat(value);
 }
 
