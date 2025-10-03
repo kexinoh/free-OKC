@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from . import spec
 from .llm import create_llm_chain # 导入我们新的 chain 创建函数
 from .registry import ToolRegistry
+from .tools.base import ToolResult
 
 
 class VirtualMachine:
@@ -22,6 +23,7 @@ class VirtualMachine:
         # 注意：history现在需要遵循LangChain的BaseMessage格式
         self.history: List[Dict[str, Any]] = []
         self._chain = None # 延迟初始化 chain
+        self._last_tool_result: ToolResult | None = None
         print("VirtualMachine initialized.")
 
     @property
@@ -36,6 +38,7 @@ class VirtualMachine:
     def reset_history(self) -> None:
         """Clears the conversation history."""
         self.history.clear()
+        self._last_tool_result = None
         print("VM history has been reset.")
 
     def execute(self, utterance: str) -> Dict[str, Any]:
@@ -88,6 +91,33 @@ class VirtualMachine:
             "reply": final_reply,
             "tool_calls": tool_calls_info,
         }
+
+    def call_tool(self, name: str, **kwargs: Any) -> ToolResult:
+        """Invoke a tool directly through the registry."""
+
+        result = self.registry.call(name, **kwargs)
+        self._last_tool_result = result
+        self.history.append(
+            {
+                "role": "tool",
+                "name": name,
+                "input": kwargs,
+                "success": result.success,
+                "output": result.output,
+                "data": result.data,
+            }
+        )
+        return result
+
+    def last_result(self) -> ToolResult | None:
+        """Return the most recent tool call result."""
+
+        return self._last_tool_result
+
+    def get_history(self) -> List[Dict[str, Any]]:
+        """Return a shallow copy of the internal history."""
+
+        return list(self.history)
 
     def describe(self) -> Dict[str, object]:
         return {

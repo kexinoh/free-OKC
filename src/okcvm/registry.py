@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
+import json
 from typing import Dict, Iterable, List, Mapping
 
 from . import spec as spec_module
 from .spec import ToolSpec
 from .tools.base import Tool, ToolResult
+
+
+def _safe_json_value(value: object) -> object:
+    """Return a JSON-serialisable representation of ``value``."""
+
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, (list, dict)):
+        return value
+    try:
+        json.dumps(value, ensure_ascii=False)
+        return value
+    except TypeError:
+        return repr(value)
 from .tools import (
     browser,
     data_sources,
@@ -28,6 +43,7 @@ class ToolRegistry:
     def __init__(self, specs: Iterable[ToolSpec]):
         self._specs: Dict[str, ToolSpec] = {item.name: item for item in specs}
         self._tools: Dict[str, Tool] = {}
+        self._langchain_cache: Dict[str, object] = {}
 
     @classmethod
     def from_default_spec(cls) -> "ToolRegistry":
@@ -41,6 +57,7 @@ class ToolRegistry:
         if not spec:
             raise KeyError(f"Tool '{tool.name}' is not part of the manifest")
         self._tools[tool.name] = tool
+        self._langchain_cache.pop(tool.name, None)
 
     def register_default_implementations(self) -> None:
         mapping: Mapping[str, type[Tool]] = {
@@ -108,3 +125,71 @@ class ToolRegistry:
 
     def missing_tools(self) -> List[str]:
         return [name for name in self._specs if name not in self._tools]
+
+    def get_langchain_tools(self) -> List[object]:
+        """Return LangChain compatible wrappers for the registered tools."""
+
+        try:
+            from langchain_core.tools import ToolException
+            from langchain.tools import Tool as LangChainTool
+        except ImportError as exc:  # pragma: no cover - defensive guard
+            raise RuntimeError(
+                "LangChain is not installed. Install the 'langchain' and "
+                "'langchain-openai' packages to enable agent execution."
+            ) from exc
+
+        tools: List[object] = []
+        for name, tool in self._tools.items():
+            cached = self._langchain_cache.get(name)
+            if cached is None:
+                description = tool.spec.description or tool.spec.name
+
+                def _make_invoker(current_tool: Tool, tool_name: str):
+                    def _invoke(raw_input: str) -> str:
+                        payload = raw_input.strip()
+                        if not payload:
+                            arguments: Mapping[str, object] = {}
+                        else:
+                            try:
+                                data = json.loads(payload)
+                            except json.JSONDecodeError as json_error:
+                                raise ToolException(
+                                    f"{tool_name} expects a JSON object as input."
+                                ) from json_error
+                            if not isinstance(data, dict):
+                                raise ToolException(
+                                    f"{tool_name} expects a JSON object as input."
+                                )
+                            arguments = dict(data)
+
+                        result = current_tool.call(**arguments)
+                        if not result.success:
+                            raise ToolException(result.error or f"{tool_name} failed")
+
+                        payload_dict = {
+                            "output": _safe_json_value(result.output),
+                            "data": _safe_json_value(result.data),
+                        }
+                        return json.dumps(payload_dict, ensure_ascii=False)
+
+                    _invoke.__name__ = f"invoke_{tool_name.replace('-', '_')}"
+                    _invoke.__doc__ = (
+                        f"Invoke the OKCVM tool '{tool_name}'. Provide a JSON object "
+                        "containing the tool parameters as described in the tool "
+                        "manifest."
+                    )
+                    return _invoke
+
+                invoker = _make_invoker(tool, name)
+                langchain_tool = LangChainTool.from_function(
+                    name=name,
+                    description=(
+                        f"{description}\n\nInput format: provide a JSON object with the "
+                        "parameters expected by the tool."
+                    ),
+                    func=invoker,
+                )
+                self._langchain_cache[name] = langchain_tool
+                cached = langchain_tool
+            tools.append(cached)
+        return tools

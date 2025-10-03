@@ -130,12 +130,20 @@ class DeployWebsiteTool(Tool):
                     f"from {DEPLOY_ROOT} and open /{slug}/index.html"
                 )
                 manifest["preview_url"] = f"http://localhost:8000/{slug}/index.html" # 提供一个默认URL
-                manifest["server_info"] = None
+                manifest["server_info"] = {
+                    "pid": None,
+                    "port": None,
+                    "status": "error",
+                }
         else:
             # 如果不启动服务器，保持原有的行为
             preview_url = f"http://localhost:8000/{slug}/index.html"
             manifest["preview_url"] = preview_url
-            manifest["server_info"] = None
+            manifest["server_info"] = {
+                "pid": None,
+                "port": None,
+                "status": "stopped",
+            }
             output = (
                 "Deployment complete. Serve the site with `python -m http.server 8000` "
                 f"from {DEPLOY_ROOT} and open /{slug}/index.html"
