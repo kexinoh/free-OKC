@@ -69,7 +69,16 @@ def main(
                     fg=typer.colors.RED,
                 )
             )
-            raise typer.Exit(code=1)
+            typer.echo(
+                typer.style(
+                    "Server start aborted. Please adjust the workspace path in "
+                    f"{config_path} before retrying.",
+                    fg=typer.colors.RED,
+                )
+            )
+            # Log the abort event for monitoring purposes
+            typer.echo("Please adjust the workspace path in {config_path} before retrying.")
+            return  # Exit the function gracefully
 
     workspace_cfg.resolve_and_prepare()
 
