@@ -87,12 +87,10 @@ class _LenFriendlyToolProxy:
                 pass
         schema = getattr(self._tool, "args_schema", None)
         if schema is not None:
-            fields = getattr(schema, "__fields__", None)
-            if fields is None:
-                fields = getattr(schema, "model_fields", None)
+            fields = getattr(schema, "__fields__", None) or getattr(schema, "model_fields", None)
             if fields is not None:
                 try:
-                    return len(fields)  # type: ignore[arg-type]
+                    return len(fields)
                 except TypeError:
                     pass
         # LangChain expects ``len(tool)`` to be >= 2 when constructing default prompts.
