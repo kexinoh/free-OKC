@@ -29,7 +29,7 @@ stack. The repository is organised into four primary layers:
    【F:src/okcvm/session.py†L18-L44】
 3. The virtual machine converts chat history into LangChain messages, invokes the
    configured LLM, and records any tool calls or outputs. Results are mapped into
-   the UI-friendly payload returned by `SessionState.respond`. 【F:src/okcvm/vm.py†L73-L196】【F:src/okcvm/session.py†L45-L103】
+   the UI-friendly payload returned by `SessionState.respond`. 【F:src/okcvm/vm.py†L58-L118】【F:src/okcvm/session.py†L53-L103】
 4. Frontend requests hit the FastAPI endpoints, which stream back configuration
    descriptions, session summaries, or chat responses. The UI renders previews,
    history, and meta telemetry based on the JSON payloads. 【F:src/okcvm/api/main.py†L74-L144】【F:frontend/app.js†L240-L620】
