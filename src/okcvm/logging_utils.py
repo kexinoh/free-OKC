@@ -35,6 +35,7 @@ _DEFAULT_MAX_BYTES = 5 * 1024 * 1024
 _CONFIGURED = False
 
 
+@lru_cache(maxsize=1)
 def _determine_log_directory() -> Path:
     """Return the directory used to store persistent log files."""
 
