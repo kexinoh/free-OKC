@@ -38,4 +38,4 @@ API responses into a productive operator workflow.
   【F:frontend/app.js†L689-L789】
 - Chat submissions append a pending assistant message, call `/api/chat`, then
   resolve the placeholder with the final reply and any preview data.
-  【F:frontend/app.js†L810-L956】
+  【F:frontend/app.js†L810-L851】
