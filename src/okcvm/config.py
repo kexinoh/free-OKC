@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Mapping, MutableMapping, Optional
 import os
-
+import yaml
 
 @dataclass(slots=True)
 class ModelEndpointConfig:
@@ -160,12 +160,81 @@ def reset_config(env: Mapping[str, str] | None = None) -> None:
     _CONFIG = Config(media=_load_media_from_env(env), chat=_load_chat_from_env(env))
 
 
-__all__ = [
-    "Config",
-    "MediaConfig",
-    "ModelEndpointConfig",
-    "configure",
-    "get_config",
-    "reset_config",
-]
+@dataclass
+class AppConfig:
+    """Represents the complete, mutable application configuration."""
 
+    chat: Optional[ModelEndpointConfig] = None
+    media: MediaConfig = field(default_factory=MediaConfig)
+
+# --- Global State Management ---
+# Global, thread-safe application configuration state.
+_config: AppConfig = AppConfig()
+_config_lock = threading.Lock()
+
+
+def get_config() -> AppConfig:
+    """Returns a copy of the current application configuration."""
+    with _config_lock:
+        return AppConfig(chat=_config.chat, media=_config.media)
+
+
+def configure(
+    chat: Optional[ModelEndpointConfig] = None,
+    media: Optional[MediaConfig] = None,
+) -> None:
+    """Updates the global application configuration."""
+    with _config_lock:
+        if chat is not None:
+            _config.chat = chat
+        if media is not None:
+            _config.media = media
+    print("✅ Configuration updated.")
+
+
+def load_config_from_yaml(path: Path) -> None:
+    """Loads configuration from a YAML file and applies it."""
+    if not path.exists():
+        print(f"⚠️ Config file not found at {path}, skipping.")
+        return
+
+    print(f"🚀 Loading configuration from {path}...")
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    if not data:
+        print("⚠️ Config file is empty, skipping.")
+        return
+        
+    chat_config = data.get("chat")
+    if chat_config:
+        _config.chat = ModelEndpointConfig(
+            model=chat_config.get("model"),
+            base_url=chat_config.get("base_url"),
+            api_key=chat_config.get("api_key") or os.environ.get(chat_config.get("api_key_env")),
+        )
+    
+    media_data = data.get("media", {})
+    _config.media = MediaConfig(
+        image=_parse_endpoint(media_data, "image"),
+        speech=_parse_endpoint(media_data, "speech"),
+        sound_effects=_parse_endpoint(media_data, "sound_effects"),
+        asr=_parse_endpoint(media_data, "asr"),
+    )
+    print("👍 Configuration loaded successfully from YAML.")
+
+
+def _parse_endpoint(data: dict, key: str) -> ModelEndpointConfig | None:
+    """Helper to parse an endpoint from a dict."""
+    endpoint_data = data.get(key)
+    if not endpoint_data or not endpoint_data.get("model"):
+        return None
+    
+    api_key_env = endpoint_data.get("api_key_env")
+    api_key = endpoint_data.get("api_key") or (os.environ.get(api_key_env) if api_key_env else None)
+
+    return ModelEndpointConfig(
+        model=endpoint_data["model"],
+        base_url=endpoint_data.get("base_url"),
+        api_key=api_key
+    )
