@@ -42,7 +42,7 @@ the key modules and how they interact.
 - [`main.py`](../main.py) wraps Typer to expose commands for running the server,
   validating configuration, and listing tools. It verifies dependencies, loads
   `.env`/`config.yaml`, then launches Uvicorn against `okcvm.api.main:app`.
-  【F:main.py†L1-L120】【F:main.py†L120-L196】
+  【F:main.py†L1-L120】【F:main.py†L120-L175】
 
 ## Testing
 - Pytest coverage exercises configuration, API routes, LangChain wiring, and the
