@@ -64,14 +64,13 @@ class SessionState:
             # 假设最后一个工具调用生成了主要内容
             last_call = tool_calls[-1]
             summary = f"Executed tool: {last_call['tool_name']}"
-            tool_output = last_call.get("tool_output", {})
-            output_keys = list(tool_output.keys()) if isinstance(tool_output, dict) else None
+            output = last_call.get("tool_output", {})
+            output_keys = list(output.keys()) if isinstance(output, dict) else None
             logger.debug(
                 "Tool execution summary tool=%s keys=%s",
                 last_call.get("tool_name"),
                 output_keys,
             )
-            output = tool_output
             if isinstance(output, dict):
                 if "html" in output:
                     web_preview = {"html": output["html"]}
