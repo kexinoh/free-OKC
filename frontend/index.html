@@ -39,16 +39,65 @@
 
       <main class="app-main">
         <section class="chat-panel">
+          <section class="experience-audit" aria-labelledby="experience-audit-title">
+            <div class="audit-header">
+              <p class="eyebrow">体验诊断</p>
+              <h2 id="experience-audit-title">我们首先梳理现有网页的主要问题</h2>
+              <p>
+                通过复盘上一版界面，我们记录了视觉信息密度、交互反馈以及可信度呈现上的不足，以下列举的要点帮助团队快速聚焦整改方向。
+              </p>
+            </div>
+            <div class="audit-grid">
+              <article class="audit-card">
+                <h3>发现的问题</h3>
+                <ul>
+                  <li><strong>内容空洞：</strong> 页面层级较少，缺乏产品定位、能力说明与操作引导，用户无法快速了解价值。</li>
+                  <li><strong>视觉失衡：</strong> 输入框过窄且缺少辅助说明，而发送按钮过于宽大，整体排版显得突兀。</li>
+                  <li><strong>信任缺口：</strong> 底部没有任何法律条款或服务说明，正式度与可信赖感不足。</li>
+                </ul>
+              </article>
+              <article class="audit-card audit-card--solution">
+                <h3>改善策略</h3>
+                <ul>
+                  <li>补充工作台简介、功能亮点与操作流程，让用户获得更清晰的使用预期。</li>
+                  <li>重新设计输入区结构，引入快捷提示、字数统计与自适应高度，强化输入体验。</li>
+                  <li>新增服务条款、免责声明与隐私提示，搭配联系渠道，营造正式可信的产品氛围。</li>
+                </ul>
+              </article>
+              <article class="audit-card audit-card--details">
+                <h3>细节补强</h3>
+                <ul>
+                  <li>在洞察面板补充服务健康度、快速预设和知识库链接，提升“工作台”质感。</li>
+                  <li>为主内容区引入阶段性流程与素材展示，呈现更具仪式感的创作旅程。</li>
+                </ul>
+              </article>
+            </div>
+          </section>
+
           <div class="chat-messages" id="chat-messages"></div>
           <form class="chat-input" id="chat-form">
             <label for="user-input" class="sr-only">用户输入</label>
             <textarea
               id="user-input"
-              rows="2"
+              rows="3"
+              maxlength="400"
               placeholder="试着说：帮我创建一个个人简历网页"
               required
             ></textarea>
-            <button type="submit" class="send-button">发送</button>
+            <div class="input-shortcuts" role="list">
+              <button type="button" class="prompt-chip" data-quick-prompt="帮我策划一次新品发布会的网页结构，并生成一份三页的演示提纲">新品发布会策划</button>
+              <button type="button" class="prompt-chip" data-quick-prompt="我需要一个科技初创公司的着陆页，突出产品优势与团队介绍">科技着陆页</button>
+              <button type="button" class="prompt-chip" data-quick-prompt="为创意黑客松活动生成招募页面，并同步准备报名须知">活动招募页</button>
+              <button type="button" class="prompt-chip" data-quick-prompt="请生成一个电商促销落地页，并给我一个包含 5 页的营销演示概要">电商促销方案</button>
+            </div>
+            <button type="submit" class="send-button">
+              <span>发送</span>
+              <span aria-hidden="true">➤</span>
+            </button>
+            <div class="input-meta">
+              <span>Shift + Enter 换行</span>
+              <span><span id="char-count">0</span> / 400</span>
+            </div>
           </form>
         </section>
 
@@ -57,6 +106,43 @@
             <h2>当前模型调用</h2>
             <ul class="model-log" id="model-log"></ul>
             <p class="empty-state" id="model-log-empty">暂无调用记录</p>
+          </section>
+
+          <section class="insight-card service-health">
+            <div class="preview-header">
+              <h2>服务健康度</h2>
+              <span class="badge badge--pulse">实时监测</span>
+            </div>
+            <ul class="service-health-list">
+              <li>
+                <div>
+                  <strong>聊天模型</strong>
+                  <p>平均响应 1.6 秒</p>
+                </div>
+                <span class="status-tag status-tag--ok">正常</span>
+              </li>
+              <li>
+                <div>
+                  <strong>图像生成</strong>
+                  <p>最新模型 moonshot-image</p>
+                </div>
+                <span class="status-tag status-tag--ok">可用</span>
+              </li>
+              <li>
+                <div>
+                  <strong>语音合成</strong>
+                  <p>缓存命中率 92%</p>
+                </div>
+                <span class="status-tag status-tag--warn">留意</span>
+              </li>
+              <li>
+                <div>
+                  <strong>语音识别</strong>
+                  <p>高峰期排队 &lt; 3 秒</p>
+                </div>
+                <span class="status-tag status-tag--ok">正常</span>
+              </li>
+            </ul>
           </section>
 
           <section class="insight-card">
@@ -86,9 +172,143 @@
               等待生成幻灯片内容…
             </p>
           </section>
+
+          <section class="insight-card knowledge-kit">
+            <h2>创作知识库</h2>
+            <ul class="knowledge-list">
+              <li>
+                <strong>网页动效灵感包</strong>
+                <p>精选 12 种 Hero 过渡与滚动叙事模板，结合当前配色即可复用。</p>
+              </li>
+              <li>
+                <strong>品牌语气指南</strong>
+                <p>涵盖标题语气、按钮文案与 CTA 结构，帮助快速统一品牌声音。</p>
+              </li>
+              <li>
+                <strong>多模态交付清单</strong>
+                <p>交付网页 + PPT 时需要同步的素材、尺寸与压缩规范，确保项目上线顺畅。</p>
+              </li>
+            </ul>
+          </section>
         </aside>
       </main>
+
+      <section class="experience-lab" aria-labelledby="experience-lab-title">
+        <header class="lab-header">
+          <p class="eyebrow">体验亮点</p>
+          <h2 id="experience-lab-title">围绕创作流程补齐细节，打造可靠的灵感孵化室</h2>
+          <p>
+            改版后的工作台强调“准备—创作—交付”三段式体验：从快捷预设切入，实时查看模型状态，再到网页/PPT 同步预览与合规声明，帮助团队沉浸在高效且可信的创作节奏里。
+          </p>
+        </header>
+        <div class="lab-grid">
+          <article class="lab-card">
+            <h3>1. 预热引导</h3>
+            <p>结合快捷提示、输入规范与模型状态，降低首次使用门槛。</p>
+            <ul>
+              <li>输入框自适应高度 + 字数提醒。</li>
+              <li>常用场景一键填充，方便灵感触发。</li>
+              <li>Shift + Enter 提示、提交反馈即时可见。</li>
+            </ul>
+          </article>
+          <article class="lab-card">
+            <h3>2. 实时协作</h3>
+            <p>洞察面板强化过程感，便于跟踪模型调用与生成素材。</p>
+            <ul>
+              <li>模型调用列表显示 token 规模与耗时。</li>
+              <li>网页与幻灯片预览同步更新。</li>
+              <li>服务健康度提醒潜在延迟。</li>
+            </ul>
+          </article>
+          <article class="lab-card">
+            <h3>3. 交付托底</h3>
+            <p>在页面底部补齐法律条款、隐私声明和联系方式，增强上线准备度。</p>
+            <ul>
+              <li>服务条款明确用户与平台责任分界。</li>
+              <li>免责声明提示模型生成的潜在偏差。</li>
+              <li>隐私合规说明数据收集与留存策略。</li>
+            </ul>
+          </article>
+        </div>
+        <ol class="lab-timeline">
+          <li>
+            <span class="timeline-step">Step 01</span>
+            <div>
+              <h3>明确需求</h3>
+              <p>参考体验诊断与快捷提示，描述你想要的页面或多模态交付目标。</p>
+            </div>
+          </li>
+          <li>
+            <span class="timeline-step">Step 02</span>
+            <div>
+              <h3>协同生成</h3>
+              <p>在聊天区沟通细节，通过洞察面板追踪模型调用与实时预览。</p>
+            </div>
+          </li>
+          <li>
+            <span class="timeline-step">Step 03</span>
+            <div>
+              <h3>整合交付</h3>
+              <p>核对网页与 PPT 素材，阅读法律声明，准备上线所需的合规资料。</p>
+            </div>
+          </li>
+        </ol>
+      </section>
     </div>
+
+    <footer class="site-footer">
+      <div class="footer-shell">
+        <div class="footer-brand">
+          <span class="logo">OK</span>
+          <div>
+            <h2>OK Computer 创意工坊</h2>
+            <p>围绕创作者的多模态生产力套件，支持网页、演示与音视频内容协同生成。</p>
+          </div>
+        </div>
+        <div class="footer-links">
+          <section aria-labelledby="legal-terms">
+            <h3 id="legal-terms">服务条款</h3>
+            <ul>
+              <li>使用者需遵守当地法律法规，不得上传违法内容。</li>
+              <li>平台提供生成工具，不对用户输出的商业结果承担保证责任。</li>
+              <li>团队可根据项目需要申请企业级 SLA 支持。</li>
+            </ul>
+          </section>
+          <section aria-labelledby="legal-disclaimer">
+            <h3 id="legal-disclaimer">免责声明</h3>
+            <ul>
+              <li>模型输出可能包含偏差或过时信息，请在发布前人工复核。</li>
+              <li>对第三方素材的引用请确认版权归属，必要时取得授权。</li>
+              <li>如遇安全风险或违规内容，请立即通过官方渠道反馈。</li>
+            </ul>
+          </section>
+          <section aria-labelledby="legal-privacy">
+            <h3 id="legal-privacy">隐私与合规</h3>
+            <ul>
+              <li>仅收集用于推理调用的最小必要信息，默认 30 天内自动清理。</li>
+              <li>企业客户可申请专属部署与加密存储策略。</li>
+              <li>更多详情请阅读《OK Computer 隐私政策》。</li>
+            </ul>
+          </section>
+          <section aria-labelledby="legal-contact">
+            <h3 id="legal-contact">联系我们</h3>
+            <ul>
+              <li>商务合作：partnership@okcomputer.ai</li>
+              <li>技术支持：support@okcomputer.ai</li>
+              <li>媒体沟通：press@okcomputer.ai</li>
+            </ul>
+          </section>
+        </div>
+        <div class="footer-meta">
+          <p>© 2025 OK Computer Studio. All rights reserved.</p>
+          <div class="footer-meta-links">
+            <a href="#">使用指引</a>
+            <a href="#">隐私政策</a>
+            <a href="#">数据安全白皮书</a>
+          </div>
+        </div>
+      </div>
+    </footer>
 
     <div class="settings-overlay" id="settings-overlay" hidden>
       <div

@@ -1,6 +1,7 @@
 const chatMessages = document.getElementById('chat-messages');
 const chatForm = document.getElementById('chat-form');
 const userInput = document.getElementById('user-input');
+const sendButton = chatForm?.querySelector('.send-button') ?? null;
 const statusPill = document.getElementById('status-pill');
 const modelLogList = document.getElementById('model-log');
 const modelLogEmpty = document.getElementById('model-log-empty');
@@ -18,6 +19,8 @@ const settingsToggle = document.getElementById('settings-toggle');
 const settingsOverlay = document.getElementById('settings-overlay');
 const settingsDrawer = settingsOverlay?.querySelector('.settings-drawer') ?? null;
 const settingsCloseButtons = document.querySelectorAll('[data-action="close-settings"]');
+const quickPromptButtons = Array.from(document.querySelectorAll('[data-quick-prompt]'));
+const charCountLabel = document.getElementById('char-count');
 
 let previousFocusedElement = null;
 
@@ -35,6 +38,26 @@ let currentWebPreview = null;
 let currentPptSlides = [];
 let isCarouselMode = false;
 const modelLogs = [];
+
+function updateCharCount() {
+  if (!charCountLabel || !(userInput instanceof HTMLTextAreaElement)) return;
+  charCountLabel.textContent = String(userInput.value.length);
+}
+
+function autoResizeTextarea() {
+  if (!(userInput instanceof HTMLTextAreaElement)) return;
+  userInput.style.height = 'auto';
+  const minHeight = 112;
+  const maxHeight = 280;
+  const nextHeight = Math.min(Math.max(userInput.scrollHeight, minHeight), maxHeight);
+  userInput.style.height = `${nextHeight}px`;
+}
+
+function setQuickPromptsDisabled(disabled) {
+  quickPromptButtons.forEach((button) => {
+    button.disabled = disabled;
+  });
+}
 
 function openSettingsPanel() {
   if (!settingsOverlay || !settingsToggle) return;
@@ -96,6 +119,25 @@ document.addEventListener('keydown', (event) => {
     closeSettingsPanel();
   }
 });
+
+quickPromptButtons.forEach((button) => {
+  button.addEventListener('click', (event) => {
+    if (!(event.currentTarget instanceof HTMLButtonElement)) return;
+    const prompt = event.currentTarget.dataset.quickPrompt;
+    if (!prompt || !userInput) return;
+    userInput.value = prompt;
+    autoResizeTextarea();
+    updateCharCount();
+    userInput.focus();
+  });
+});
+
+if (userInput) {
+  userInput.addEventListener('input', () => {
+    autoResizeTextarea();
+    updateCharCount();
+  });
+}
 
 function addMessage(role, text) {
   const message = document.createElement('article');
@@ -325,8 +367,13 @@ async function bootSession() {
 
 async function sendChat(message) {
   setStatus('创意生成中…', true);
-  chatForm.querySelector('button').disabled = true;
-  userInput.disabled = true;
+  if (sendButton instanceof HTMLButtonElement) {
+    sendButton.disabled = true;
+  }
+  if (userInput instanceof HTMLTextAreaElement) {
+    userInput.disabled = true;
+  }
+  setQuickPromptsDisabled(true);
   try {
     const data = await fetchJson('/api/chat', {
       method: 'POST',
@@ -342,25 +389,37 @@ async function sendChat(message) {
     addMessage('assistant', `抱歉，发生错误：${error.message}`);
   } finally {
     setStatus('待命中…');
-    chatForm.querySelector('button').disabled = false;
-    userInput.disabled = false;
-    userInput.value = '';
-    userInput.focus();
+    if (sendButton instanceof HTMLButtonElement) {
+      sendButton.disabled = false;
+    }
+    if (userInput instanceof HTMLTextAreaElement) {
+      userInput.disabled = false;
+      userInput.value = '';
+      autoResizeTextarea();
+      updateCharCount();
+      userInput.focus();
+    }
+    setQuickPromptsDisabled(false);
   }
 }
 
 function handleUserSubmit(event) {
   event.preventDefault();
+  if (!(userInput instanceof HTMLTextAreaElement)) return;
   const value = userInput.value.trim();
   if (!value) return;
   addMessage('user', value);
   sendChat(value);
 }
 
-chatForm.addEventListener('submit', handleUserSubmit);
+if (chatForm) {
+  chatForm.addEventListener('submit', handleUserSubmit);
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   setStatus('连接工作台…', true);
   loadConfig();
   bootSession();
+  autoResizeTextarea();
+  updateCharCount();
 });
