@@ -1,3 +1,5 @@
+import { cloneMessageActionIcon } from './messageActionIcons.js';
+
 const chatMessages = document.getElementById('chat-messages');
 const chatForm = document.getElementById('chat-form');
 const userInput = document.getElementById('user-input');
@@ -86,6 +88,317 @@ const storage = {
 
 let conversations = [];
 let currentSessionId = null;
+
+function setInteractionDisabled(disabled) {
+  if (userInput) {
+    userInput.disabled = disabled;
+  }
+  const submitButton = chatForm?.querySelector('button');
+  if (submitButton) {
+    submitButton.disabled = disabled;
+  }
+}
+
+function createMessageActionButton(label, action, iconName) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'message-action';
+  button.dataset.action = action;
+  button.dataset.defaultLabel = label;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'message-action-icon';
+  iconSpan.setAttribute('aria-hidden', 'true');
+
+  const iconElement = typeof iconName === 'string' ? cloneMessageActionIcon(iconName) : null;
+  if (iconElement) {
+    iconSpan.appendChild(iconElement);
+  } else if (iconName instanceof Node) {
+    iconSpan.appendChild(iconName.cloneNode(true));
+  } else if (typeof iconName === 'string') {
+    iconSpan.textContent = iconName;
+  }
+
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'message-action-label';
+  labelSpan.setAttribute('aria-live', 'polite');
+
+  button.append(iconSpan, labelSpan);
+  return button;
+}
+
+function setMessageActionsDisabled(messageElement, disabled) {
+  if (!(messageElement instanceof HTMLElement)) return;
+  const buttons = messageElement.querySelectorAll('button.message-action');
+  buttons.forEach((button) => {
+    button.disabled = disabled;
+    if (disabled) {
+      clearMessageActionStatus(button);
+    }
+  });
+}
+
+const messageActionStatusTimers = new WeakMap();
+
+function setMessageActionStatus(button, text) {
+  if (!(button instanceof HTMLElement)) return;
+  const existingTimeoutId = messageActionStatusTimers.get(button);
+  if (typeof existingTimeoutId === 'number') {
+    clearTimeout(existingTimeoutId);
+    messageActionStatusTimers.delete(button);
+  }
+  const labelSpan = button.querySelector('.message-action-label');
+  const message = typeof text === 'string' ? text : '';
+  if (labelSpan) {
+    labelSpan.textContent = message;
+  }
+  if (message && message.length > 0) {
+    button.dataset.statusVisible = 'true';
+  } else {
+    delete button.dataset.statusVisible;
+  }
+  const defaultLabel = button.dataset.defaultLabel ?? '';
+  button.title = message || defaultLabel;
+  button.setAttribute('aria-label', message || defaultLabel);
+}
+
+function clearMessageActionStatus(button) {
+  if (!(button instanceof HTMLElement)) return;
+  const timeoutId = messageActionStatusTimers.get(button);
+  if (typeof timeoutId === 'number') {
+    clearTimeout(timeoutId);
+  }
+  messageActionStatusTimers.delete(button);
+  setMessageActionStatus(button, '');
+}
+
+function flashMessageActionStatus(button, text, duration = 1200) {
+  if (!(button instanceof HTMLElement)) return;
+  const timeoutId = messageActionStatusTimers.get(button);
+  if (typeof timeoutId === 'number') {
+    clearTimeout(timeoutId);
+  }
+  setMessageActionStatus(button, text);
+  if (duration > 0) {
+    const newTimeoutId = window.setTimeout(() => {
+      messageActionStatusTimers.delete(button);
+      setMessageActionStatus(button, '');
+    }, duration);
+    messageActionStatusTimers.set(button, newTimeoutId);
+  }
+}
+
+function markMessagePending(messageElement, placeholderText) {
+  if (!(messageElement instanceof HTMLElement)) return;
+  messageElement.dataset.pending = 'true';
+  messageElement.classList.add('pending');
+  const body = messageElement.querySelector('p');
+  if (body) {
+    body.classList.add('pending');
+    body.textContent = placeholderText ?? '正在生成回复…';
+  }
+  setMessageActionsDisabled(messageElement, true);
+}
+
+function findConversationByMessageId(messageId) {
+  if (!messageId) return null;
+  for (const conversation of conversations) {
+    const messageIndex = conversation.messages.findIndex((message) => message.id === messageId);
+    if (messageIndex !== -1) {
+      return { conversation, messageIndex };
+    }
+  }
+  return null;
+}
+
+function findPreviousUserMessage(conversation, fromIndex) {
+  if (!conversation) return null;
+  for (let index = fromIndex - 1; index >= 0; index -= 1) {
+    const entry = conversation.messages[index];
+    if (entry?.role === 'user' && typeof entry.content === 'string' && entry.content.trim().length > 0) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+async function writeToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      console.warn('Clipboard API write failed, falling back to execCommand.', error);
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  document.body.appendChild(textarea);
+
+  const selection = document.getSelection();
+  const previousRange = selection?.rangeCount ? selection.getRangeAt(0) : null;
+
+  textarea.select();
+  try {
+    document.execCommand('copy');
+  } catch (error) {
+    console.error('Clipboard fallback failed', error);
+    throw error;
+  } finally {
+    textarea.remove();
+    if (previousRange && selection) {
+      selection.removeAllRanges();
+      selection.addRange(previousRange);
+    }
+  }
+}
+
+async function handleCopyMessageAction(messageId, button) {
+  if (!button) return;
+  const match = findConversationByMessageId(messageId);
+  if (!match) return;
+  const { conversation, messageIndex } = match;
+  const message = conversation.messages[messageIndex];
+  const content = message?.content ?? '';
+
+  try {
+    await writeToClipboard(content);
+    flashMessageActionStatus(button, '已复制');
+    button.dataset.feedback = 'success';
+    window.setTimeout(() => {
+      delete button.dataset.feedback;
+    }, 1200);
+  } catch (error) {
+    console.error(error);
+    flashMessageActionStatus(button, '复制失败', 1500);
+    button.dataset.feedback = 'error';
+    window.setTimeout(() => {
+      delete button.dataset.feedback;
+    }, 1500);
+  }
+}
+
+function handleEditMessageAction(messageElement, messageId) {
+  if (!messageElement) return;
+  const match = findConversationByMessageId(messageId);
+  if (!match) return;
+  const { conversation, messageIndex } = match;
+  const message = conversation.messages[messageIndex];
+  if (!message || message.role !== 'user') return;
+
+  const body = messageElement.querySelector('p');
+  const currentContent = typeof message.content === 'string' ? message.content : body?.textContent ?? '';
+  const nextContent = window.prompt('编辑这条消息', currentContent ?? '');
+  if (nextContent === null) return;
+
+  const normalized = nextContent.replace(/\r\n/g, '\n');
+  message.content = normalized;
+  const timestamp = new Date().toISOString();
+  message.timestamp = timestamp;
+  conversation.updatedAt = timestamp;
+  bumpConversation(conversation.id);
+
+  if (body) {
+    body.textContent = normalized;
+  }
+
+  const timeElement = messageElement.querySelector('time');
+  if (timeElement) {
+    timeElement.dateTime = timestamp;
+    timeElement.textContent = new Date(timestamp).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  const snippet = normalized.trim();
+  if (snippet.length > 0) {
+    conversation.title = snippet.length > 20 ? `${snippet.slice(0, 20)}…` : snippet;
+  } else {
+    conversation.title = '新的会话';
+  }
+
+  saveConversationsToStorage();
+  renderConversationList();
+}
+
+async function regenerateAssistantMessage(messageElement, messageId, button) {
+  if (!messageElement || !button) return;
+  const match = findConversationByMessageId(messageId);
+  if (!match) return;
+  const { conversation, messageIndex } = match;
+  const assistantMessage = conversation.messages[messageIndex];
+  if (!assistantMessage || assistantMessage.role !== 'assistant') return;
+
+  const precedingUserMessage = findPreviousUserMessage(conversation, messageIndex);
+  if (!precedingUserMessage) {
+    flashMessageActionStatus(button, '无法刷新', 1500);
+    button.dataset.feedback = 'error';
+    window.setTimeout(() => {
+      delete button.dataset.feedback;
+    }, 1500);
+    return;
+  }
+
+  button.dataset.loading = 'true';
+  setMessageActionStatus(button, '刷新中…');
+
+  setStatus('重新生成中…', true);
+  setInteractionDisabled(true);
+
+  const placeholder = '正在重新生成回复…';
+  markMessagePending(messageElement, placeholder);
+
+  const timestamp = new Date().toISOString();
+  assistantMessage.pending = true;
+  assistantMessage.content = '';
+  assistantMessage.timestamp = timestamp;
+  conversation.updatedAt = timestamp;
+  bumpConversation(conversation.id);
+  saveConversationsToStorage();
+  renderConversationList();
+
+  try {
+    const data = await fetchJson('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: precedingUserMessage.content }),
+    });
+    finalizePendingMessage(messageElement, data.reply, messageId);
+    if (data.meta) {
+      logModelInvocation(data.meta);
+    }
+    updateWebPreview(data.web_preview);
+    updatePptPreview(data.ppt_slides);
+    flashMessageActionStatus(button, '已刷新', 1500);
+    button.dataset.feedback = 'success';
+    window.setTimeout(() => {
+      delete button.dataset.feedback;
+    }, 1500);
+  } catch (error) {
+    console.error(error);
+    finalizePendingMessage(messageElement, `重新生成失败：${error.message}`, messageId);
+    flashMessageActionStatus(button, '刷新失败', 1500);
+    button.dataset.feedback = 'error';
+    window.setTimeout(() => {
+      delete button.dataset.feedback;
+    }, 1500);
+  } finally {
+    setStatus('待命中…');
+    setInteractionDisabled(false);
+    if (userInput) {
+      userInput.focus();
+    }
+    delete button.dataset.loading;
+  }
+}
 
 function openSettingsPanel() {
   if (!settingsOverlay || !settingsToggle) return;
@@ -608,16 +921,26 @@ function addMessage(role, text, options = {}) {
     body.textContent = '';
   }
 
-  if (pending) {
-    message.dataset.pending = 'true';
-    message.classList.add('pending');
-    body.classList.add('pending');
-    if (!body.textContent) {
-      body.textContent = '正在生成回复…';
-    }
+  const actions = document.createElement('div');
+  actions.className = 'message-actions';
+
+  if (role === 'user') {
+    actions.appendChild(createMessageActionButton('编辑', 'edit', 'edit'));
   }
 
-  message.append(header, body);
+  actions.appendChild(createMessageActionButton('复制', 'copy', 'copy'));
+
+  if (role === 'assistant') {
+    actions.appendChild(createMessageActionButton('刷新', 'refresh', 'refresh'));
+  }
+
+  message.append(header, body, actions);
+
+  if (pending) {
+    markMessagePending(message, body.textContent || '正在生成回复…');
+  } else {
+    setMessageActionsDisabled(message, false);
+  }
   chatMessages.appendChild(message);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return message;
@@ -663,6 +986,7 @@ function finalizePendingMessage(message, text, messageId) {
     delete message.dataset.pending;
   }
   message.removeAttribute('data-pending');
+  setMessageActionsDisabled(message, false);
 
   if (messageId) {
     resolvePendingConversationMessage(messageId, finalText);
@@ -887,8 +1211,7 @@ async function deleteSessionHistory() {
 
 async function sendChat(message) {
   setStatus('创意生成中…', true);
-  chatForm.querySelector('button').disabled = true;
-  userInput.disabled = true;
+  setInteractionDisabled(true);
   const { messageId: pendingMessageId, messageElement: pendingMessage } = addAndRenderMessage(
     'assistant',
     '正在生成回复…',
@@ -913,8 +1236,7 @@ async function sendChat(message) {
     );
   } finally {
     setStatus('待命中…');
-    chatForm.querySelector('button').disabled = false;
-    userInput.disabled = false;
+    setInteractionDisabled(false);
     userInput.value = '';
     userInput.focus();
   }
@@ -929,6 +1251,37 @@ function handleUserSubmit(event) {
 }
 
 chatForm.addEventListener('submit', handleUserSubmit);
+
+if (chatMessages) {
+  chatMessages.addEventListener('click', (event) => {
+    const target = event.target instanceof HTMLElement ? event.target.closest('button.message-action') : null;
+    if (!target || !(target instanceof HTMLElement)) return;
+
+    const action = target.dataset.action;
+    if (!action) return;
+
+    const messageElement = target.closest('.message');
+    const messageId = messageElement?.dataset.messageId;
+    if (!messageElement || !messageId) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    switch (action) {
+      case 'copy':
+        handleCopyMessageAction(messageId, target);
+        break;
+      case 'edit':
+        handleEditMessageAction(messageElement, messageId);
+        break;
+      case 'refresh':
+        regenerateAssistantMessage(messageElement, messageId, target);
+        break;
+      default:
+        break;
+    }
+  });
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   const conversation = initializeConversationState();
