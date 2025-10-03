@@ -195,7 +195,34 @@ class DeployWebsiteTool(Tool):
             raise ToolError(f"Directory not found: {source}")
         index = source / "index.html"
         if not index.exists():
-            raise ToolError("index.html must exist in the specified directory")
+            entry_hint = (
+                kwargs.get("entry_file")
+                or kwargs.get("entrypoint")
+                or kwargs.get("index_file")
+                or kwargs.get("index")
+            )
+
+            candidate_files: list[Path] = []
+            if entry_hint:
+                hinted = source / entry_hint
+                if hinted.exists() and hinted.is_file():
+                    candidate_files = [hinted]
+
+            if not candidate_files:
+                candidate_files = sorted(
+                    [
+                        path
+                        for path in source.iterdir()
+                        if path.is_file() and path.suffix.lower() in {".html", ".htm"}
+                    ]
+                )
+
+            if len(candidate_files) == 1:
+                shutil.copyfile(candidate_files[0], index)
+            else:
+                raise ToolError(
+                    "index.html must exist in the specified directory or a single HTML file must be provided"
+                )
 
         slug = _slugify(name or source.name)
         deployment_id, target = self._ensure_unique_target()
