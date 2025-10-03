@@ -99,9 +99,12 @@ OKCVM includes a full-featured web application that allows you to interact with 
 #### 1. Start the Service
 
 ```bash
-python -m okcvm.server
+# After `pip install -e .[dev]`
+okcvm-server
 ```
-The service will start on `http://localhost:8000`.
+This console script wraps the same Typer entry point as `python -m okcvm.server`,
+so you can launch the service directly from the project root without changing
+directories. The service will start on `http://localhost:8000`.
 
 #### 2. Open the UI
 
