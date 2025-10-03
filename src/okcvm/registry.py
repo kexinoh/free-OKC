@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Dict, Iterable, List, Mapping
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from . import spec as spec_module
 from .spec import ToolSpec
@@ -22,6 +22,7 @@ def _safe_json_value(value: object) -> object:
         return value
     except TypeError:
         return repr(value)
+
 from .tools import (
     browser,
     data_sources,
@@ -131,12 +132,90 @@ class ToolRegistry:
 
         try:
             from langchain_core.tools import ToolException
-            from langchain.tools import Tool as LangChainTool
+            from langchain.pydantic_v1 import BaseModel, Extra, Field, create_model
+            from langchain.tools import StructuredTool
         except ImportError as exc:  # pragma: no cover - defensive guard
             raise RuntimeError(
                 "LangChain is not installed. Install the 'langchain' and "
                 "'langchain-openai' packages to enable agent execution."
             ) from exc
+
+        def _annotation_from_schema(schema: Mapping[str, Any]) -> Any:
+            type_mapping: Dict[str, Any] = {
+                "string": str,
+                "number": float,
+                "integer": int,
+                "boolean": bool,
+                "array": list,
+                "object": dict,
+                "null": type(None),
+            }
+
+            type_value = schema.get("type")
+
+            def _single(value: str) -> Any:
+                return type_mapping.get(value, Any)
+
+            if isinstance(type_value, str):
+                return _single(type_value)
+            if isinstance(type_value, list) and type_value:
+                non_null = [item for item in type_value if item != "null"]
+                if len(non_null) == 1:
+                    base = _single(non_null[0])
+                    if len(non_null) != len(type_value):
+                        return Optional[base]  # type: ignore[return-value]
+                    return base
+            return Any
+
+        def _build_args_model(tool_spec: ToolSpec) -> type[BaseModel]:
+            parameters = tool_spec.parameters or {}
+            additional = parameters.get("additionalProperties", True)
+            allow_extra = bool(additional) if isinstance(additional, bool) else True
+            properties: Mapping[str, Mapping[str, Any]] = parameters.get("properties", {}) or {}
+            required: Tuple[str, ...] = tuple(parameters.get("required", ()))
+
+            fields: Dict[str, Tuple[Any, Any]] = {}
+            for field_name, field_schema in properties.items():
+                annotation = _annotation_from_schema(field_schema)
+                field_kwargs: Dict[str, Any] = {}
+
+                description = field_schema.get("description")
+                enum_values = field_schema.get("enum")
+                if enum_values:
+                    enum_text = ", ".join(map(str, enum_values))
+                    if description:
+                        description = f"{description} Options: {enum_text}."
+                    else:
+                        description = f"Options: {enum_text}."
+                if description:
+                    field_kwargs["description"] = description
+
+                default: Union[Any, object] = field_schema.get("default", ...)
+                if field_name in required and default is ...:
+                    field_info = Field(..., **field_kwargs)
+                else:
+                    if default is ...:
+                        default = None
+                    field_info = Field(default, **field_kwargs)
+
+                fields[field_name] = (annotation, field_info)
+
+            config_kwargs = {
+                "extra": Extra.allow if allow_extra else Extra.forbid,
+                "schema_extra": {"original_spec": parameters},
+            }
+            config = type(
+                f"{tool_spec.name.replace('-', '_').title()}ArgsConfig",
+                (),
+                config_kwargs,
+            )
+
+            model = create_model(
+                f"{tool_spec.name.replace('-', '_').title()}Args",
+                __config__=config,
+                **fields,
+            )
+            return model
 
         tools: List[object] = []
         for name, tool in self._tools.items():
@@ -145,24 +224,8 @@ class ToolRegistry:
                 description = tool.spec.description or tool.spec.name
 
                 def _make_invoker(current_tool: Tool, tool_name: str):
-                    def _invoke(raw_input: str) -> str:
-                        payload = raw_input.strip()
-                        if not payload:
-                            arguments: Mapping[str, object] = {}
-                        else:
-                            try:
-                                data = json.loads(payload)
-                            except json.JSONDecodeError as json_error:
-                                raise ToolException(
-                                    f"{tool_name} expects a JSON object as input."
-                                ) from json_error
-                            if not isinstance(data, dict):
-                                raise ToolException(
-                                    f"{tool_name} expects a JSON object as input."
-                                )
-                            arguments = dict(data)
-
-                        result = current_tool.call(**arguments)
+                    def _invoke(**kwargs: Any) -> str:
+                        result = current_tool.call(**dict(kwargs))
                         if not result.success:
                             raise ToolException(result.error or f"{tool_name} failed")
 
@@ -174,20 +237,18 @@ class ToolRegistry:
 
                     _invoke.__name__ = f"invoke_{tool_name.replace('-', '_')}"
                     _invoke.__doc__ = (
-                        f"Invoke the OKCVM tool '{tool_name}'. Provide a JSON object "
-                        "containing the tool parameters as described in the tool "
-                        "manifest."
+                        f"Invoke the OKCVM tool '{tool_name}'. Provide arguments "
+                        "matching the tool manifest specification."
                     )
                     return _invoke
 
                 invoker = _make_invoker(tool, name)
-                langchain_tool = LangChainTool.from_function(
+                args_model = _build_args_model(tool.spec)
+                langchain_tool = StructuredTool.from_function(
                     name=name,
-                    description=(
-                        f"{description}\n\nInput format: provide a JSON object with the "
-                        "parameters expected by the tool."
-                    ),
+                    description=description,
                     func=invoker,
+                    args_schema=args_model,
                 )
                 self._langchain_cache[name] = langchain_tool
                 cached = langchain_tool
