@@ -65,7 +65,7 @@ def test_deploy_website_and_start_server(tmp_path, deployed_site_pid):
 
     # --- 3. 基本断言 ---
     assert result.success
-    assert "Site is now being served" in result.output
+    assert "FastAPI preview endpoint" in result.output
     
     target = Path(result.data["target"])
     assert target.exists()
@@ -87,6 +87,9 @@ def test_deploy_website_and_start_server(tmp_path, deployed_site_pid):
     pid = server_info["pid"]
     port = server_info["port"]
     preview_url = manifest_data["preview_url"]
+    assert preview_url.endswith("&path=index.html")
+    server_preview_url = manifest_data.get("server_preview_url")
+    assert server_preview_url is not None
 
     # 将 PID 传递给 fixture 以便在测试后清理
     deployed_site_pid.append(pid)
@@ -100,7 +103,7 @@ def test_deploy_website_and_start_server(tmp_path, deployed_site_pid):
     
     # 检查服务器是否响应 HTTP 请求
     try:
-        response = requests.get(preview_url, timeout=5)
+        response = requests.get(server_preview_url, timeout=5)
         response.raise_for_status() # 如果状态码不是 2xx，则抛出异常
         assert "<h1>OKCVM</h1>" in response.text
         assert response.headers['Content-Type'].startswith('text/html')
@@ -127,13 +130,14 @@ def test_deploy_website_without_starting_server(tmp_path):
     )
 
     assert result.success
-    assert "Serve the site with `python -m http.server" in result.output
+    assert "FastAPI preview endpoint" in result.output
 
     with open(Path(result.data["target"]) / "deployment.json", 'r') as f:
         manifest_data = json.load(f, cls=ManifestJSONDecoder)
 
     # 验证没有服务器信息
     assert manifest_data["server_info"] is None
+    assert manifest_data.get("server_preview_url") is None
     # 验证 PID 不存在（以防万一）
     assert not psutil.pid_exists(manifest_data.get("server_info", {}).get("pid", -1))
 

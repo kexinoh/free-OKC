@@ -10,6 +10,7 @@ import subprocess
 import sys
 from contextlib import closing
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from ..workspace import WorkspaceError, WorkspaceManager
 from .base import Tool, ToolError, ToolResult
@@ -224,6 +225,8 @@ class DeployWebsiteTool(Tool):
                     "index.html must exist in the specified directory or a single HTML file must be provided"
                 )
 
+        entry_path = "index.html"
+
         slug = _slugify(name or source.name)
         deployment_id, target = self._ensure_unique_target()
         if target.exists():
@@ -245,24 +248,28 @@ class DeployWebsiteTool(Tool):
             "session_id": self._workspace.session_id,
         }
 
+        preview_url = f"http://127.0.0.1:8000/?s={deployment_id}&path={quote(entry_path)}"
+        manifest["preview_url"] = preview_url
+        manifest["entry_path"] = entry_path
+
         if start_server:
             try:
                 process, port = self._ensure_server()
-                preview_url = f"http://127.0.0.1:{port}/{deployment_id}/index.html"
-                manifest["preview_url"] = preview_url
+                server_preview_url = f"http://127.0.0.1:{port}/{deployment_id}/{entry_path}"
                 manifest["server_info"] = {
                     "pid": process.pid if process else None,
                     "port": port,
                     "status": "running" if process and process.poll() is None else "unknown",
                 }
+                manifest["server_preview_url"] = server_preview_url
                 output = (
-                    "Deployment complete. Site is now being served.\n"
+                    "Deployment complete. Site is now available via the FastAPI preview endpoint.\n"
                     f"  Deployment ID: {deployment_id}\n"
-                    f"  Port: {port}\n"
-                    f"  Preview URL: {preview_url}"
+                    f"  Preview URL: {preview_url}\n"
+                    f"  Static server port: {port}\n"
+                    f"  Direct server URL: {server_preview_url}"
                 )
             except Exception as exc:  # pragma: no cover - defensive fallback
-                manifest["preview_url"] = f"http://127.0.0.1:8000/{deployment_id}/index.html"
                 manifest["server_info"] = {
                     "pid": None,
                     "port": None,
@@ -270,16 +277,17 @@ class DeployWebsiteTool(Tool):
                     "message": str(exc),
                 }
                 output = (
-                    f"Deployment of files complete, but failed to start server: {exc}\n"
-                    f"Serve the site manually with `python -m http.server 8000` from {self._deploy_root}"
-                    f" and open /{deployment_id}/index.html"
-                ).format(exc=exc)
+                    "Deployment complete, but failed to start auxiliary server.\n"
+                    f"  Error: {exc}\n"
+                    f"  Preview URL: {preview_url}\n"
+                    f"  Manual fallback: serve {self._deploy_root} and open /{deployment_id}/{entry_path}"
+                )
         else:
-            manifest["preview_url"] = f"http://127.0.0.1:8000/{deployment_id}/index.html"
             manifest["server_info"] = None
             output = (
-                "Deployment complete. Serve the site with `python -m http.server 8000` "
-                f"from {self._deploy_root} and open /{deployment_id}/index.html"
+                "Deployment complete. Access via the FastAPI preview endpoint.\n"
+                f"  Deployment ID: {deployment_id}\n"
+                f"  Preview URL: {preview_url}"
             )
 
         deployment_manifest_path = target / "deployment.json"
