@@ -52,18 +52,64 @@ export function resetModelLogs() {
   }
 }
 
+function normalizeWebPreview(preview) {
+  if (!preview || typeof preview !== 'object') {
+    return null;
+  }
+
+  const normalized = {};
+  const htmlCandidate =
+    typeof preview.html === 'string'
+      ? preview.html
+      : typeof preview.content === 'string'
+        ? preview.content
+        : null;
+  if (htmlCandidate && htmlCandidate.trim()) {
+    normalized.html = htmlCandidate;
+  }
+
+  const urlCandidate =
+    typeof preview.url === 'string'
+      ? preview.url
+      : typeof preview.preview_url === 'string'
+        ? preview.preview_url
+        : typeof preview.server_preview_url === 'string'
+          ? preview.server_preview_url
+          : null;
+  if (urlCandidate && urlCandidate.trim()) {
+    normalized.url = urlCandidate;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
 export function updateWebPreview(preview) {
-  currentWebPreview = preview;
-  if (preview?.html) {
-    webPreviewFrame.srcdoc = preview.html;
-    webPreviewFrame.hidden = false;
-    webPreviewEmpty.hidden = true;
-    openWebPreviewButton.disabled = false;
-  } else {
-    webPreviewFrame.srcdoc = '';
-    webPreviewFrame.hidden = true;
-    webPreviewEmpty.hidden = false;
-    openWebPreviewButton.disabled = true;
+  currentWebPreview = normalizeWebPreview(preview);
+
+  const hasHtml = typeof currentWebPreview?.html === 'string' && currentWebPreview.html.trim().length > 0;
+  const hasUrl = typeof currentWebPreview?.url === 'string' && currentWebPreview.url.trim().length > 0;
+
+  if (webPreviewFrame instanceof HTMLIFrameElement) {
+    if (hasHtml) {
+      webPreviewFrame.removeAttribute('src');
+      webPreviewFrame.srcdoc = currentWebPreview.html;
+    } else if (hasUrl) {
+      webPreviewFrame.removeAttribute('srcdoc');
+      webPreviewFrame.src = currentWebPreview.url;
+    } else {
+      webPreviewFrame.removeAttribute('src');
+      webPreviewFrame.removeAttribute('srcdoc');
+      webPreviewFrame.srcdoc = '';
+    }
+    webPreviewFrame.hidden = !(hasHtml || hasUrl);
+  }
+
+  if (webPreviewEmpty instanceof HTMLElement) {
+    webPreviewEmpty.hidden = hasHtml || hasUrl;
+  }
+
+  if (openWebPreviewButton instanceof HTMLButtonElement) {
+    openWebPreviewButton.disabled = !(hasHtml || hasUrl);
   }
 }
 
@@ -108,11 +154,25 @@ function togglePptMode() {
 }
 
 function handleOpenPreview() {
-  if (!currentWebPreview?.html) return;
-  const blob = new Blob([currentWebPreview.html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (!currentWebPreview) return;
+
+  if (typeof currentWebPreview.url === 'string' && currentWebPreview.url.trim()) {
+    const newWindow = window.open(currentWebPreview.url, '_blank');
+    if (newWindow) {
+      newWindow.opener = null;
+    }
+    return;
+  }
+
+  if (typeof currentWebPreview.html === 'string' && currentWebPreview.html.trim()) {
+    const blob = new Blob([currentWebPreview.html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const newWindow = window.open(url, '_blank');
+    if (newWindow) {
+      newWindow.opener = null;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 export function initializePreviewControls() {

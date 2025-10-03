@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import random
+from json import JSONDecodeError
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -109,18 +111,70 @@ class SessionState:
             # 假设最后一个工具调用生成了主要内容
             last_call = tool_calls[-1]
             summary = f"Executed tool: {last_call['tool_name']}"
-            output = last_call.get("tool_output", {})
-            output_keys = list(output.keys()) if isinstance(output, dict) else None
+            output_payload = last_call.get("tool_output")
+            parsed_payload: Dict[str, object] | None = None
+            if isinstance(output_payload, dict):
+                parsed_payload = output_payload
+            elif isinstance(output_payload, str):
+                try:
+                    parsed_payload = json.loads(output_payload)
+                except JSONDecodeError:
+                    logger.debug("Tool output is not valid JSON; treating as raw text")
+            output_keys = list(parsed_payload.keys()) if isinstance(parsed_payload, dict) else None
             logger.debug(
                 "Tool execution summary tool=%s keys=%s",
                 last_call.get("tool_name"),
                 output_keys,
             )
-            if isinstance(output, dict):
-                if "html" in output:
-                    web_preview = {"html": output["html"]}
-                if "slides" in output:
-                    ppt_slides = output["slides"]
+            if isinstance(parsed_payload, dict):
+                preview_details: Dict[str, str] = {}
+
+                def _string_field(candidate: object) -> str | None:
+                    if isinstance(candidate, str) and candidate.strip():
+                        return candidate
+                    return None
+
+                def _maybe_update_preview(container: Dict[str, object]) -> None:
+                    nonlocal ppt_slides
+                    html_value = _string_field(
+                        container.get("html")
+                        or container.get("rendered_html")
+                        or container.get("content")
+                    )
+                    if html_value:
+                        preview_details["html"] = html_value
+                    url_value = _string_field(
+                        container.get("preview_url")
+                        or container.get("url")
+                        or container.get("href")
+                        or container.get("server_preview_url")
+                    )
+                    if not url_value:
+                        deployment_info = container.get("deployment")
+                        if isinstance(deployment_info, dict):
+                            url_value = _string_field(
+                                deployment_info.get("preview_url")
+                                or deployment_info.get("server_preview_url")
+                            )
+                    if url_value:
+                        preview_details["url"] = url_value
+
+                    slides_value = container.get("slides")
+                    if isinstance(slides_value, list):
+                        ppt_slides = slides_value
+
+                _maybe_update_preview(parsed_payload)
+
+                data_section = parsed_payload.get("data")
+                if isinstance(data_section, dict):
+                    _maybe_update_preview(data_section)
+
+                if preview_details:
+                    web_preview = preview_details
+
+                output_text = parsed_payload.get("output")
+                if isinstance(output_text, str) and output_text.strip():
+                    summary = output_text.strip().splitlines()[0]
 
         # 使用真实数据填充响应
         cfg = get_config()
