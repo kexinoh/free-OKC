@@ -151,6 +151,10 @@ On your first visit, the UI will guide you through the setup process.
 
 Once configured, you're ready to interact with the agent in the chat interface! All messages are sent to the backend VM for processing and will return curated previews and results.
 
+#### 5. Troubleshooting Tool Errors
+
+- **Session workspace paths**: Every chat session is assigned a random virtual mount such as `/mnt/okcvm-12ab34cd/`. The file tools (`mshtools-write_file`, `mshtools-read_file`, `mshtools-edit_file`) automatically resolve relative paths inside this mount, so commands like `resume-website/index.html` are stored safely without leaking across sessions. Passing a path outside the mount will raise a "path outside workspace" error.
+
 ---
 
 We're thrilled to have you join the project! Whether it's through code contributions, suggestions, or bug reports, all forms of participation are welcome. Let's build the future of agentic workflows together!

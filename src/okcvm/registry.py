@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 from . import spec as spec_module
 from .spec import ToolSpec
 from .tools.base import Tool, ToolResult
+from .workspace import WorkspaceManager
 
 
 def _safe_json_value(value: object) -> object:
@@ -41,15 +42,16 @@ from .tools import (
 class ToolRegistry:
     """Registry providing lookup and invocation for tools."""
 
-    def __init__(self, specs: Iterable[ToolSpec]):
+    def __init__(self, specs: Iterable[ToolSpec], workspace: WorkspaceManager | None = None):
         self._specs: Dict[str, ToolSpec] = {item.name: item for item in specs}
         self._tools: Dict[str, Tool] = {}
         self._langchain_cache: Dict[str, object] = {}
+        self._workspace = workspace
 
     @classmethod
-    def from_default_spec(cls) -> "ToolRegistry":
+    def from_default_spec(cls, *, workspace: WorkspaceManager | None = None) -> "ToolRegistry":
         specs = spec_module.load_tool_specs()
-        registry = cls(specs)
+        registry = cls(specs, workspace=workspace)
         registry.register_default_implementations()
         return registry
 
@@ -102,7 +104,10 @@ class ToolRegistry:
         for name, cls in mapping.items():
             spec = self._specs.get(name)
             if spec:
-                self.register(cls(spec))
+                if getattr(cls, "requires_workspace", False):
+                    self.register(cls(spec, workspace=self._workspace))
+                else:
+                    self.register(cls(spec))
         for name, message in stub_messages.items():
             if name not in self._tools:
                 spec = self._specs[name]
@@ -126,6 +131,10 @@ class ToolRegistry:
 
     def missing_tools(self) -> List[str]:
         return [name for name in self._specs if name not in self._tools]
+
+    @property
+    def workspace(self) -> WorkspaceManager | None:
+        return self._workspace
 
     def get_langchain_tools(self) -> List[object]:
         """Return LangChain compatible wrappers for the registered tools."""

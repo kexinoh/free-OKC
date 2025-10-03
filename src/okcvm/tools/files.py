@@ -8,10 +8,18 @@ import os
 from pathlib import Path, PurePosixPath
 from typing import Optional
 
+from ..workspace import WorkspaceError, WorkspaceManager
 from .base import Tool, ToolError, ToolResult
 
 
-def _ensure_absolute(path_str: str) -> Path:
+def _ensure_absolute(path_str: str, workspace: WorkspaceManager | None = None) -> Path:
+    if workspace is not None:
+        try:
+            return workspace.resolve(path_str)
+        except WorkspaceError as exc:
+            if not os.path.isabs(path_str):
+                raise ToolError(str(exc)) from exc
+
     if not os.path.isabs(path_str):
         raise ToolError("file_path must be absolute")
 
@@ -19,9 +27,6 @@ def _ensure_absolute(path_str: str) -> Path:
     if path.is_absolute():
         return path
 
-    # On Windows, pathlib treats POSIX-style absolute paths (e.g. "/tmp/foo")
-    # as relative. Detect this case explicitly and normalise it so that tools
-    # invoked by the agent can interoperate across operating systems.
     if os.name == "nt" and PurePosixPath(path_str).is_absolute():
         drive = Path.cwd().drive or Path.home().drive
         if drive:
@@ -30,14 +35,25 @@ def _ensure_absolute(path_str: str) -> Path:
     raise ToolError("file_path must be absolute")
 
 
-class ReadFileTool(Tool):
+class FileTool(Tool):
+    requires_workspace = True
+
+    def __init__(self, spec, *, workspace: WorkspaceManager | None = None):
+        super().__init__(spec)
+        self._workspace = workspace
+
+    def _resolve(self, path_str: str) -> Path:
+        return _ensure_absolute(path_str, self._workspace)
+
+
+class ReadFileTool(FileTool):
     name = "mshtools-read_file"
 
     def call(self, **kwargs) -> ToolResult:  # type: ignore[override]
         file_path = kwargs.get("file_path")
         if not file_path:
             raise ToolError("'file_path' is required")
-        path = _ensure_absolute(file_path)
+        path = self._resolve(file_path)
         if not path.exists():
             raise ToolError(f"File not found: {path}")
 
@@ -58,7 +74,7 @@ class ReadFileTool(Tool):
         return ToolResult(success=True, data=text, output=text)
 
 
-class WriteFileTool(Tool):
+class WriteFileTool(FileTool):
     name = "mshtools-write_file"
 
     def call(self, **kwargs) -> ToolResult:  # type: ignore[override]
@@ -67,7 +83,7 @@ class WriteFileTool(Tool):
         append = bool(kwargs.get("append", False))
         if not file_path or content is None:
             raise ToolError("'file_path' and 'content' are required")
-        path = _ensure_absolute(file_path)
+        path = self._resolve(file_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         mode = "a" if append else "w"
         with path.open(mode, encoding="utf-8") as handle:
@@ -75,7 +91,7 @@ class WriteFileTool(Tool):
         return ToolResult(success=True, data={"path": str(path)}, output=str(path))
 
 
-class EditFileTool(Tool):
+class EditFileTool(FileTool):
     name = "mshtools-edit_file"
 
     def call(self, **kwargs) -> ToolResult:  # type: ignore[override]
@@ -87,7 +103,7 @@ class EditFileTool(Tool):
             raise ToolError("'file_path', 'old_string', and 'new_string' are required")
         if old == new:
             raise ToolError("'old_string' and 'new_string' must differ")
-        path = _ensure_absolute(file_path)
+        path = self._resolve(file_path)
         if not path.exists():
             raise ToolError(f"File not found: {path}")
         text = path.read_text(encoding="utf-8", errors="replace")
