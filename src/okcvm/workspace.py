@@ -62,8 +62,7 @@ class WorkspaceManager:
     @property
     def session_id(self) -> str:
         """Return the unique session identifier tied to this workspace."""
-
-        return self._session_id
+        return self._paths.session_id
 
     def resolve(self, raw_path: str) -> Path:
         """Map a user-provided path to the internal workspace location."""
