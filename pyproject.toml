@@ -31,7 +31,7 @@ dev = [
 ]
 
 [project.scripts]
-okcvm-server = "okcvm.server:main"
+okcvm-server = "okcvm.server:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
