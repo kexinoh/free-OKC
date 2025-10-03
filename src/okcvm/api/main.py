@@ -144,6 +144,14 @@ def create_app() -> FastAPI:
         logger.debug("Session info requested (history=%s)", description.get("history_length"))
         return description
 
+    @app.get("/api/session/history/{entry_id}")
+    async def session_history_entry(entry_id: str) -> Dict[str, object]:
+        logger.debug("History entry requested id=%s", entry_id)
+        entry = state.vm.get_history_entry(entry_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="History entry not found")
+        return entry
+
     @app.get("/api/session/boot")
     async def session_boot() -> Dict[str, object]:
         logger.info("Session boot requested")
