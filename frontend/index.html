@@ -13,8 +13,34 @@
     />
   </head>
   <body>
-    <div class="app-shell">
-      <header class="app-header">
+    <div class="app-workspace">
+      <aside class="history-sidebar" id="history-sidebar">
+        <button
+          type="button"
+          class="history-toggle"
+          id="history-toggle"
+          aria-expanded="false"
+          aria-controls="history-panel"
+          aria-label="切换历史会话侧栏"
+        >
+          <span class="history-toggle-icon" aria-hidden="true">💾</span>
+          <span class="history-toggle-label">历史会话</span>
+        </button>
+        <div class="history-panel" id="history-panel" tabindex="-1">
+          <div class="history-panel-header">
+            <h2>历史会话</h2>
+            <button type="button" class="ghost-button history-new" id="new-conversation">
+              <span aria-hidden="true">＋</span>
+              <span>新建对话</span>
+            </button>
+          </div>
+          <p class="history-empty" id="conversation-empty">暂无会话记录</p>
+          <ul class="conversation-list" id="conversation-list"></ul>
+        </div>
+      </aside>
+
+      <div class="app-shell">
+        <header class="app-header">
         <div class="logo-area">
           <span class="logo">OK</span>
           <div>
@@ -37,7 +63,7 @@
         </div>
       </header>
 
-      <main class="app-main">
+        <main class="app-main">
         <section class="chat-panel">
           <div class="chat-messages" id="chat-messages"></div>
           <form class="chat-input" id="chat-form">
@@ -86,7 +112,8 @@
             </p>
           </section>
         </aside>
-      </main>
+        </main>
+      </div>
     </div>
 
     <div class="settings-overlay" id="settings-overlay" hidden>

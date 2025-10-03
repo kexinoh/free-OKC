@@ -50,12 +50,22 @@ body {
   display: flex;
   align-items: stretch;
   justify-content: center;
+  padding: clamp(0.5rem, 2vw, 1.5rem);
 }
 
 body.no-scroll { overflow: hidden; }
 
+.app-workspace {
+  width: min(1600px, 100%);
+  display: flex;
+  align-items: stretch;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
 .app-shell {
-  width: min(1440px, 100%);
+  flex: 1 1 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -77,7 +87,7 @@ body.no-scroll { overflow: hidden; }
   background: var(--surface-bg);
   border: 1px solid var(--surface-stroke);
   border-radius: 1.5rem;
-  box-shadow: 0 0 0 1px var(--surface-highlight) inset, 
+  box-shadow: 0 0 0 1px var(--surface-highlight) inset,
               0 20px 50px -20px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -136,6 +146,187 @@ body.no-scroll { overflow: hidden; }
 }
 .settings-toggle:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
 .settings-toggle[aria-expanded='true'] { background: var(--brand-purple); border-color: var(--brand-purple); color: white; }
+
+/* --- Conversation History Sidebar --- */
+.history-sidebar {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+  min-height: 100%;
+}
+
+.history-toggle {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 2.9rem;
+  padding: 0.75rem 0.65rem;
+  border-radius: 1.5rem;
+  border: 1px solid var(--surface-stroke);
+  background: rgba(23, 24, 38, 0.65);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.history-toggle:hover,
+.history-toggle:focus-visible {
+  outline: none;
+  border-color: rgba(129, 140, 160, 0.5);
+  background: rgba(45, 46, 70, 0.85);
+  color: var(--text-primary);
+  box-shadow: 0 0 15px -5px rgba(0,0,0,0.25);
+}
+
+.history-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.6);
+}
+
+.history-toggle-icon {
+  font-size: 1.2rem;
+}
+
+.history-toggle-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+}
+
+.history-panel {
+  flex: 0 0 0;
+  width: 0;
+  opacity: 0;
+  padding: 0;
+  border-radius: 1.5rem;
+  border: 1px solid transparent;
+  background: var(--surface-bg);
+  box-shadow: 0 0 0 1px var(--surface-highlight) inset,
+              0 20px 50px -20px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: calc(100vh - clamp(1.5rem, 4vh, 2.25rem) * 2);
+  overflow: hidden;
+  transition: flex-basis var(--transition-medium),
+              width var(--transition-medium),
+              opacity var(--transition-medium),
+              padding var(--transition-medium),
+              border-color var(--transition-medium);
+}
+
+.history-panel:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35),
+              0 0 0 1px var(--surface-highlight) inset,
+              0 20px 50px -20px rgba(0, 0, 0, 0.5);
+}
+
+.history-sidebar.open .history-panel {
+  flex-basis: 280px;
+  width: 280px;
+  opacity: 1;
+  padding: 1.25rem;
+  pointer-events: auto;
+  border-color: var(--surface-stroke);
+}
+
+.history-sidebar.open .history-toggle {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.45), rgba(139, 92, 246, 0.55));
+  border-color: rgba(99, 102, 241, 0.65);
+  color: white;
+  box-shadow: 0 10px 30px -15px rgba(59, 130, 246, 0.8);
+}
+
+.history-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.history-panel-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.history-new {
+  padding-inline: 0.85rem;
+  font-size: 0.85rem;
+  border-color: rgba(99, 102, 241, 0.45);
+}
+
+.history-new span[aria-hidden='true'] {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.history-empty {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+}
+
+.conversation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.conversation-item {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 1.1rem;
+  background: rgba(24, 25, 41, 0.9);
+  padding: 0.85rem 1rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.conversation-item:hover,
+.conversation-item:focus-visible {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.45);
+  color: var(--text-primary);
+  background: rgba(45, 46, 70, 0.85);
+  box-shadow: 0 10px 25px -20px rgba(59, 130, 246, 0.8);
+}
+
+.conversation-item.active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.4), rgba(139, 92, 246, 0.35));
+  border-color: rgba(99, 102, 241, 0.65);
+  color: white;
+}
+
+.conversation-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-align: left;
+}
+
+.conversation-meta {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
 
 .app-main {
   display: grid;
@@ -314,6 +505,10 @@ body.no-scroll { overflow: hidden; }
 
 /* --- Responsive Adjustments --- */
 @media (max-width: 1080px) {
+  .app-workspace { flex-direction: column; }
+  .history-sidebar { width: 100%; min-height: auto; }
+  .history-panel { max-height: none; }
+  .history-sidebar.open .history-panel { flex-basis: 100%; width: 100%; }
   .app-shell { max-height: none; overflow: visible; min-height: auto; }
   .app-main { grid-template-columns: 1fr; min-height: auto; }
   .chat-panel,
@@ -322,6 +517,10 @@ body.no-scroll { overflow: hidden; }
 }
 
 @media (max-width: 720px) {
+  .history-sidebar { flex-direction: column; gap: 0.5rem; }
+  .history-toggle { flex-direction: row; width: auto; padding: 0.65rem 1rem; }
+  .history-toggle-label { writing-mode: initial; transform: none; letter-spacing: 0.05em; font-size: 0.85rem; }
+  .history-sidebar.open .history-panel { padding: 1rem !important; }
   .app-shell { padding: 1.5rem 1rem 2.5rem; }
   .app-header { flex-direction: column; gap: 1rem; align-items: flex-start; }
   .chat-input { flex-direction: column; align-items: stretch; }
