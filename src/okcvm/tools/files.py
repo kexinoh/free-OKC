@@ -17,8 +17,7 @@ def _ensure_absolute(path_str: str, workspace: WorkspaceManager | None = None) -
         try:
             return workspace.resolve(path_str)
         except WorkspaceError as exc:
-            if not os.path.isabs(path_str):
-                raise ToolError(str(exc)) from exc
+            raise ToolError(str(exc)) from exc
 
     if not os.path.isabs(path_str):
         raise ToolError("file_path must be absolute")

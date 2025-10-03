@@ -6,6 +6,7 @@ from pathlib import Path, PosixPath
 
 import pytest
 from okcvm.spec import ToolSpec
+from okcvm.workspace import WorkspaceError
 from okcvm.tools import files
 
 
@@ -28,6 +29,17 @@ def test_ensure_absolute_normalises_posix_path_on_windows(monkeypatch) -> None:
 def test_ensure_absolute_rejects_relative_path() -> None:
     with pytest.raises(files.ToolError):
         files._ensure_absolute("relative/path.txt")
+
+
+def test_ensure_absolute_errors_when_workspace_rejects_absolute() -> None:
+    class RejectingWorkspace:
+        def resolve(self, raw_path: str) -> Path:  # pragma: no cover - simple stub
+            raise WorkspaceError("outside of workspace")
+
+    with pytest.raises(files.ToolError) as exc:
+        files._ensure_absolute("/etc/passwd", workspace=RejectingWorkspace())
+
+    assert "outside of workspace" in str(exc.value)
 
 
 def _write_spec() -> ToolSpec:

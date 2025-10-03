@@ -8,6 +8,9 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+LEGACY_MOUNT_PATH = "/mnt/okcomputer/"
+LEGACY_OUTPUT_PATH = "/mnt/okcomputer/output/"
+
 
 class WorkspaceError(RuntimeError):
     """Raised when a workspace path cannot be resolved safely."""
@@ -90,7 +93,7 @@ class WorkspaceManager:
         mount_str = str(self._paths.mount)
         output_str = str(self._paths.output)
 
-        prompt = prompt.replace("/mnt/okcomputer/output/", f"{output_str}/")
-        prompt = prompt.replace("/mnt/okcomputer/", f"{mount_str}/")
+        prompt = prompt.replace(LEGACY_OUTPUT_PATH, f"{output_str}/")
+        prompt = prompt.replace(LEGACY_MOUNT_PATH, f"{mount_str}/")
         return prompt
 
