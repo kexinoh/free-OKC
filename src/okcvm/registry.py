@@ -211,7 +211,7 @@ class ToolRegistry:
             )
 
             model = create_model(
-                f"{tool_spec.name.replace('-', '_').title()}Args",
+                f"{tool_spec.name.replace('-', '_').title().replace('_', '')}Args",
                 __config__=config,
                 **fields,
             )
