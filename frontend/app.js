@@ -909,9 +909,6 @@ async function sendChat(message) {
 }
 
 function resolveUserInputField(form) {
-  if (userInput instanceof HTMLTextAreaElement || userInput instanceof HTMLInputElement) {
-    return userInput;
-  }
   if (form instanceof HTMLFormElement) {
     const fallback = form.querySelector('#user-input, textarea[name="message"]');
     if (fallback instanceof HTMLTextAreaElement || fallback instanceof HTMLInputElement) {
