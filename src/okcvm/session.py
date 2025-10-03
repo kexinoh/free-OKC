@@ -133,7 +133,7 @@ class SessionState:
 
         # 引导信息仍然可以是静态的
         boot_reply = constants.WELCOME_MESSAGE
-        self.vm.history.append({"role": "assistant", "content": boot_reply})
+        self.vm.record_history_entry({"role": "assistant", "content": boot_reply})
 
         logger.info("Session booted (history=%s)", len(self.vm.history))
 

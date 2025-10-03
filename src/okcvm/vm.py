@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import copy
+from itertools import count
 from typing import Any, Dict, List
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -28,6 +31,12 @@ class VirtualMachine:
         self.history: List[Dict[str, Any]] = []
         self._chain = None  # 延迟初始化 chain
         self._last_tool_result: ToolResult | None = None
+        workspace = getattr(self.registry, "workspace", None)
+        if workspace is not None and hasattr(workspace, "session_id"):
+            self._history_prefix = workspace.session_id
+        else:
+            self._history_prefix = uuid4().hex[:8]
+        self._history_id_counter = count(1)
         logger.debug("VirtualMachine initialised")
 
     @property
@@ -43,6 +52,7 @@ class VirtualMachine:
         """Clears the conversation history."""
         self.history.clear()
         self._last_tool_result = None
+        self._history_id_counter = count(1)
         logger.debug("VM history has been reset")
 
     def execute(self, utterance: str) -> Dict[str, Any]:
@@ -53,12 +63,17 @@ class VirtualMachine:
         logger.info("Executing utterance: %s", utterance[:200])
         
         # 将历史转换为 LangChain 格式
-        langchain_history = [
-            HumanMessage(content=msg["content"]) if msg["role"] == "user"
-            else AIMessage(content=msg["content"])
-            for msg in self.history
-        ]
-        
+        langchain_history: List[Any] = []
+        for msg in self.history:
+            role = msg.get("role")
+            content = msg.get("content")
+            if content is None:
+                continue
+            if role == "user":
+                langchain_history.append(HumanMessage(content=content))
+            elif role == "assistant":
+                langchain_history.append(AIMessage(content=content))
+
         # 调用 LangChain Agent Executor
         try:
             response = self.chain.invoke({
@@ -77,8 +92,8 @@ class VirtualMachine:
         final_reply = response.get("output", "I'm not sure how to respond to that.")
         
         # 更新我们的内部历史记录
-        self.history.append({"role": "user", "content": utterance})
-        self.history.append({"role": "assistant", "content": final_reply})
+        self.record_history_entry({"role": "user", "content": utterance})
+        self.record_history_entry({"role": "assistant", "content": final_reply})
         
         # 从LangChain的中间步骤提取工具调用信息（可选，但对于调试很有用）
         tool_calls_info = []
@@ -108,7 +123,7 @@ class VirtualMachine:
         logger.debug("Calling tool %s with args=%s", name, list(kwargs.keys()))
         result = self.registry.call(name, **kwargs)
         self._last_tool_result = result
-        self.history.append(
+        self.record_history_entry(
             {
                 "role": "tool",
                 "name": name,
@@ -128,8 +143,22 @@ class VirtualMachine:
 
     def get_history(self) -> List[Dict[str, Any]]:
         """Return a deep copy of the internal history to prevent mutation."""
-        import copy
         return copy.deepcopy(self.history)
+
+    def _next_history_id(self) -> str:
+        return f"{self._history_prefix}-{next(self._history_id_counter):04d}"
+
+    def record_history_entry(self, entry: Dict[str, Any]) -> Dict[str, Any]:
+        stored = dict(entry)
+        stored.setdefault("id", self._next_history_id())
+        self.history.append(stored)
+        return stored
+
+    def get_history_entry(self, entry_id: str) -> Dict[str, Any] | None:
+        for item in reversed(self.history):
+            if item.get("id") == entry_id:
+                return copy.deepcopy(item)
+        return None
 
     def describe(self) -> Dict[str, object]:
         description = {
@@ -140,8 +169,10 @@ class VirtualMachine:
         workspace = getattr(self.registry, "workspace", None)
         if workspace is not None:
             paths = workspace.paths
+            description["workspace_id"] = workspace.session_id
             description["workspace_mount"] = str(paths.mount)
             description["workspace_output"] = str(paths.output)
+        description["history_namespace"] = self._history_prefix
         return description
 
     def describe_history(self, limit: int = 25) -> List[Dict[str, object]]:
