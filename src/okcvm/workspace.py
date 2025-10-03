@@ -40,7 +40,7 @@ class WorkspaceManager:
         mount_path = mount_root_path / f"{prefix}-{token}"
 
         storage_root = base_dir or Path(tempfile.gettempdir()) / "okcvm" / "sessions"
-        internal_root = (storage_root / mount_path.relative_to("/")).resolve()
+        internal_root = (storage_root / mount_path.name).resolve()
         internal_output = internal_root / "output"
 
         internal_output.mkdir(parents=True, exist_ok=True)
