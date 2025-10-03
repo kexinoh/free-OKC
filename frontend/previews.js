@@ -2,9 +2,11 @@ import {
   modelLogList,
   modelLogEmpty,
   modelLogTemplate,
+  webPreviewCard,
   webPreviewFrame,
   webPreviewEmpty,
   openWebPreviewButton,
+  pptPreviewCard,
   pptPreviewContainer,
   pptPreviewEmpty,
   togglePptModeButton,
@@ -84,32 +86,23 @@ function normalizeWebPreview(preview) {
 }
 
 export function updateWebPreview(preview) {
-  currentWebPreview = normalizeWebPreview(preview);
+  currentWebPreview = preview;
+  const hasContent = Boolean(preview?.html);
 
-  const hasHtml = typeof currentWebPreview?.html === 'string' && currentWebPreview.html.trim().length > 0;
-  const hasUrl = typeof currentWebPreview?.url === 'string' && currentWebPreview.url.trim().length > 0;
-
-  if (webPreviewFrame instanceof HTMLIFrameElement) {
-    if (hasHtml) {
-      webPreviewFrame.removeAttribute('src');
-      webPreviewFrame.srcdoc = currentWebPreview.html;
-    } else if (hasUrl) {
-      webPreviewFrame.removeAttribute('srcdoc');
-      webPreviewFrame.src = currentWebPreview.url;
-    } else {
-      webPreviewFrame.removeAttribute('src');
-      webPreviewFrame.removeAttribute('srcdoc');
-      webPreviewFrame.srcdoc = '';
-    }
-    webPreviewFrame.hidden = !(hasHtml || hasUrl);
+  if (webPreviewCard) {
+    webPreviewCard.hidden = !hasContent;
   }
 
-  if (webPreviewEmpty instanceof HTMLElement) {
-    webPreviewEmpty.hidden = hasHtml || hasUrl;
-  }
-
-  if (openWebPreviewButton instanceof HTMLButtonElement) {
-    openWebPreviewButton.disabled = !(hasHtml || hasUrl);
+  if (hasContent) {
+    webPreviewFrame.srcdoc = preview.html;
+    webPreviewFrame.hidden = false;
+    webPreviewEmpty.hidden = true;
+    openWebPreviewButton.disabled = false;
+  } else {
+    webPreviewFrame.srcdoc = '';
+    webPreviewFrame.hidden = true;
+    webPreviewEmpty.hidden = true;
+    openWebPreviewButton.disabled = true;
   }
 }
 
@@ -117,8 +110,14 @@ export function updatePptPreview(slides) {
   currentPptSlides = Array.isArray(slides) ? slides : [];
   pptPreviewContainer.innerHTML = '';
 
-  if (currentPptSlides.length === 0) {
-    pptPreviewEmpty.hidden = false;
+  const hasSlides = currentPptSlides.length > 0;
+
+  if (pptPreviewCard) {
+    pptPreviewCard.hidden = !hasSlides;
+  }
+
+  if (!hasSlides) {
+    pptPreviewEmpty.hidden = true;
     pptPreviewContainer.hidden = true;
     togglePptModeButton.disabled = true;
     if (isCarouselMode) {
