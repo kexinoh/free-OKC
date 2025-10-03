@@ -7,8 +7,11 @@ from typing import Dict, List, Optional
 
 from . import constants, spec
 from .config import get_config
+from .logging_utils import get_logger
 from .registry import ToolRegistry
 from .vm import VirtualMachine
+
+logger = get_logger(__name__)
 
 class SessionState:
     """Manages the state and logic for a user session."""
@@ -20,6 +23,7 @@ class SessionState:
             registry=self.registry,
         )
         self._rng = random.Random()
+        logger.info("SessionState initialised with %d tool specifications", len(self.registry.list_specs()))
         # 注意：VM现在管理自己的历史，SessionState的历史可以作为副本或移除
         # 为了简单起见，我们让VM成为历史的唯一来源
         # self.history: List[Dict[str, str]] = []
@@ -41,9 +45,17 @@ class SessionState:
         }
 
     def respond(self, message: str) -> Dict[str, object]:
-        
+        logger.info("Processing chat message (length=%s)", len(message))
+        if message:
+            preview = message if len(message) <= 200 else f"{message[:200]}…"
+            logger.debug("Message preview: %s", preview)
+
         # 调用 VM 来获取真实的 LLM 响应
-        vm_result = self.vm.execute(message)
+        try:
+            vm_result = self.vm.execute(message)
+        except Exception:
+            logger.exception("Virtual machine execution failed")
+            raise
         
         # 从 VM 的结果中提取信息
         reply = vm_result.get("reply", "An error occurred.")
@@ -58,6 +70,11 @@ class SessionState:
             # 假设最后一个工具调用生成了主要内容
             last_call = tool_calls[-1]
             summary = f"Executed tool: {last_call['tool_name']}"
+            logger.info(
+                "Tool executed during chat: %s (has_output=%s)",
+                last_call.get("tool_name"),
+                bool(last_call.get("tool_output")),
+            )
             output = last_call.get("tool_output", {})
             if isinstance(output, dict):
                 if "html" in output:
@@ -70,13 +87,15 @@ class SessionState:
         model_name = cfg.chat.model if cfg.chat else "Unconfigured chat model"
         meta = self._meta(model_name, summary)
         
-        return {
+        response_payload = {
             "reply": reply,
             "meta": meta,
             "web_preview": web_preview,
             "ppt_slides": ppt_slides,
             "vm_history": self.vm.describe_history(limit=25),
         }
+        logger.debug("Chat response prepared with meta=%s", meta)
+        return response_payload
 
     def boot(self) -> Dict[str, object]:
         """
@@ -84,13 +103,13 @@ class SessionState:
         It simply initializes the state.
         """
         self.reset()
-        
+
         # 引导信息仍然可以是静态的
         boot_reply = constants.WELCOME_MESSAGE
         self.vm.history.append({"role": "assistant", "content": boot_reply})
 
         meta = self._meta("OKC-Orchestrator", "Workbench Initialized")
-        return {
+        payload = {
             "reply": boot_reply,
             "meta": meta,
             "web_preview": {"html": constants.STUDIO_HTML},
@@ -100,5 +119,7 @@ class SessionState:
             ],
             "vm": self.vm.describe(),
         }
+        logger.info("Session bootstrapped")
+        return payload
 
     # _demo_response 方法现在可以移除了，因为它不再被 respond 方法调用

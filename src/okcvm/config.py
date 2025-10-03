@@ -24,6 +24,10 @@ from typing import Mapping, Optional
 
 import yaml
 
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
+
 @dataclass(slots=True)
 class ModelEndpointConfig:
     """Configuration for a single model endpoint."""
@@ -144,7 +148,14 @@ def configure(
                 sound_effects=copy.deepcopy(media.sound_effects),
                 asr=copy.deepcopy(media.asr),
             )
-    print("✅ Configuration updated.")
+    logger.info("Configuration updated: chat=%s, media_services=%s",
+                bool(chat),
+                [service for service, cfg in (
+                    ("image", _config.media.image),
+                    ("speech", _config.media.speech),
+                    ("sound_effects", _config.media.sound_effects),
+                    ("asr", _config.media.asr),
+                ) if cfg])
 
 
 def get_config() -> Config:
@@ -168,15 +179,15 @@ def reset_config(env: Mapping[str, str] | None = None) -> None:
 def load_config_from_yaml(path: Path) -> None:
     """Loads configuration from a YAML file and applies it."""
     if not path.exists():
-        print(f"⚠️ Config file not found at {path}, skipping.")
+        logger.warning("Config file not found at %s, skipping load.", path)
         return
 
-    print(f"🚀 Loading configuration from {path}...")
+    logger.info("Loading configuration from %s", path)
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not data:
-        print("⚠️ Config file is empty, skipping.")
+        logger.warning("Config file at %s is empty, skipping.", path)
         return
         
     chat_config = data.get("chat")
