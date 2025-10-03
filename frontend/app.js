@@ -99,6 +99,18 @@ function setInteractionDisabled(disabled) {
   }
 }
 
+const CONVERSATION_TITLE_MAX_LENGTH = 20;
+
+function generateConversationTitle(content, { fallbackToDefault = true } = {}) {
+  const normalized = typeof content === 'string' ? content.trim() : '';
+  if (!normalized) {
+    return fallbackToDefault ? '新的会话' : null;
+  }
+  return normalized.length > CONVERSATION_TITLE_MAX_LENGTH
+    ? `${normalized.slice(0, CONVERSATION_TITLE_MAX_LENGTH)}…`
+    : normalized;
+}
+
 function createMessageActionButton(label, action, iconName) {
   const button = document.createElement('button');
   button.type = 'button';
@@ -112,13 +124,15 @@ function createMessageActionButton(label, action, iconName) {
   iconSpan.className = 'message-action-icon';
   iconSpan.setAttribute('aria-hidden', 'true');
 
-  const iconElement = typeof iconName === 'string' ? cloneMessageActionIcon(iconName) : null;
-  if (iconElement) {
-    iconSpan.appendChild(iconElement);
-  } else if (iconName instanceof Node) {
+  if (iconName instanceof Node) {
     iconSpan.appendChild(iconName.cloneNode(true));
   } else if (typeof iconName === 'string') {
-    iconSpan.textContent = iconName;
+    const iconElement = cloneMessageActionIcon(iconName);
+    if (iconElement) {
+      iconSpan.appendChild(iconElement);
+    } else {
+      iconSpan.textContent = iconName;
+    }
   }
 
   const labelSpan = document.createElement('span');
@@ -260,6 +274,18 @@ async function writeToClipboard(text) {
   }
 }
 
+function flashButtonFeedback(button, message, feedback, duration = 1200) {
+  if (!(button instanceof HTMLElement)) return;
+  flashMessageActionStatus(button, message, duration);
+  if (!feedback) return;
+  button.dataset.feedback = feedback;
+  if (duration > 0) {
+    window.setTimeout(() => {
+      delete button.dataset.feedback;
+    }, duration);
+  }
+}
+
 async function handleCopyMessageAction(messageId, button) {
   if (!button) return;
   const match = findConversationByMessageId(messageId);
@@ -270,18 +296,10 @@ async function handleCopyMessageAction(messageId, button) {
 
   try {
     await writeToClipboard(content);
-    flashMessageActionStatus(button, '已复制');
-    button.dataset.feedback = 'success';
-    window.setTimeout(() => {
-      delete button.dataset.feedback;
-    }, 1200);
+    flashButtonFeedback(button, '已复制', 'success');
   } catch (error) {
     console.error(error);
-    flashMessageActionStatus(button, '复制失败', 1500);
-    button.dataset.feedback = 'error';
-    window.setTimeout(() => {
-      delete button.dataset.feedback;
-    }, 1500);
+    flashButtonFeedback(button, '复制失败', 'error', 1500);
   }
 }
 
@@ -318,12 +336,7 @@ function handleEditMessageAction(messageElement, messageId) {
     });
   }
 
-  const snippet = normalized.trim();
-  if (snippet.length > 0) {
-    conversation.title = snippet.length > 20 ? `${snippet.slice(0, 20)}…` : snippet;
-  } else {
-    conversation.title = '新的会话';
-  }
+  conversation.title = generateConversationTitle(normalized);
 
   saveConversationsToStorage();
   renderConversationList();
@@ -339,11 +352,7 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
 
   const precedingUserMessage = findPreviousUserMessage(conversation, messageIndex);
   if (!precedingUserMessage) {
-    flashMessageActionStatus(button, '无法刷新', 1500);
-    button.dataset.feedback = 'error';
-    window.setTimeout(() => {
-      delete button.dataset.feedback;
-    }, 1500);
+    flashButtonFeedback(button, '无法刷新', 'error', 1500);
     return;
   }
 
@@ -377,19 +386,11 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
     }
     updateWebPreview(data.web_preview);
     updatePptPreview(data.ppt_slides);
-    flashMessageActionStatus(button, '已刷新', 1500);
-    button.dataset.feedback = 'success';
-    window.setTimeout(() => {
-      delete button.dataset.feedback;
-    }, 1500);
+    flashButtonFeedback(button, '已刷新', 'success', 1500);
   } catch (error) {
     console.error(error);
     finalizePendingMessage(messageElement, `重新生成失败：${error.message}`, messageId);
-    flashMessageActionStatus(button, '刷新失败', 1500);
-    button.dataset.feedback = 'error';
-    window.setTimeout(() => {
-      delete button.dataset.feedback;
-    }, 1500);
+    flashButtonFeedback(button, '刷新失败', 'error', 1500);
   } finally {
     setStatus('待命中…');
     setInteractionDisabled(false);
@@ -743,9 +744,9 @@ function appendMessageToConversation(role, content, options = {}) {
   conversation.updatedAt = timestamp;
 
   if (role === 'user') {
-    const snippet = message.content.trim();
-    if (snippet.length > 0) {
-      conversation.title = snippet.length > 20 ? `${snippet.slice(0, 20)}…` : snippet;
+    const nextTitle = generateConversationTitle(message.content, { fallbackToDefault: false });
+    if (typeof nextTitle === 'string') {
+      conversation.title = nextTitle;
     }
   }
 
