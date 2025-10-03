@@ -31,4 +31,4 @@ experience with a per-session "virtual space" managed by
 - Both READMEs explain the virtual workspace contract, highlighting that file
   tools stay within the sandbox and that crossing the boundary yields an error.
   Share this section with contributors who are confused about "虚拟空间" paths.
-  【F:README.md†L140-L158】【F:README_ZH.md†L142-L149】
+  【F:README.md†L156-L156】【F:README_ZH.md†L148-L148】
