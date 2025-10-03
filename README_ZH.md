@@ -105,8 +105,8 @@ okcvm-server
 >
 > 如果在 PowerShell 中执行 `python -m okcvm.server` 出现
 > `ModuleNotFoundError: No module named 'okcvm'`，通常说明当前用于启动服务
-> 的解释器与安装 `okcvm` 的解释器不一致。请确认已经激活安装依赖时使用
-> 的虚拟环境（命令行提示符应包含环境名称，例如 `(free-OKC)`）。若仍然报
+> 的解释器与安装 `okcvm` 的解释器不一致。请确认已激活虚拟环境，
+> 可在 PowerShell 中运行 `.\venv\Scripts\Activate.ps1`。激活后，命令行提示符应包含环境名称（例如 `(free-OKC)`）。若仍然报
 > 错，可以在项目根目录重新以可编辑模式安装，确保在当前环境中注册
 > `okcvm-server` 命令：
 >
