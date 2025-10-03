@@ -95,13 +95,14 @@ def _validate_json_schema(schema: dict, *, field: str, context: str) -> None:
         else:
             raise TypeError(f"'items' for {context} must be a schema object or list of schema objects")
 
-    additional_properties = schema.get("additionalProperties")
-    if additional_properties not in (None, True, False):
-        if not isinstance(additional_properties, dict):
+    if "additionalProperties" in schema:
+        additional_properties = schema["additionalProperties"]
+        if isinstance(additional_properties, dict):
+            _validate_json_schema(additional_properties, field="additionalProperties", context=context)
+        elif not isinstance(additional_properties, bool):
             raise TypeError(
                 f"'additionalProperties' for {context} must be a boolean or schema mapping"
             )
-        _validate_json_schema(additional_properties, field="additionalProperties", context=context)
 
 
 @dataclass
