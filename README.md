@@ -110,9 +110,9 @@ directories. The service will start on `http://localhost:8000`.
 >
 > If PowerShell reports `ModuleNotFoundError: No module named 'okcvm'` when you
 > try `python -m okcvm.server`, the interpreter being used to start the server
-> is not the one where the package was installed. Double-check that your virtual
-> environment is activated (the prompt should include its name, for example
-> `(free-OKC)`) before running the command. If the problem persists, reinstall
+> is not the one where the package was installed. Make sure your virtual
+> environment is activated by running `.\venv\Scripts\Activate.ps1` in PowerShell.
+> Your prompt should then include the environment's name (e.g., `(free-OKC)`). If the problem persists, reinstall
 > the project in editable mode from the repository root so that the
 > `okcvm-server` entry point is registered in the current environment:
 >
