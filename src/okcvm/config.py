@@ -86,11 +86,46 @@ class MediaConfig:
 
 
 @dataclass(slots=True)
+class WorkspaceConfig:
+    """Configuration for the on-disk workspace sandbox."""
+
+    path: Optional[str] = None
+    confirm_on_start: bool = True
+    _config_dir: Optional[Path] = None
+
+    def copy(self) -> "WorkspaceConfig":
+        return WorkspaceConfig(
+            path=self.path,
+            confirm_on_start=self.confirm_on_start,
+            _config_dir=self._config_dir,
+        )
+
+    def resolve_path(self, *, cwd: Optional[Path] = None) -> Path:
+        """Resolve the workspace directory to an absolute :class:`Path`."""
+
+        base_path = cwd or self._config_dir or Path.cwd()
+        candidate = Path(self.path).expanduser() if self.path else Path("workspace")
+        if not candidate.is_absolute():
+            candidate = (base_path / candidate).resolve()
+        else:
+            candidate = candidate.resolve()
+        return candidate
+
+    def resolve_and_prepare(self, *, cwd: Optional[Path] = None) -> Path:
+        """Resolve and ensure the workspace directory exists on disk."""
+
+        resolved = self.resolve_path(cwd=cwd)
+        resolved.mkdir(parents=True, exist_ok=True)
+        return resolved
+
+
+@dataclass(slots=True)
 class Config:
     """Top-level runtime configuration shared by the whole application."""
 
     chat: Optional[ModelEndpointConfig] = None
     media: MediaConfig = field(default_factory=MediaConfig)
+    workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
 
     def copy(self) -> "Config":
         """Return a deep copy of the configuration instance."""
@@ -103,6 +138,7 @@ class Config:
                 sound_effects=copy.deepcopy(self.media.sound_effects),
                 asr=copy.deepcopy(self.media.asr),
             ),
+            workspace=self.workspace.copy(),
         )
 
 
@@ -136,6 +172,7 @@ def configure(
     *,
     chat: Optional[ModelEndpointConfig] = None,
     media: Optional[MediaConfig] = None,
+    workspace: Optional[WorkspaceConfig] = None,
 ) -> None:
     """Update the process-wide configuration."""
 
@@ -149,10 +186,13 @@ def configure(
                 sound_effects=copy.deepcopy(media.sound_effects),
                 asr=copy.deepcopy(media.asr),
             )
+        if workspace is not None:
+            _config.workspace = workspace.copy()
     logger.info(
-        "Configuration updated (chat=%s media=%s)",
+        "Configuration updated (chat=%s media=%s workspace=%s)",
         chat is not None,
         media is not None,
+        workspace is not None,
     )
 
 
@@ -171,6 +211,7 @@ def reset_config(env: Mapping[str, str] | None = None) -> None:
         _config = Config(
             chat=_load_chat_from_env(env),
             media=_load_media_from_env(env),
+            workspace=WorkspaceConfig(),
         )
 
 
@@ -190,6 +231,7 @@ def load_config_from_yaml(path: Path) -> None:
         
     chat_config = data.get("chat")
     media_data = data.get("media", {})
+    workspace_data = data.get("workspace")
 
     with _config_lock:
         if chat_config:
@@ -208,6 +250,8 @@ def load_config_from_yaml(path: Path) -> None:
             asr=_parse_endpoint(media_data, "asr"),
         )
 
+        _config.workspace = _parse_workspace(workspace_data, config_dir=path.parent)
+
     logger.info("Configuration loaded successfully from YAML: %s", path)
 
 
@@ -225,3 +269,34 @@ def _parse_endpoint(data: dict, key: str) -> ModelEndpointConfig | None:
         base_url=endpoint_data.get("base_url"),
         api_key=api_key
     )
+
+
+def _parse_workspace(data: Mapping[str, object] | None, *, config_dir: Path) -> WorkspaceConfig:
+    """Parse workspace configuration from YAML mapping."""
+
+    path_value: Optional[str] = None
+    confirm_on_start = True
+
+    if isinstance(data, Mapping):
+        raw_path = data.get("path")
+        if isinstance(raw_path, str) and raw_path.strip():
+            path_value = raw_path.strip()
+        elif raw_path not in (None, ""):
+            logger.warning("Ignoring invalid workspace path configuration: %s", raw_path)
+
+        if "confirm_on_start" in data:
+            confirm_on_start = bool(data.get("confirm_on_start"))
+
+    workspace = WorkspaceConfig(
+        path=path_value,
+        confirm_on_start=confirm_on_start,
+        _config_dir=config_dir,
+    )
+
+    logger.info(
+        "Workspace configuration resolved (path=%s confirm_on_start=%s)",
+        workspace.resolve_path(),
+        workspace.confirm_on_start,
+    )
+
+    return workspace

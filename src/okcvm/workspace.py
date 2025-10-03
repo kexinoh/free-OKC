@@ -25,6 +25,8 @@ class WorkspacePaths:
     output: PurePosixPath
     internal_root: Path
     internal_output: Path
+    internal_mount: Path
+    internal_tmp: Path
     session_id: str
 
 
@@ -34,7 +36,7 @@ class WorkspaceManager:
     def __init__(
         self,
         *,
-        base_dir: Path | None = None,
+        base_dir: Path | str | None = None,
         mount_root: PurePosixPath | str = PurePosixPath("/mnt"),
         prefix: str = "okcvm",
     ) -> None:
@@ -44,17 +46,25 @@ class WorkspaceManager:
         )
         mount_path = mount_root_path / f"{prefix}-{token}"
 
-        storage_root = base_dir or Path(tempfile.gettempdir()) / "okcvm" / "sessions"
+        storage_root = Path(base_dir).expanduser().resolve() if base_dir else Path(tempfile.gettempdir()) / "okcvm" / "sessions"
+        storage_root.mkdir(parents=True, exist_ok=True)
         internal_root = (storage_root / mount_path.name).resolve()
-        internal_output = internal_root / "output"
+        internal_root.mkdir(parents=True, exist_ok=True)
 
-        internal_output.mkdir(parents=True, exist_ok=True)
+        internal_output = internal_root / "output"
+        internal_mount = internal_root / "mnt"
+        internal_tmp = internal_root / "tmp"
+
+        for directory in (internal_output, internal_mount, internal_tmp):
+            directory.mkdir(parents=True, exist_ok=True)
 
         self._paths = WorkspacePaths(
             mount=mount_path,
             output=mount_path / "output",
             internal_root=internal_root,
             internal_output=internal_output,
+            internal_mount=internal_mount,
+            internal_tmp=internal_tmp,
             session_id=mount_path.name,
         )
 

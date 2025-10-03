@@ -6,7 +6,7 @@ import pytest
 pytest.importorskip("yaml")
 
 import okcvm.config as config_mod
-from okcvm.config import MediaConfig, ModelEndpointConfig
+from okcvm.config import MediaConfig, ModelEndpointConfig, WorkspaceConfig
 
 
 @pytest.fixture(autouse=True)
@@ -19,6 +19,7 @@ def restore_config_state():
             config_mod._config = config_mod.AppConfig(  # type: ignore[attr-defined]
                 chat=copy.deepcopy(original.chat),
                 media=copy.deepcopy(original.media),
+                workspace=original.workspace.copy(),
             )
 
 
@@ -73,6 +74,15 @@ def test_configure_updates_media_without_affecting_chat():
     assert cfg.chat.model == "gpt-initial"
     assert cfg.media.image is not None
     assert cfg.media.image.model == "img-one"
+
+
+def test_configure_updates_workspace(tmp_path: Path):
+    workspace_cfg = WorkspaceConfig(path=str(tmp_path), confirm_on_start=False)
+    config_mod.configure(workspace=workspace_cfg)
+
+    cfg = config_mod.get_config()
+    assert cfg.workspace.confirm_on_start is False
+    assert cfg.workspace.resolve_path() == tmp_path.resolve()
 
 
 def test_load_config_from_yaml_supports_env_keys(tmp_path: Path, monkeypatch):
