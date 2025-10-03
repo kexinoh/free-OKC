@@ -193,7 +193,7 @@ class SessionState:
     def snapshot_workspace(self, label: Optional[str] = None, *, limit: int = 20) -> Dict[str, object]:
         state = getattr(self.workspace, "state", None)
         if not getattr(state, "enabled", False):
-            return {"enabled": False, "snapshots": []}
+            raise WorkspaceStateError("Workspace snapshots are disabled")
 
         snapshot_id = state.snapshot(label)
         return self._workspace_state_summary(latest=snapshot_id, limit=limit)
