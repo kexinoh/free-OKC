@@ -34,6 +34,7 @@ If you discover a security issue, please submit a private report via the reposit
 - **Dependency Hygiene:** Keep Python and frontend dependencies patched. Use tools such as `pip-audit` or Dependabot and verify checksums for downloaded assets.
 - **Logging & Monitoring:** Centralize FastAPI access logs and tool execution logs. Configure alerting for repeated failures, unexpected tool invocations, or outbound traffic spikes.
 - **Data Retention:** Regularly purge session histories and workspace artifacts that contain sensitive information. Apply filesystem permissions appropriate to the data sensitivity.
+- **Least Functionality:** Disable any agent tools (e.g., shell execution, file system access) that are not required for your use case to reduce the attack surface.
 
 ## Incident Response
 1. Isolate the affected deployment (disable inbound traffic, revoke exposed credentials).
