@@ -60,8 +60,7 @@ body.no-scroll { overflow: hidden; }
   flex-direction: column;
   gap: 1.5rem;
   padding: 2rem clamp(1rem, 4vw, 2rem) 3rem;
-  min-height: 100vh;
-  max-height: 100vh;
+  height: 100vh;
   overflow: hidden;
 }
 
