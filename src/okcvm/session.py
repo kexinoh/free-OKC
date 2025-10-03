@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from . import constants, spec
+from .config import get_config
 from .registry import ToolRegistry
 from .vm import VirtualMachine
 
@@ -65,7 +66,9 @@ class SessionState:
                     ppt_slides = output["slides"]
 
         # 使用真实数据填充响应
-        meta = self._meta("OpenAI Model", summary) # 模型名称可以从配置中读取
+        cfg = get_config()
+        model_name = cfg.chat.model if cfg.chat else "Unconfigured chat model"
+        meta = self._meta(model_name, summary)
         
         return {
             "reply": reply,

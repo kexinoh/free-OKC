@@ -1,30 +1,27 @@
 """Runtime configuration helpers for OKCVM tools.
 
-This module provides a very small configuration system that focuses on tools
-which integrate with external multimodal models (image generation, speech
-synthesis, sound effect generation, automatic speech recognition, ...).
+This module keeps track of the model endpoints that the orchestrator should
+use.  It deliberately focuses on a very small set of fields (``model``,
+``base_url`` and ``api_key``) to make it easy to plug in real inference
+providers.  The configuration can be loaded from environment variables, YAML
+files or updated dynamically at runtime through the FastAPI endpoints.
 
-The reference implementation keeps the actual media generation deterministic
-for testability, but production deployments are expected to forward requests
-to real model endpoints.  To make that integration straightforward we expose
-lightweight dataclasses that capture the information users need to provide:
-
-* ``base_url`` – the inference endpoint that should receive requests.
-* ``model`` – the specific model identifier to use at that endpoint.
-* ``api_key`` – the credential required by the provider (optional).
-
-Users can either populate these values programmatically by calling
-``okcvm.config.configure`` or by defining environment variables before the
-package is imported.  The expected environment variable names follow the
-pattern ``OKCVM_<SERVICE>_BASE_URL``/``MODEL``/``API_KEY`` (e.g.
-``OKCVM_IMAGE_BASE_URL``).
+The previous implementation mixed two different configuration systems which
+made it difficult to reason about the active values and to integrate with real
+services.  The module now exposes a single ``Config``/``AppConfig`` dataclass
+backed by a thread-safe global state, ensuring that the server always works
+with the latest credentials.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping, MutableMapping, Optional
+from pathlib import Path
+import copy
 import os
+import threading
+from typing import Mapping, Optional
+
 import yaml
 
 @dataclass(slots=True)
@@ -83,26 +80,29 @@ class MediaConfig:
         return getattr(self, service, None)
 
 
-_UNSET = object()
-
-
 @dataclass(slots=True)
 class Config:
-    """Top-level runtime configuration."""
+    """Top-level runtime configuration shared by the whole application."""
 
+    chat: Optional[ModelEndpointConfig] = None
     media: MediaConfig = field(default_factory=MediaConfig)
-    chat: ModelEndpointConfig | None = None
 
-    def update(
-        self,
-        *,
-        media: MediaConfig | None = None,
-        chat: ModelEndpointConfig | None | object = _UNSET,
-    ) -> None:
-        if media is not None:
-            self.media = media
-        if chat is not _UNSET:
-            self.chat = chat  # type: ignore[assignment]
+    def copy(self) -> "Config":
+        """Return a deep copy of the configuration instance."""
+
+        return Config(
+            chat=copy.deepcopy(self.chat),
+            media=MediaConfig(
+                image=copy.deepcopy(self.media.image),
+                speech=copy.deepcopy(self.media.speech),
+                sound_effects=copy.deepcopy(self.media.sound_effects),
+                asr=copy.deepcopy(self.media.asr),
+            ),
+        )
+
+
+# Backwards compatibility alias – older code imported ``AppConfig`` directly.
+AppConfig = Config
 
 
 def _load_media_from_env(env: Mapping[str, str] | None = None) -> MediaConfig:
@@ -120,76 +120,49 @@ def _load_chat_from_env(env: Mapping[str, str] | None = None) -> ModelEndpointCo
     return ModelEndpointConfig.from_env("OKCVM_CHAT", env_mapping)
 
 
-_CONFIG = Config(media=_load_media_from_env(), chat=_load_chat_from_env())
+_config_lock = threading.Lock()
+_config: Config = Config(
+    chat=_load_chat_from_env(),
+    media=_load_media_from_env(),
+)
 
 
 def configure(
     *,
-    media: MediaConfig | None = None,
-    chat: ModelEndpointConfig | None | object = _UNSET,
-) -> None:
-    """Update the process-wide configuration.
-
-    Example
-    -------
-    >>> from okcvm.config import configure, MediaConfig, ModelEndpointConfig
-    >>> configure(
-    ...     media=MediaConfig(
-    ...         image=ModelEndpointConfig(
-    ...             model="my-image-model",
-    ...             base_url="https://api.example.com/v1/images",
-    ...             api_key="sk-...",
-    ...         ),
-    ...     )
-    ... )
-    """
-
-    _CONFIG.update(media=media, chat=chat)
-
-
-def get_config() -> Config:
-    """Return the active configuration instance."""
-
-    return _CONFIG
-
-
-def reset_config(env: Mapping[str, str] | None = None) -> None:
-    """Reset configuration to match the environment (mainly for tests)."""
-
-    global _CONFIG
-    _CONFIG = Config(media=_load_media_from_env(env), chat=_load_chat_from_env(env))
-
-
-@dataclass
-class AppConfig:
-    """Represents the complete, mutable application configuration."""
-
-    chat: Optional[ModelEndpointConfig] = None
-    media: MediaConfig = field(default_factory=MediaConfig)
-
-# --- Global State Management ---
-# Global, thread-safe application configuration state.
-_config: AppConfig = AppConfig()
-_config_lock = threading.Lock()
-
-
-def get_config() -> AppConfig:
-    """Returns a copy of the current application configuration."""
-    with _config_lock:
-        return AppConfig(chat=_config.chat, media=_config.media)
-
-
-def configure(
     chat: Optional[ModelEndpointConfig] = None,
     media: Optional[MediaConfig] = None,
 ) -> None:
-    """Updates the global application configuration."""
+    """Update the process-wide configuration."""
+
     with _config_lock:
         if chat is not None:
-            _config.chat = chat
+            _config.chat = copy.deepcopy(chat)
         if media is not None:
-            _config.media = media
+            _config.media = MediaConfig(
+                image=copy.deepcopy(media.image),
+                speech=copy.deepcopy(media.speech),
+                sound_effects=copy.deepcopy(media.sound_effects),
+                asr=copy.deepcopy(media.asr),
+            )
     print("✅ Configuration updated.")
+
+
+def get_config() -> Config:
+    """Return a copy of the active configuration."""
+
+    with _config_lock:
+        return _config.copy()
+
+
+def reset_config(env: Mapping[str, str] | None = None) -> None:
+    """Reset the configuration based on environment variables (tests)."""
+
+    global _config
+    with _config_lock:
+        _config = Config(
+            chat=_load_chat_from_env(env),
+            media=_load_media_from_env(env),
+        )
 
 
 def load_config_from_yaml(path: Path) -> None:
@@ -207,20 +180,25 @@ def load_config_from_yaml(path: Path) -> None:
         return
         
     chat_config = data.get("chat")
-    if chat_config:
-        _config.chat = ModelEndpointConfig(
-            model=chat_config.get("model"),
-            base_url=chat_config.get("base_url"),
-            api_key=chat_config.get("api_key") or os.environ.get(chat_config.get("api_key_env")),
-        )
-    
     media_data = data.get("media", {})
-    _config.media = MediaConfig(
-        image=_parse_endpoint(media_data, "image"),
-        speech=_parse_endpoint(media_data, "speech"),
-        sound_effects=_parse_endpoint(media_data, "sound_effects"),
-        asr=_parse_endpoint(media_data, "asr"),
-    )
+
+    with _config_lock:
+        if chat_config:
+            api_key_env = chat_config.get("api_key_env")
+            _config.chat = ModelEndpointConfig(
+                model=chat_config.get("model"),
+                base_url=chat_config.get("base_url"),
+                api_key=chat_config.get("api_key")
+                or (os.environ.get(api_key_env) if api_key_env else None),
+            )
+
+        _config.media = MediaConfig(
+            image=_parse_endpoint(media_data, "image"),
+            speech=_parse_endpoint(media_data, "speech"),
+            sound_effects=_parse_endpoint(media_data, "sound_effects"),
+            asr=_parse_endpoint(media_data, "asr"),
+        )
+
     print("👍 Configuration loaded successfully from YAML.")
 
 
