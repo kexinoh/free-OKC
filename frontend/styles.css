@@ -294,7 +294,7 @@ body.no-scroll { overflow: hidden; }
 
 /* --- Responsive Adjustments --- */
 @media (max-width: 1080px) {
-  .app-shell { max-height: none; overflow: visible; }
+  .app-shell { max-height: none; overflow: visible; min-height: auto; }
   .app-main { grid-template-columns: 1fr; min-height: auto; }
   .chat-panel,
   .insight-panel { height: auto; overflow: visible; }
