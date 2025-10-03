@@ -464,13 +464,31 @@ function finalizePendingMessage(message, text, messageId) {
   }
 }
 
-async function handleCopyMessageAction(messageId, button) {
+async function handleCopyMessageAction(messageId, button, messageElement) {
   if (!button) return;
+
+  let content = '';
+
   const match = findConversationByMessageId(messageId);
-  if (!match) return;
-  const { conversation, messageIndex } = match;
-  const message = conversation.messages[messageIndex];
-  const content = message?.content ?? '';
+  if (match) {
+    const { conversation, messageIndex } = match;
+    const message = conversation.messages[messageIndex];
+    if (typeof message?.content === 'string' && message.content.length > 0) {
+      content = message.content;
+    }
+  }
+
+  if (!content && messageElement instanceof HTMLElement) {
+    const body = messageElement.querySelector('p');
+    if (body) {
+      content = body.innerText ?? body.textContent ?? '';
+    }
+  }
+
+  if (!content) {
+    setMessageActionFeedback(button, { status: 'error', message: '没有可复制的内容', duration: 1500 });
+    return;
+  }
 
   try {
     await writeToClipboard(content);
@@ -971,7 +989,7 @@ function initializeEventListeners() {
 
       switch (action) {
         case 'copy':
-          handleCopyMessageAction(messageId, target);
+          handleCopyMessageAction(messageId, target, messageElement);
           break;
         case 'edit':
           handleEditMessageAction(messageElement, messageId);

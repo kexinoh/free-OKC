@@ -117,8 +117,16 @@ export function commitBranchTransition(
   const timestamp = new Date().toISOString();
   const previousSnapshot = cloneMessages(previousMessages);
   const previousSignature = computeMessageSignature(previousSnapshot);
+  const nextSnapshot = cloneMessages(conversation.messages);
+  const nextSignature = computeMessageSignature(nextSnapshot);
+
   let previousIndex = state.versions.findIndex((version) => version.signature === previousSignature);
-  if (previousIndex === -1) {
+  const hasDistinctPreviousVersion = state.versions.some(
+    (version, index) => index !== previousIndex && version.signature === previousSignature,
+  );
+  const shouldInsertPrevious =
+    previousIndex === -1 || (previousSignature === nextSignature && !hasDistinctPreviousVersion);
+  if (shouldInsertPrevious) {
     state.versions.push({
       id: generateId(),
       signature: previousSignature,
@@ -129,10 +137,8 @@ export function commitBranchTransition(
     previousIndex = state.versions.length - 1;
   }
 
-  const nextSnapshot = cloneMessages(conversation.messages);
-  const nextSignature = computeMessageSignature(nextSnapshot);
   let nextIndex = state.versions.findIndex((version) => version.signature === nextSignature);
-  if (nextIndex === -1) {
+  if (nextIndex === -1 || previousSignature === nextSignature) {
     const overrideIndex = state.versions.length;
     const nextSelections = captureBranchSelections(conversation.branches, { [messageId]: overrideIndex });
     state.versions.push({
