@@ -66,11 +66,10 @@ def _validate_json_schema(schema: dict, *, field: str, context: str) -> None:
             raise ValueError(f"'required' for {context} must be a non-empty list when provided")
         _validate_required_list(required_values, field="required", context=context)
 
-    raw_type = schema.get("type")
-    if isinstance(raw_type, list):
-        type_members = set(raw_type)
+    if isinstance(type_value, list):
+        type_members = set(type_value)
     else:
-        type_members = {raw_type}
+        type_members = {type_value}
 
     properties = schema.get("properties")
     if properties is not None:
