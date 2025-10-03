@@ -132,11 +132,17 @@ class VirtualMachine:
         return copy.deepcopy(self.history)
 
     def describe(self) -> Dict[str, object]:
-        return {
+        description = {
             "system_prompt": self.system_prompt,
             "tools": [tool.name for tool in self.registry.get_langchain_tools()],
             "history_length": len(self.history),
         }
+        workspace = getattr(self.registry, "workspace", None)
+        if workspace is not None:
+            paths = workspace.paths
+            description["workspace_mount"] = str(paths.mount)
+            description["workspace_output"] = str(paths.output)
+        return description
 
     def describe_history(self, limit: int = 25) -> List[Dict[str, object]]:
         return self.history[-limit:]

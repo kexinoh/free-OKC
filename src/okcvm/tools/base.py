@@ -33,6 +33,7 @@ class Tool:
     """Abstract base class for OKCVM tools."""
 
     name: str
+    requires_workspace = False
 
     def __init__(self, spec: ToolSpec):
         self.spec = spec

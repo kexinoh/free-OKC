@@ -143,6 +143,10 @@ okcvm-server
 
 配置完成后，你就可以在聊天界面中与智能体进行交互了！所有消息都会被发送到后端的虚拟机进行处理，并返回精心编排的预览和结果。
 
+#### 5. 常见工具错误排查 (Troubleshooting Tool Errors)
+
+- **会话工作区路径 (Session workspace paths)**：每次会话都会自动分配一个随机的虚拟挂载路径，例如 `/mnt/okcvm-12ab34cd/`。`mshtools-write_file`、`mshtools-read_file` 和 `mshtools-edit_file` 会自动将相对路径映射到该工作区，因此可以直接写入 `resume-website/index.html` 等相对路径；如果传入的路径不在当前会话的挂载目录下，工具会提示路径越界错误。当前会话的真实文件将被保存在后端临时目录中，互不干扰。
+
 ---
 
 我们很高兴你能加入这个项目！无论是贡献代码、提出建议还是报告问题，我们都非常欢迎。让我们一起构建下一代智能体工作流的未来！

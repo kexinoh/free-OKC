@@ -9,6 +9,7 @@ from .config import get_config
 from .logging_utils import get_logger
 from .registry import ToolRegistry
 from .vm import VirtualMachine
+from .workspace import WorkspaceManager
 
 
 logger = get_logger(__name__)
@@ -19,19 +20,23 @@ class SessionState:
 
     def __init__(self) -> None:
         logger.debug("Initialising SessionState and tool registry")
-        self.registry = ToolRegistry.from_default_spec()
-        self.vm = VirtualMachine(
-            system_prompt=spec.load_system_prompt(),
-            registry=self.registry,
-        )
+        self._initialise_vm()
         self._rng = random.Random()
         # 注意：VM现在管理自己的历史，SessionState的历史可以作为副本或移除
         # 为了简单起见，我们让VM成为历史的唯一来源
         # self.history: List[Dict[str, str]] = []
 
+    def _initialise_vm(self) -> None:
+        self.workspace = WorkspaceManager()
+        self.registry = ToolRegistry.from_default_spec(workspace=self.workspace)
+        system_prompt = self.workspace.adapt_prompt(spec.load_system_prompt())
+        self.vm = VirtualMachine(
+            system_prompt=system_prompt,
+            registry=self.registry,
+        )
+
     def reset(self) -> None:
-        # self.history.clear()
-        self.vm.reset_history()
+        self._initialise_vm()
 
     def _meta(self, model: str, summary: str) -> Dict[str, str]:
         # 这个方法可以保留，用于生成前端需要的元数据
