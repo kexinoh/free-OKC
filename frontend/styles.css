@@ -60,6 +60,8 @@ body.no-scroll { overflow: hidden; }
   flex-direction: column;
   gap: 1.5rem;
   padding: 2rem clamp(1rem, 4vw, 2rem) 3rem;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* --- Shared Panel Style --- */
@@ -126,10 +128,31 @@ body.no-scroll { overflow: hidden; }
 .settings-toggle:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
 .settings-toggle[aria-expanded='true'] { background: var(--brand-purple); border-color: var(--brand-purple); color: white; }
 
-.app-main { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1.5rem; flex: 1; }
+.app-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  flex: 1;
+  min-height: 0;
+}
 
-.chat-panel { padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
-.insight-panel { display: flex; flex-direction: column; gap: 1.25rem; }
+.chat-panel {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.insight-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
 
 /* --- Chat Panel --- */
 .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem; padding-right: 0.5rem; }
@@ -139,7 +162,16 @@ body.no-scroll { overflow: hidden; }
 .message header { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; }
 .message p { margin: 0; line-height: 1.6; white-space: pre-wrap; color: var(--text-primary); }
 
-.chat-input { display: flex; gap: 0.75rem; align-items: flex-end; padding: 0.5rem; background: var(--surface-inset); border-radius: 1.25rem; box-shadow: 0 0 0 1px var(--surface-stroke); }
+.chat-input {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  padding: 0.5rem;
+  background: var(--surface-inset);
+  border-radius: 1.25rem;
+  box-shadow: 0 0 0 1px var(--surface-stroke);
+  flex-shrink: 0;
+}
 .chat-input textarea {
   flex: 1; resize: none; border: none; background: transparent;
   padding: 0.75rem 1rem; font-size: 1rem; font-family: inherit;
@@ -162,12 +194,29 @@ body.no-scroll { overflow: hidden; }
 
 /* --- Insight Panel --- */
 .insight-card { padding: 1.25rem 1.35rem; display: flex; flex-direction: column; gap: 1rem; }
+.insight-panel .insight-card:first-of-type {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
 .insight-card h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
 .preview-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .ghost-button { background: transparent; color: var(--brand-blue); border-color: transparent; }
 .ghost-button:hover:not(:disabled) { background: var(--chat-user-bg); border-color: rgba(59, 130, 246, 0.2); }
 
-.model-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1rem; }
+.model-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+.model-log:empty { padding-right: 0; }
 .model-log-item { border: 1px solid var(--surface-stroke); border-radius: 1rem; padding: 0.9rem 1rem; background: var(--surface-inset); display: grid; gap: 0.55rem; }
 .model-log-item header { display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; color: var(--text-tertiary); }
 .model-name { font-weight: 600; color: var(--brand-blue); }
@@ -244,8 +293,11 @@ body.no-scroll { overflow: hidden; }
 
 /* --- Responsive Adjustments --- */
 @media (max-width: 1080px) {
-  .app-main { grid-template-columns: 1fr; }
-  .insight-panel { position: static; }
+  .app-shell { max-height: none; overflow: visible; min-height: auto; }
+  .app-main { grid-template-columns: 1fr; min-height: auto; }
+  .chat-panel,
+  .insight-panel { height: auto; overflow: visible; }
+  .insight-panel .insight-card:first-of-type { flex: unset; }
 }
 
 @media (max-width: 720px) {
