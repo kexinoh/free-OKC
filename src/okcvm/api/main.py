@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Dict, Optional
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
@@ -82,6 +82,39 @@ _ensure_frontend()
 state = SessionState()
 
 # --- Helper Functions ---
+def _deployments_root() -> Path:
+    workspace = getattr(state, "workspace", None)
+    if workspace is None:
+        raise HTTPException(status_code=500, detail="Workspace not initialised")
+    return workspace.paths.internal_output / "deployments"
+
+
+def _resolve_deployment_asset(deployment_id: str, relative_path: str | None) -> Path:
+    deployments_root = _deployments_root()
+    target_dir = deployments_root / deployment_id
+    if not target_dir.exists() or not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Deployment not found")
+
+    path_hint = (relative_path or "index.html").strip()
+    if not path_hint or path_hint.endswith("/"):
+        path_hint = f"{path_hint}index.html" if path_hint else "index.html"
+
+    candidate = Path(path_hint)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    resolved = (target_dir / candidate).resolve()
+    try:
+        resolved.relative_to(target_dir.resolve())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid path") from exc
+
+    if not resolved.exists() or not resolved.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return resolved
+
+
 def _describe_endpoint(config: ModelEndpointConfig | None) -> Optional[Dict[str, object]]:
     if config is None:
         return None
@@ -109,7 +142,13 @@ def create_app() -> FastAPI:
     app.mount("/ui", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="ui")
 
     @app.get("/")
-    async def root() -> RedirectResponse:
+    async def root(
+        s: Optional[str] = Query(default=None, description="Deployment identifier"),
+        path: Optional[str] = Query(default=None, description="Relative asset path"),
+    ) -> Response:
+        if s:
+            asset = _resolve_deployment_asset(s, path)
+            return FileResponse(asset)
         return RedirectResponse(url="/ui/")
 
     # --- API Routes ---
