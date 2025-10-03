@@ -404,8 +404,8 @@ body.no-scroll { overflow: hidden; }
 .message-action-label { position: absolute; bottom: calc(100% + 0.35rem); left: 50%; transform: translate(-50%, 0.3rem); padding: 0.2rem 0.55rem; border-radius: 999px; background: rgba(15, 23, 42, 0.9); color: #f8fafc; font-size: 0.68rem; letter-spacing: 0.01em; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity var(--transition-fast), transform var(--transition-fast); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25); }
 .theme-dark .message-action-label { background: rgba(15, 23, 42, 0.95); color: #f1f5f9; }
 .message-action[data-status-visible='true'] .message-action-label { opacity: 1; transform: translate(-50%, -0.15rem); }
-.message-action[data-feedback='success'] { color: #34D399; border-color: rgba(52, 211, 153, 0.35); }
-.message-action[data-feedback='error'] { color: #F87171; border-color: rgba(248, 113, 113, 0.4); }
+.message-action[data-feedback='success'] { color: var(--feedback-success-color, #34D399); border-color: var(--feedback-success-border, rgba(52, 211, 153, 0.35)); }
+.message-action[data-feedback='error'] { color: var(--feedback-error-color, #F87171); border-color: var(--feedback-error-border, rgba(248, 113, 113, 0.4)); }
 .message-action[data-loading='true'] .icon { animation: spin 1s linear infinite; }
 .message.pending .message-actions { opacity: 0.6; }
 .message.pending { opacity: 0.9; }
