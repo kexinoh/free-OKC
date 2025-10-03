@@ -1,4 +1,5 @@
 import { cloneMessageActionIcon } from './messageActionIcons.js';
+import { renderMarkdown } from './markdown.js';
 import {
   chatMessages,
   chatForm,
@@ -160,7 +161,7 @@ function markMessagePending(messageElement, placeholderText) {
   if (!(messageElement instanceof HTMLElement)) return;
   messageElement.dataset.pending = 'true';
   messageElement.classList.add('pending');
-  const body = messageElement.querySelector('p');
+  const body = messageElement.querySelector('.message-content');
   if (body) {
     body.classList.add('pending');
     body.textContent = placeholderText ?? '正在生成回复…';
@@ -347,8 +348,10 @@ function createMessageElement(role, text, options = {}) {
   });
   header.append(name, time);
 
-  const body = document.createElement('p');
-  body.textContent = typeof text === 'string' && text.length > 0 ? text : '';
+  const body = document.createElement('div');
+  body.className = 'message-content';
+  const initialText = typeof text === 'string' ? text : '';
+  body.innerHTML = renderMarkdown(initialText);
 
   const actions = document.createElement('div');
   actions.className = 'message-actions';
@@ -442,9 +445,9 @@ function finalizePendingMessage(message, text, messageId) {
     return;
   }
 
-  const body = message.querySelector('p');
+  const body = message.querySelector('.message-content');
   if (body) {
-    body.textContent = finalText;
+    body.innerHTML = renderMarkdown(finalText);
     body.classList.remove('pending');
   }
 
@@ -479,7 +482,7 @@ async function handleCopyMessageAction(messageId, button, messageElement) {
   }
 
   if (!content && messageElement instanceof HTMLElement) {
-    const body = messageElement.querySelector('p');
+    const body = messageElement.querySelector('.message-content');
     if (body) {
       content = body.innerText ?? body.textContent ?? '';
     }
@@ -510,7 +513,7 @@ function handleEditMessageAction(messageElement, messageId) {
   const previousMessages = conversation.messages.map((entry) => ({ ...entry }));
   const previousSelections = captureBranchSelections(conversation.branches);
 
-  const body = messageElement.querySelector('p');
+  const body = messageElement.querySelector('.message-content');
   const currentContent = typeof message.content === 'string' ? message.content : body?.textContent ?? '';
   const nextContent = window.prompt('编辑这条消息', currentContent ?? '');
   if (nextContent === null) return;
@@ -523,7 +526,7 @@ function handleEditMessageAction(messageElement, messageId) {
   bumpConversation(conversation.id);
 
   if (body) {
-    body.textContent = normalized;
+    body.innerHTML = renderMarkdown(normalized);
   }
 
   const timeElement = messageElement.querySelector('time');
