@@ -9,3 +9,4 @@ src/okcvm.egg-info/
 .venv
 uv.lock
 logs/
+workspace
