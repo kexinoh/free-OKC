@@ -205,7 +205,7 @@ class ToolRegistry:
                 "schema_extra": {"original_spec": parameters},
             }
             config = type(
-                f"{tool_spec.name.replace('-', '_').title()}ArgsConfig",
+                f"{tool_spec.name.replace('-', '_').title().replace('_', '')}ArgsConfig",
                 (),
                 config_kwargs,
             )
