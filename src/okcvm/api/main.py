@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Emit structured logs for each HTTP request handled by FastAPI."""
 
-    async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[override]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = uuid4().hex[:8]
         start = time.perf_counter()
         logger.info(
