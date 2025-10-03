@@ -4,17 +4,30 @@ from __future__ import annotations
 
 import base64
 import mimetypes
-from pathlib import Path
+import os
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 from .base import Tool, ToolError, ToolResult
 
 
 def _ensure_absolute(path_str: str) -> Path:
-    path = Path(path_str)
-    if not path.is_absolute():
+    if not os.path.isabs(path_str):
         raise ToolError("file_path must be absolute")
-    return path
+
+    path = Path(path_str)
+    if path.is_absolute():
+        return path
+
+    # On Windows, pathlib treats POSIX-style absolute paths (e.g. "/tmp/foo")
+    # as relative. Detect this case explicitly and normalise it so that tools
+    # invoked by the agent can interoperate across operating systems.
+    if os.name == "nt" and PurePosixPath(path_str).is_absolute():
+        drive = Path.cwd().drive or Path.home().drive
+        if drive:
+            return Path(f"{drive}{path_str}")
+
+    raise ToolError("file_path must be absolute")
 
 
 class ReadFileTool(Tool):
