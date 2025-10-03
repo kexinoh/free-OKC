@@ -10,12 +10,7 @@
 </div>
 
 <div align="center">
-
-[![Python Version][python-shield]][python-link]
-[![PyPI Version][pypi-shield]][pypi-link]
-[![License][license-shield]][license-link]
-[![Tests][tests-shield]][tests-link]
-
+  
 [OKCVM 中文文档 (Chinese README)](README_ZH.md)
 
 </div>
