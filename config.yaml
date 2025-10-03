@@ -30,3 +30,9 @@ media:
   # asr:
   #   model: "whisper-1"
   #   api_key_env: "OPENAI_API_KEY"
+
+workspace:
+  # Path can be relative (resolved against this file) or absolute.
+  path: "workspace"
+  # Require a confirmation prompt before the server starts using the workspace.
+  confirm_on_start: true

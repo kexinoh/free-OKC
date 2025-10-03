@@ -10,6 +10,8 @@ def test_workspace_cleanup_removes_directory(tmp_path: Path) -> None:
     manager = WorkspaceManager(base_dir=tmp_path)
     internal_root = manager.paths.internal_root
     assert internal_root.exists()
+    assert manager.paths.internal_mount.exists()
+    assert manager.paths.internal_tmp.exists()
 
     removed = manager.cleanup()
     assert removed is True

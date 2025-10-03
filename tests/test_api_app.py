@@ -6,8 +6,9 @@ pytest.importorskip("httpx")
 from fastapi.testclient import TestClient
 
 import okcvm.config as config_mod
-from okcvm.config import MediaConfig, ModelEndpointConfig
+from okcvm.config import MediaConfig, ModelEndpointConfig, WorkspaceConfig
 from okcvm.api import main
+from okcvm.session import SessionState
 
 
 @pytest.fixture(autouse=True)
@@ -21,11 +22,14 @@ def restore_config_state():
             config_mod._config = config_mod.AppConfig(  # type: ignore[attr-defined]
                 chat=copy.deepcopy(original.chat),
                 media=copy.deepcopy(original.media),
+                workspace=original.workspace.copy(),
             )
 
 
 @pytest.fixture
-def client():
+def client(tmp_path):
+    config_mod.configure(workspace=WorkspaceConfig(path=str(tmp_path)))
+    main.state = SessionState()
     return TestClient(main.create_app())
 
 

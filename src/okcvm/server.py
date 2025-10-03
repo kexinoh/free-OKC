@@ -4,7 +4,7 @@ from typing import Optional
 import typer
 import uvicorn
 
-from okcvm.config import load_config_from_yaml
+from okcvm.config import get_config, load_config_from_yaml
 
 cli = typer.Typer(
     name="OKCVM Server",
@@ -42,6 +42,36 @@ def main(
 
     # 在启动服务器之前加载配置
     load_config_from_yaml(config_path)
+
+    cfg = get_config()
+    workspace_cfg = cfg.workspace
+    workspace_root = workspace_cfg.resolve_path()
+
+    typer.echo(
+        typer.style(
+            f"Workspace directory resolved to: {workspace_root}",
+            fg=typer.colors.BLUE,
+        )
+    )
+    typer.echo(
+        f"Update the workspace settings in {config_path} if this path is incorrect."
+    )
+
+    if workspace_cfg.confirm_on_start:
+        confirmed = typer.confirm(
+            "Proceed with using this workspace directory?", default=False
+        )
+        if not confirmed:
+            typer.echo(
+                typer.style(
+                    "Server start aborted. Please adjust the workspace path in "
+                    f"{config_path} before retrying.",
+                    fg=typer.colors.RED,
+                )
+            )
+            raise typer.Exit(code=1)
+
+    workspace_cfg.resolve_and_prepare()
 
     typer.echo(typer.style(f"Starting server on http://{host}:{port}", fg=typer.colors.GREEN, bold=True))
     typer.echo(f"Using configuration: {config_path}")

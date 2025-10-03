@@ -27,7 +27,9 @@ class SessionState:
         # self.history: List[Dict[str, str]] = []
 
     def _initialise_vm(self) -> None:
-        self.workspace = WorkspaceManager()
+        cfg = get_config()
+        workspace_root = cfg.workspace.resolve_and_prepare()
+        self.workspace = WorkspaceManager(base_dir=workspace_root)
         self.registry = ToolRegistry.from_default_spec(workspace=self.workspace)
         system_prompt = self.workspace.adapt_prompt(spec.load_system_prompt())
         self.vm = VirtualMachine(
@@ -46,6 +48,8 @@ class SessionState:
             "output": str(paths.output),
             "internal_root": str(paths.internal_root),
             "internal_output": str(paths.internal_output),
+            "internal_mount": str(getattr(paths, "internal_mount", paths.internal_root / "mnt")),
+            "internal_tmp": str(getattr(paths, "internal_tmp", paths.internal_root / "tmp")),
         }
 
         try:
