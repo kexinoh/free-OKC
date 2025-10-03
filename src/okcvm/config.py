@@ -24,6 +24,11 @@ from typing import Mapping, Optional
 
 import yaml
 
+from .logging_utils import get_logger
+
+
+logger = get_logger(__name__)
+
 @dataclass(slots=True)
 class ModelEndpointConfig:
     """Configuration for a single model endpoint."""
@@ -144,7 +149,11 @@ def configure(
                 sound_effects=copy.deepcopy(media.sound_effects),
                 asr=copy.deepcopy(media.asr),
             )
-    print("✅ Configuration updated.")
+    logger.info(
+        "Configuration updated (chat=%s media=%s)",
+        chat is not None,
+        media is not None,
+    )
 
 
 def get_config() -> Config:
@@ -168,15 +177,15 @@ def reset_config(env: Mapping[str, str] | None = None) -> None:
 def load_config_from_yaml(path: Path) -> None:
     """Loads configuration from a YAML file and applies it."""
     if not path.exists():
-        print(f"⚠️ Config file not found at {path}, skipping.")
+        logger.warning("Config file not found: %s", path)
         return
 
-    print(f"🚀 Loading configuration from {path}...")
+    logger.info("Loading configuration from file: %s", path)
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not data:
-        print("⚠️ Config file is empty, skipping.")
+        logger.warning("Config file is empty: %s", path)
         return
         
     chat_config = data.get("chat")
@@ -199,7 +208,7 @@ def load_config_from_yaml(path: Path) -> None:
             asr=_parse_endpoint(media_data, "asr"),
         )
 
-    print("👍 Configuration loaded successfully from YAML.")
+    logger.info("Configuration loaded successfully from YAML: %s", path)
 
 
 def _parse_endpoint(data: dict, key: str) -> ModelEndpointConfig | None:

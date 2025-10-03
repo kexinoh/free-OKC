@@ -5,9 +5,13 @@ from typing import Any, Dict, List
 from langchain_core.messages import AIMessage, HumanMessage
 
 from . import spec
-from .llm import create_llm_chain # 导入我们新的 chain 创建函数
+from .logging_utils import get_logger
+from .llm import create_llm_chain  # 导入我们新的 chain 创建函数
 from .registry import ToolRegistry
 from .tools.base import ToolResult
+
+
+logger = get_logger(__name__)
 
 
 class VirtualMachine:
@@ -22,31 +26,31 @@ class VirtualMachine:
         self.registry = registry
         # 注意：history现在需要遵循LangChain的BaseMessage格式
         self.history: List[Dict[str, Any]] = []
-        self._chain = None # 延迟初始化 chain
+        self._chain = None  # 延迟初始化 chain
         self._last_tool_result: ToolResult | None = None
-        print("VirtualMachine initialized.")
+        logger.debug("VirtualMachine initialised")
 
     @property
     def chain(self):
         """Lazy-loads the LangChain agent executor."""
         if self._chain is None:
-            print("Creating LangChain agent executor for the first time...")
+            logger.info("Creating LangChain agent executor")
             self._chain = create_llm_chain(self.registry)
-            print("LangChain agent executor created successfully.")
+            logger.info("LangChain agent executor created successfully")
         return self._chain
 
     def reset_history(self) -> None:
         """Clears the conversation history."""
         self.history.clear()
         self._last_tool_result = None
-        print("VM history has been reset.")
+        logger.debug("VM history has been reset")
 
     def execute(self, utterance: str) -> Dict[str, Any]:
         """
         Processes a user utterance using the LangChain agent.
         Handles LLM calls and tool executions.
         """
-        print(f"VM executing with utterance: '{utterance}'")
+        logger.info("Executing utterance: %s", utterance[:200])
         
         # 将历史转换为 LangChain 格式
         langchain_history = [
@@ -63,7 +67,7 @@ class VirtualMachine:
             })
         except Exception as e:
             # 捕获并返回错误信息，防止服务崩溃
-            print(f"Error invoking LangChain agent: {e}")
+            logger.exception("Error invoking LangChain agent")
             return {
                 "reply": f"An error occurred: {e}",
                 "tool_calls": [],
@@ -87,6 +91,12 @@ class VirtualMachine:
                     "tool_output": observation
                 })
 
+        logger.debug(
+            "Utterance processed (reply_length=%s tool_calls=%s)",
+            len(final_reply),
+            len(tool_calls_info),
+        )
+
         return {
             "reply": final_reply,
             "tool_calls": tool_calls_info,
@@ -95,6 +105,7 @@ class VirtualMachine:
     def call_tool(self, name: str, **kwargs: Any) -> ToolResult:
         """Invoke a tool directly through the registry."""
 
+        logger.debug("Calling tool %s with args=%s", name, list(kwargs.keys()))
         result = self.registry.call(name, **kwargs)
         self._last_tool_result = result
         self.history.append(
@@ -107,6 +118,7 @@ class VirtualMachine:
                 "data": result.data,
             }
         )
+        logger.debug("Tool call recorded: %s success=%s", name, result.success)
         return result
 
     def last_result(self) -> ToolResult | None:

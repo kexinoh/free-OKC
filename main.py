@@ -20,6 +20,7 @@ try:
     src_path = project_root / "src"
     sys.path.insert(0, str(src_path))
     from okcvm.config import AppConfig, configure, get_config, ModelEndpointConfig, MediaConfig
+    from okcvm.logging_utils import get_logger, setup_logging
     from okcvm.registry import ToolRegistry
 except ImportError as e:
     print(f"FATAL: Could not bootstrap the application. Ensure 'src' directory exists and is valid: {e}")
@@ -33,6 +34,8 @@ cli = typer.Typer(
                expand=False)
 )
 console = Console()
+setup_logging()
+logger = get_logger(__name__)
 
 # --- Helper Functions ---
 def _ensure_dependencies():
@@ -106,7 +109,9 @@ def run(
                         padding=(1, 2)))
     if reload:
         console.print("[yellow]🔄 Auto-reload enabled.[/yellow]")
-    
+
+    logger.info("Launching server on %s:%s (reload=%s)", host, port, reload)
+
     # 必须用字符串导入路径，Uvicorn reload 才能工作
     import uvicorn
     uvicorn.run("okcvm.api.main:app", host=host, port=port, reload=reload, log_level="info")
@@ -166,3 +171,4 @@ if __name__ == "__main__":
     except Exception as e:
         console.print(f"\n[bold red]An unexpected error occurred:[/bold red]")
         console.print_exception(show_locals=False)
+        logger.exception("Unhandled exception in CLI")
