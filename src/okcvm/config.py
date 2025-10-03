@@ -184,11 +184,12 @@ def load_config_from_yaml(path: Path) -> None:
 
     with _config_lock:
         if chat_config:
+            api_key_env = chat_config.get("api_key_env")
             _config.chat = ModelEndpointConfig(
                 model=chat_config.get("model"),
                 base_url=chat_config.get("base_url"),
                 api_key=chat_config.get("api_key")
-                or os.environ.get(chat_config.get("api_key_env")),
+                or (os.environ.get(api_key_env) if api_key_env else None),
             )
 
         _config.media = MediaConfig(
