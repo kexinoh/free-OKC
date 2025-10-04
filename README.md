@@ -34,11 +34,13 @@ Imagine seamlessly embedding a powerful, multi-modal agent brain into your own a
 .
 ├── spec/                # 📜 Canonical system prompt and tool specification files
 ├── src/okcvm/           # 🐍 Python source for the VM, tool registry, and reference tools
-├── frontend/            # 🎨 Assets and UI prototypes for OKCVM integrations
+├── frontend/            # 🎨 Static operator console served by the FastAPI backend
+├── docs/                # 🧭 In-depth architecture, backend, and frontend documentation
 ├── tests/               # 🧪 Automated test suite for validating tool and registry behavior
 ├── roadmap.md           # 🗺️ Project development roadmap (English)
 ├── roadmap.zh.md        # 🗺️ Project development roadmap (Chinese)
-└── README_PROJECT.md    # 📄 Additional background on project goals and architecture
+├── security.md          # 🔐 Security and hardening notes for deployments
+└── config.yaml          # ⚙️ Sample runtime configuration consumed by the CLI and API
 ```
 
 ## 🛠️ Getting Started
@@ -49,8 +51,8 @@ Get OKCVM up and running locally in just a few steps and experience its power.
 
 ```bash
 # Clone the repository and navigate into the directory
-git clone https://github.com/moonshot-ai/ok-computer-vm.git
-cd ok-computer-vm
+git clone https://github.com/kexinoh/free-OKC.git
+cd free-OKC
 
 # Create and activate a virtual environment (recommended)
 python -m venv venv
@@ -153,9 +155,9 @@ Once configured, you're ready to interact with the agent in the chat interface! 
 
 #### 5. Concurrency & Multi-User Access
 
-The demo FastAPI service keeps a single global `SessionState` instance in [`src/okcvm/api/main.py`](src/okcvm/api/main.py), so every browser tab shares the same conversation and workspace context. There is no automatic per-visitor isolation in this mode. [src/okcvm/api/main.py#L63-L69](src/okcvm/api/main.py#L63-L69)
+The FastAPI layer now provisions a dedicated `SessionState` per `client_id`. A stable identifier is stored in both cookies and `localStorage`, so each browser automatically receives an isolated workspace while multiple tabs from the same client remain in sync. [`src/okcvm/api/main.py`](src/okcvm/api/main.py) [`frontend/utils.js`](frontend/utils.js)
 
-To run multi-user or multi-session deployments, allocate a dedicated `SessionState` per user (for example by binding it to an authenticated account or an explicit session ID) and pass that instance into the relevant API routes.
+To integrate with your own identity system, resolve the authenticated account or session identifier on each request and pass it into the API via the `client_id` query parameter or the `x-okc-client-id` header. Sessions can also be pre-provisioned server side through [`SessionStore`](src/okcvm/api/main.py#L94-L149) if you need to share a workspace between collaborators.
 
 #### 6. Troubleshooting Tool Errors
 

@@ -32,11 +32,13 @@
 .
 ├── spec/                # 📜 系统指令和工具规范文件
 ├── src/okcvm/           # 🐍 虚拟机、工具注册表和工具实现的 Python 源代码
-├── frontend/            # 🎨 与 OKCVM 集成相关的前端资源和 UI 原型
+├── frontend/            # 🎨 由 FastAPI 托管的静态运维控制台
+├── docs/                # 🧭 架构、后端、前端等深入文档
 ├── tests/               # 🧪 用于验证工具和注册表行为的自动化测试套件
 ├── roadmap.md           # 🗺️ 项目发展路线图 (英文)
 ├── roadmap.zh.md        # 🗺️ 项目发展路线图 (中文)
-└── README_PROJECT.md    # 📄 关于项目目标和架构的更多背景信息
+├── security.md          # 🔐 部署安全与加固建议
+└── config.yaml          # ⚙️ CLI 与 API 可直接加载的示例运行配置
 ```
 
 ## 🛠️ 快速开始 (Getting Started)
@@ -47,7 +49,7 @@
 
 ```bash
 git clone https://github.com/kexinoh/free-OKC.git
-cd ok-computer-vm
+cd free-OKC
 
 python -m venv venv
 source venv/bin/activate  # macOS / Linux
@@ -145,9 +147,9 @@ okcvm-server
 
 #### 5. 并发与多用户访问 (Concurrency & Multi-User Access)
 
-当前的 FastAPI 服务在 `src/okcvm/api/main.py` 中维护了一个全局的 `SessionState` 单例，用于演示目的。也就是说，所有浏览器客户端都会共享同一个对话会话和工作空间，并不会为每位访客自动创建隔离上下文。 [src/okcvm/api/main.py#L63-L69](src/okcvm/api/main.py#L63-L69)
+FastAPI 层会按 `client_id` 创建独立的 `SessionState`。浏览器首次访问时会把该标识写入 cookie 与 `localStorage`，从而自动获得隔离的对话与工作区；同一客户端的多个标签页仍会共享状态。 [`src/okcvm/api/main.py`](src/okcvm/api/main.py) [`frontend/utils.js`](frontend/utils.js)
 
-如果需要支持真正的多用户或多会话并发，你需要在应用层为每位用户分配独立的 `SessionState` 实例（例如基于登录态或显式的会话 ID），并将它们注入到对应的 API 路由中。
+若要接入企业账号体系，可在每次请求时解析登录态并通过 `client_id` 查询参数或 `x-okc-client-id` 请求头传入。也可以使用 [`SessionStore`](src/okcvm/api/main.py#L94-L149) 预先分配共享会话，以便协作成员共同查看同一工作区。
 
 #### 6. 常见工具错误排查 (Troubleshooting Tool Errors)
 

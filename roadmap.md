@@ -27,6 +27,18 @@ living document—update it whenever major capabilities land or priorities shift
 - Snapshot creation, listing, and restoration are exposed as first-class API
   endpoints so the frontend can drive the session tree UI without bespoke glue
   code. [src/okcvm/api/main.py#L210-L309](src/okcvm/api/main.py#L210-L309)
+- Artifact metadata, deployment URLs, and slide previews are normalised inside
+  `SessionState.respond`, ensuring previews include a `client_id` and stay
+  deduplicated across tool payloads. [src/okcvm/session.py#L76-L279](src/okcvm/session.py#L76-L279)
+
+### Client-scoped orchestration
+- `SessionStore` provisions sessions per `client_id`, while `AppState` exposes
+  the active VM for debugging and tests without sacrificing encapsulation.
+  Cookies, headers, and query parameters all map to the same identifier so tabs
+  from the same browser stay synced. [src/okcvm/api/main.py#L90-L206](src/okcvm/api/main.py#L90-L206)
+- The frontend propagates the identifier automatically when calling the API or
+  loading deployment assets, removing the need for manual wiring when embedding
+  the console. [frontend/utils.js#L1-L120](frontend/utils.js#L1-L120)
 
 ### Operator experience and automation
 - A Typer CLI now launches the FastAPI server, validates configuration, and
@@ -36,11 +48,12 @@ living document—update it whenever major capabilities land or priorities shift
   atomic updates from YAML, environment variables, or API requests. [src/okcvm/config.py#L25-L227](src/okcvm/config.py#L25-L227)
 
 ### Control panel and presentation layer
-- The static frontend introduces persistent conversations, configuration
-  management, live previews for HTML/PPT assets, and a model telemetry timeline
-  that mirrors the VM trace. [frontend/index.html#L16-L220](frontend/index.html#L16-L220) [frontend/app.js#L1-L851](frontend/app.js#L1-L851)
-- Deployment assets are now served directly from per-session directories, giving
-  the preview UI predictable URLs for websites and other artefacts. [src/okcvm/api/main.py#L146-L209](src/okcvm/api/main.py#L146-L209)
+- The static frontend now splits responsibilities across focused modules for
+  configuration, conversation state, previews, and utilities while retaining the
+  accessible layout defined in `index.html`. [frontend/index.html#L16-L220](frontend/index.html#L16-L220) [frontend/app.js#L1-L200](frontend/app.js#L1-L200) [frontend/conversationState.js#L1-L240](frontend/conversationState.js#L1-L240)
+- Deployment assets are served directly from per-session directories, and
+  preview frames consume the enriched metadata produced by the backend to keep
+  artefacts, slides, and web content in sync. [src/okcvm/api/main.py#L146-L209](src/okcvm/api/main.py#L146-L209) [frontend/previews.js#L1-L200](frontend/previews.js#L1-L200)
 
 ### Quality and safety net
 - The pytest suite exercises API routes, workspace guarantees, and LangChain
@@ -60,11 +73,11 @@ focuses on producing structured metadata (thumbnails, slide manifests, audio
 waveforms) so the control panel can render immersive previews while remaining
 agnostic of tool specifics.
 
-### Multi-session coordination
-The API already accepts caller-provided client IDs. We plan to extend this with
-persistent storage and eviction policies so teams can resume workspaces across
-restarts, expire dormant sessions, and safely share deployments between
-operators. [src/okcvm/api/main.py#L58-L145](src/okcvm/api/main.py#L58-L145)
+### Session persistence and collaboration
+With per-client isolation in place, the next milestone is durable storage and
+retention policies so teams can resume workspaces across restarts, expire
+dormant sessions, and intentionally share deployments between operators without
+manual intervention.
 
 ## Future Exploration
 

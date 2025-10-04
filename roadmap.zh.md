@@ -36,13 +36,21 @@ Session 层不再使用静态示例，所有请求都会通过 VM，返回的工
   模型指标和预览内容。([`src/okcvm/session.py`](./src/okcvm/session.py))
 - `/api/session/*` 与 `/api/chat` 路由提供启动、查询与聊天接口，对输入做裁剪
   并在失败时返回明确的校验信息。([`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
+- `SessionState.respond` 会统一解析工具输出的 HTML、URL、Slides 以及其他附件，
+  自动补全 `client_id` 并去重，确保前端拿到结构化的预览元数据。([`src/okcvm/session.py`](./src/okcvm/session.py))
+
+### 客户端隔离与多会话编排
+- `okcvm.api.main.SessionStore` 按 `client_id` 懒加载会话，`AppState` 在测试与调试
+  场景下暴露当前 VM，同时保持线程安全。([`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
+- 前端在请求和部署资源访问时会自动写入并携带 `client_id`，无需手动拼接参数
+  即可获得隔离的工作区。([`frontend/utils.js`](./frontend/utils.js))
 
 ### 控制台前端升级
 随包 UI 现已发展为集历史记录、配置面板与多模态预览于一体的工作台。
-- `frontend/index.html` 新增历史侧栏、配置抽屉以及聊天记录、网页预览、幻灯
-  预览等信息面板。
-- `frontend/app.js` 与后端同步配置、使用 localStorage 缓存会话、处理辅助功能
-  快捷键，并在工具输出抵达时刷新预览区。
+- `frontend/index.html` 负责布局与可访问语义结构，配合 `styles.css` 保持桌面与
+  小屏体验一致。
+- `frontend/app.js`、`conversationState.js`、`previews.js`、`utils.js` 等模块分别
+  负责事件绑定、状态持久化、预览渲染和网络请求，结构更加清晰易扩展。
 
 ### 完整的回归测试
 单元测试覆盖 API、配置助手、LangChain 链路与工具注册表，保障后续改动安全。
@@ -57,7 +65,7 @@ Session 层不再使用静态示例，所有请求都会通过 VM，返回的工
 ### 流式与多轮体验
 当前代理同步执行，只返回最终回答。
 - 评估 LangChain 的流式回调，把增量回复与工具进度推送给前端。
-- 在服务端持久化会话历史，支持刷新或多终端共享上下文。
+- 引入服务端持久化与淘汰策略，让会话在重启后可恢复，并支持多人协作。
 
 ### 扩展媒体与部署集成
 目前仅有部分 OK Computer 媒体端点具备参考实现。
