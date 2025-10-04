@@ -38,6 +38,75 @@ export function logModelInvocation(meta) {
     clone.querySelector('.model-name').textContent = log.model;
     clone.querySelector('.model-time').textContent = log.timestamp;
     clone.querySelector('.model-summary').textContent = log.summary;
+
+    const toolList = clone.querySelector('.tool-call-list');
+    if (toolList) {
+      toolList.innerHTML = '';
+      const toolCalls = Array.isArray(log.toolCalls)
+        ? log.toolCalls.filter((item) => item && typeof item === 'object')
+        : [];
+      if (toolCalls.length > 0) {
+        toolList.hidden = false;
+        toolCalls.forEach((call) => {
+          const details = document.createElement('details');
+          details.className = 'tool-call-entry';
+
+          const summary = document.createElement('summary');
+          summary.className = 'tool-call-summary';
+          const name = typeof call.name === 'string' && call.name.trim() ? call.name.trim() : '工具调用';
+          summary.innerHTML = `<span class="tool-call-name">🔧 ${name}</span>`;
+          if (typeof call.source === 'string' && call.source.trim()) {
+            const source = document.createElement('span');
+            source.className = 'tool-call-source';
+            source.textContent = call.source.trim();
+            summary.appendChild(source);
+          }
+          details.appendChild(summary);
+
+          const content = document.createElement('div');
+          content.className = 'tool-call-content';
+
+          if (typeof call.arguments === 'string' && call.arguments.trim()) {
+            const argsBlock = document.createElement('div');
+            argsBlock.className = 'tool-call-block';
+            const argsLabel = document.createElement('span');
+            argsLabel.className = 'tool-call-label';
+            argsLabel.textContent = '输入参数';
+            const argsValue = document.createElement('code');
+            argsValue.className = 'tool-call-value';
+            argsValue.textContent = call.arguments.trim();
+            argsBlock.append(argsLabel, argsValue);
+            content.appendChild(argsBlock);
+          }
+
+          if (typeof call.output === 'string' && call.output.trim()) {
+            const outputBlock = document.createElement('div');
+            outputBlock.className = 'tool-call-block';
+            const outputLabel = document.createElement('span');
+            outputLabel.className = 'tool-call-label';
+            outputLabel.textContent = '执行结果';
+            const outputValue = document.createElement('code');
+            outputValue.className = 'tool-call-value';
+            outputValue.textContent = call.output.trim();
+            outputBlock.append(outputLabel, outputValue);
+            content.appendChild(outputBlock);
+          }
+
+          if (!content.childNodes.length) {
+            const empty = document.createElement('p');
+            empty.className = 'tool-call-empty';
+            empty.textContent = '该工具调用未返回额外信息。';
+            content.appendChild(empty);
+          }
+
+          details.appendChild(content);
+          toolList.appendChild(details);
+        });
+      } else {
+        toolList.hidden = true;
+      }
+    }
+
     clone.querySelector('.meta-input').textContent = log.tokensIn;
     clone.querySelector('.meta-output').textContent = log.tokensOut;
     clone.querySelector('.meta-latency').textContent = log.latency;

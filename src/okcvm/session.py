@@ -123,8 +123,47 @@ class SessionState:
         updated = parsed._replace(query=new_query)
         return urlunparse(updated)
 
-    def _meta(self, model: str, summary: str) -> Dict[str, str]:
-        # 这个方法可以保留，用于生成前端需要的元数据
+    def _meta(self, model: str, summary: str, tool_calls: List[Dict[str, object]]) -> Dict[str, object]:
+        """Assemble metadata for the frontend, including tool call details."""
+
+        def _stringify(value: object, *, limit: int = 200) -> Optional[str]:
+            if value is None:
+                return None
+            if isinstance(value, str):
+                text = value.strip()
+            else:
+                try:
+                    text = json.dumps(value, ensure_ascii=False)
+                except TypeError:
+                    text = repr(value)
+                text = text.strip()
+            if not text:
+                return None
+            if len(text) > limit:
+                return text[: limit - 1] + "…"
+            return text
+
+        formatted_calls: List[Dict[str, str]] = []
+        for call in tool_calls:
+            if not isinstance(call, dict):
+                continue
+            name = str(call.get("tool_name") or call.get("tool") or "Unknown tool")
+            formatted: Dict[str, str] = {"name": name}
+
+            argument_preview = _stringify(call.get("tool_input") or call.get("arguments"))
+            if argument_preview:
+                formatted["arguments"] = argument_preview
+
+            output_preview = _stringify(call.get("tool_output") or call.get("output"))
+            if output_preview:
+                formatted["output"] = output_preview
+
+            source = call.get("source")
+            if isinstance(source, str) and source.strip():
+                formatted["source"] = source.strip()
+
+            formatted_calls.append(formatted)
+
         now = datetime.now()
         return {
             "model": model,
@@ -133,6 +172,7 @@ class SessionState:
             "tokensOut": f"{self._rng.randint(180, 420)} tokens",
             "latency": f"{self._rng.uniform(1.0, 2.2):.2f} s",
             "summary": summary,
+            "toolCalls": formatted_calls,
         }
 
     def respond(self, message: str, *, replace_last: bool = False) -> Dict[str, object]:
@@ -340,7 +380,7 @@ class SessionState:
 
         # 使用真实数据填充响应
         model_name = cfg.chat.model if cfg.chat else "Unconfigured chat model"
-        meta = self._meta(model_name, summary)
+        meta = self._meta(model_name, summary, tool_calls)
 
         logger.info(
             "Session response ready (model=%s history=%s tool_calls=%s)",
@@ -386,7 +426,7 @@ class SessionState:
 
         logger.info("Session booted (history=%s)", len(self.vm.history))
 
-        meta = self._meta("OKC-Orchestrator", "Workbench Initialized")
+        meta = self._meta("OKC-Orchestrator", "Workbench Initialized", [])
         workspace_state = self._workspace_state_summary()
         return {
             "reply": boot_reply,
