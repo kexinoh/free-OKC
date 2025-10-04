@@ -23,6 +23,7 @@ class SessionState:
 
     def __init__(self) -> None:
         logger.debug("Initialising SessionState and tool registry")
+        self._booted = False
         self._initialise_vm()
         self._rng = random.Random()
         # 注意：VM现在管理自己的历史，SessionState的历史可以作为副本或移除
@@ -39,6 +40,7 @@ class SessionState:
             system_prompt=system_prompt,
             registry=self.registry,
         )
+        self._booted = False
 
     def _workspace_state_summary(self, *, latest: Optional[str] = None, limit: int = 10) -> Dict[str, object]:
         state = getattr(self.workspace, "state", None)
@@ -214,15 +216,20 @@ class SessionState:
         }
 
     def boot(self) -> Dict[str, object]:
-        """
-        Boots the session, but now it doesn't need to return hardcoded content.
-        It simply initializes the state.
-        """
-        self.reset()
+        """Return the welcome payload without resetting existing workspace state."""
 
-        # 引导信息仍然可以是静态的
-        boot_reply = constants.WELCOME_MESSAGE
-        self.vm.record_history_entry({"role": "assistant", "content": boot_reply})
+        logger.info("Session boot requested (booted=%s)", self._booted)
+
+        if not self._booted:
+            boot_reply = constants.WELCOME_MESSAGE
+            self.vm.record_history_entry({"role": "assistant", "content": boot_reply})
+            self._booted = True
+        else:
+            history = self.vm.history
+            if history and history[0].get("role") == "assistant":
+                boot_reply = str(history[0].get("content", constants.WELCOME_MESSAGE))
+            else:
+                boot_reply = constants.WELCOME_MESSAGE
 
         logger.info("Session booted (history=%s)", len(self.vm.history))
 
