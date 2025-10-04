@@ -121,9 +121,26 @@ def test_load_config_from_yaml_supports_env_keys(tmp_path: Path, monkeypatch):
     assert cfg.media.image.api_key == "inline-image"
     assert cfg.media.speech is not None
     assert cfg.media.speech.api_key == "sk-speech"
+    assert cfg.workspace.preview_base_url is None
 
 
 def test_load_config_from_yaml_missing_file_is_noop(tmp_path: Path, capsys):
     config_mod.load_config_from_yaml(tmp_path / "missing.yaml")
     captured = capsys.readouterr().out
     assert "Config file not found" in captured
+
+
+def test_load_config_from_yaml_reads_preview_base_url(tmp_path: Path):
+    payload = {
+        "workspace": {
+            "preview_base_url": "https://preview.invalid/preview",
+        }
+    }
+
+    config_file = tmp_path / "with-preview.yaml"
+    config_file.write_text(config_mod.yaml.safe_dump(payload), encoding="utf-8")
+
+    config_mod.load_config_from_yaml(config_file)
+    cfg = config_mod.get_config()
+
+    assert cfg.workspace.preview_base_url == "https://preview.invalid/preview"

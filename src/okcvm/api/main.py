@@ -119,6 +119,7 @@ class SessionStore:
     def reset(self) -> None:
         with self._lock:
             self._sessions.clear()
+        state.clear()
 
 
 session_store = SessionStore()
@@ -205,6 +206,7 @@ def _get_session(request: Request, client_id: Optional[str] = None) -> SessionSt
     session = session_store.get(resolved, create=True)
     if session is None:  # pragma: no cover - defensive
         raise HTTPException(status_code=500, detail="Failed to initialise session")
+    state.set(session)
     return session
 
 

@@ -5,10 +5,10 @@ import random
 from datetime import datetime
 from json import JSONDecodeError
 from typing import Dict, List, Optional
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from . import constants, spec
-from .config import get_config
+from .config import WorkspaceConfig, get_config
 from .logging_utils import get_logger
 from .registry import ToolRegistry
 from .vm import VirtualMachine
@@ -147,17 +147,139 @@ class SessionState:
         # 从 VM 的结果中提取信息
         reply = vm_result.get("reply", "An error occurred.")
 
-        # [TODO] 这里我们需要一种机制来从工具调用结果中提取网页和PPT内容
-        web_preview = None
-        ppt_slides = []
+        cfg = get_config()
+        workspace_cfg = getattr(cfg, "workspace", WorkspaceConfig()) if hasattr(cfg, "workspace") else WorkspaceConfig()
+        preview_base_url = getattr(workspace_cfg, "preview_base_url", None)
+
+        web_preview: Dict[str, str] = {}
+        ppt_slides: List[Dict[str, object]] = []
         summary = ""
-        
+        artifacts: List[Dict[str, str]] = []
+
+        def _string_field(candidate: object) -> str | None:
+            if isinstance(candidate, str):
+                stripped = candidate.strip()
+                if stripped:
+                    return stripped
+            return None
+
+        def _normalise_preview_url(url: str) -> str:
+            candidate = url.strip()
+            if not candidate:
+                return candidate
+            parsed = urlparse(candidate)
+            if parsed.scheme and parsed.netloc:
+                return candidate
+            if preview_base_url:
+                try:
+                    return urljoin(preview_base_url, candidate)
+                except ValueError:
+                    logger.debug("Failed to join preview base URL %s with %s", preview_base_url, candidate)
+            return candidate
+
+        def _iter_containers(payload: Dict[str, object]) -> List[Dict[str, object]]:
+            containers: List[Dict[str, object]] = []
+            containers.append(payload)
+            data_section = payload.get("data")
+            if isinstance(data_section, dict):
+                containers.append(data_section)
+            return containers
+
+        def _extract_artifacts(container: Dict[str, object]) -> List[Dict[str, str]]:
+            collected: List[Dict[str, str]] = []
+            raw_items = container.get("artifacts")
+            if isinstance(raw_items, list):
+                for item in raw_items:
+                    if not isinstance(item, dict):
+                        continue
+                    url_value = _string_field(item.get("url"))
+                    if not url_value:
+                        continue
+                    normalized = self._append_client_id_to_url(_normalise_preview_url(url_value))
+                    collected.append(
+                        {
+                            "type": _string_field(item.get("type")) or "file",
+                            "name": _string_field(item.get("name")) or "Artifact",
+                            "url": normalized,
+                        }
+                    )
+            return collected
+
+        def _preview_from_container(container: Dict[str, object]) -> tuple[Dict[str, str] | None, List[Dict[str, object]] | None, List[Dict[str, str]]]:
+            preview_bits: Dict[str, str] = {}
+            slides: List[Dict[str, object]] | None = None
+            collected_artifacts = _extract_artifacts(container)
+
+            html_value = _string_field(
+                container.get("html")
+                or container.get("rendered_html")
+                or container.get("content")
+            )
+            if html_value:
+                preview_bits.setdefault("html", html_value)
+
+            url_value = _string_field(
+                container.get("preview_url")
+                or container.get("url")
+                or container.get("href")
+                or container.get("server_preview_url")
+            )
+
+            deployment_info = container.get("deployment")
+            if not url_value and isinstance(deployment_info, dict):
+                url_value = _string_field(
+                    deployment_info.get("preview_url")
+                    or deployment_info.get("server_preview_url")
+                )
+
+            if url_value:
+                normalized_url = self._append_client_id_to_url(_normalise_preview_url(url_value))
+                preview_bits.setdefault("url", normalized_url)
+
+                deployment_id = _string_field(container.get("deployment_id"))
+                if not deployment_id and isinstance(deployment_info, dict):
+                    deployment_id = _string_field(deployment_info.get("id"))
+                if deployment_id:
+                    preview_bits.setdefault("deployment_id", deployment_id)
+
+                title_value = (
+                    _string_field(container.get("title"))
+                    or _string_field(container.get("name"))
+                )
+                if not title_value and isinstance(deployment_info, dict):
+                    title_value = _string_field(deployment_info.get("name")) or _string_field(
+                        deployment_info.get("slug")
+                    )
+                if title_value:
+                    preview_bits.setdefault("title", title_value)
+
+                preview_artifact = {
+                    "type": "web",
+                    "name": title_value or "Web preview",
+                    "url": normalized_url,
+                }
+                if not any(
+                    isinstance(item, dict) and _string_field(item.get("url")) == normalized_url
+                    for item in collected_artifacts
+                ):
+                    collected_artifacts.insert(0, preview_artifact)
+                else:
+                    # Ensure artifact name/title consistency when already present
+                    for item in collected_artifacts:
+                        if _string_field(item.get("url")) == normalized_url:
+                            item.setdefault("type", "web")
+                            item.setdefault("name", title_value or "Web preview")
+
+            slides_value = container.get("slides")
+            if isinstance(slides_value, list) and slides_value:
+                slides = slides_value
+
+            return (preview_bits or None, slides, collected_artifacts)
+
         tool_calls = vm_result.get("tool_calls", [])
-        if tool_calls:
-            # 假设最后一个工具调用生成了主要内容
-            last_call = tool_calls[-1]
-            summary = f"Executed tool: {last_call['tool_name']}"
-            output_payload = last_call.get("tool_output")
+        parsed_tool_data: List[Dict[str, object]] = []
+        for call in tool_calls:
+            output_payload = call.get("tool_output")
             parsed_payload: Dict[str, object] | None = None
             if isinstance(output_payload, dict):
                 parsed_payload = output_payload
@@ -166,69 +288,57 @@ class SessionState:
                     parsed_payload = json.loads(output_payload)
                 except JSONDecodeError:
                     logger.debug("Tool output is not valid JSON; treating as raw text")
-            output_keys = list(parsed_payload.keys()) if isinstance(parsed_payload, dict) else None
-            logger.debug(
-                "Tool execution summary tool=%s keys=%s",
-                last_call.get("tool_name"),
-                output_keys,
-            )
             if isinstance(parsed_payload, dict):
-                preview_details: Dict[str, str] = {}
+                parsed_tool_data.append(parsed_payload)
 
-                def _string_field(candidate: object) -> str | None:
-                    if isinstance(candidate, str) and candidate.strip():
-                        return candidate
-                    return None
+        if parsed_tool_data:
+            logger.debug("Parsed %s tool payloads for preview extraction", len(parsed_tool_data))
 
-                def _maybe_update_preview(container: Dict[str, object]) -> None:
-                    nonlocal ppt_slides
-                    html_value = _string_field(
-                        container.get("html")
-                        or container.get("rendered_html")
-                        or container.get("content")
+        seen_artifact_urls: set[str] = set()
+
+        for payload in reversed(parsed_tool_data):
+            for container in _iter_containers(payload):
+                preview_candidate, slides_candidate, container_artifacts = _preview_from_container(container)
+
+                for artifact in container_artifacts:
+                    url_value = _string_field(artifact.get("url"))
+                    if not url_value or url_value in seen_artifact_urls:
+                        continue
+                    seen_artifact_urls.add(url_value)
+                    artifacts.append(
+                        {
+                            "type": artifact.get("type", "file"),
+                            "name": artifact.get("name", "Artifact"),
+                            "url": url_value,
+                        }
                     )
-                    if html_value:
-                        preview_details["html"] = html_value
-                    url_value = _string_field(
-                        container.get("preview_url")
-                        or container.get("url")
-                        or container.get("href")
-                        or container.get("server_preview_url")
-                    )
-                    if not url_value:
-                        deployment_info = container.get("deployment")
-                        if isinstance(deployment_info, dict):
-                            url_value = _string_field(
-                                deployment_info.get("preview_url")
-                                or deployment_info.get("server_preview_url")
-                            )
-                    if url_value:
-                        preview_details["url"] = url_value
 
-                    slides_value = container.get("slides")
-                    if isinstance(slides_value, list):
-                        ppt_slides = slides_value
+                if preview_candidate:
+                    for key, value in preview_candidate.items():
+                        if key not in web_preview and value is not None:
+                            web_preview[key] = value
 
-                _maybe_update_preview(parsed_payload)
+                if not ppt_slides and slides_candidate:
+                    ppt_slides = slides_candidate
 
-                data_section = parsed_payload.get("data")
-                if isinstance(data_section, dict):
-                    _maybe_update_preview(data_section)
-
-                if preview_details:
-                    url_value = preview_details.get("url")
-                    if isinstance(url_value, str) and url_value:
-                        preview_details["url"] = self._append_client_id_to_url(url_value)
-                        if isinstance(parsed_payload, dict):
-                            parsed_payload["preview_url"] = preview_details["url"]
-                    web_preview = preview_details
-
-                output_text = parsed_payload.get("output")
+            if not summary:
+                output_text = payload.get("output")
                 if isinstance(output_text, str) and output_text.strip():
                     summary = output_text.strip().splitlines()[0]
 
+        if tool_calls and not summary:
+            summary = f"Executed tool: {tool_calls[-1]['tool_name']}"
+
+        if not web_preview:
+            web_preview = None
+
+        if not artifacts:
+            artifacts = []
+
+        if not ppt_slides:
+            ppt_slides = []
+
         # 使用真实数据填充响应
-        cfg = get_config()
         model_name = cfg.chat.model if cfg.chat else "Unconfigured chat model"
         meta = self._meta(model_name, summary)
 
@@ -253,6 +363,7 @@ class SessionState:
             "meta": meta,
             "web_preview": web_preview,
             "ppt_slides": ppt_slides,
+            "artifacts": artifacts,
             "vm_history": self.vm.describe_history(limit=25),
             "workspace_state": workspace_state,
         }
@@ -285,6 +396,7 @@ class SessionState:
                 {"title": "灵感孵化室能力", "bullets": ["网页 / PPT 一体生成", "模型调用透明可追踪", "可视化实时预览"]},
                 {"title": "示例需求", "bullets": ["品牌落地页", "产品发布会演示", "活动招募物料"]},
             ],
+            "artifacts": [],
             "vm": self.vm.describe(),
             "workspace_state": workspace_state,
         }
