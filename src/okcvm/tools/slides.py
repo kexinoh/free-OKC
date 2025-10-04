@@ -21,19 +21,18 @@ def _parse_slides(html: str) -> List[BeautifulSoup]:
     return slides
 
 
-def _extract_slide_outline(
+def _extract_slide_content(
     slide_markup: BeautifulSoup, index: int
-) -> Tuple[str, List[str], List[str], List[str]]:
+) -> Tuple[str, List[str], List[str]]:
     title_tag = slide_markup.find(["h1", "h2", "h3"])
     title = title_tag.get_text(strip=True) if title_tag else ""
     if not title:
         title = f"Slide {index + 1}"
 
-    paragraphs = [p.get_text(strip=True) for p in slide_markup.find_all("p") if p.get_text(strip=True)]
-    list_items = [li.get_text(strip=True) for li in slide_markup.find_all("li") if li.get_text(strip=True)]
-    outline = list_items or paragraphs
+    paragraphs = [text for p in slide_markup.find_all("p") if (text := p.get_text(strip=True))]
+    list_items = [text for li in slide_markup.find_all("li") if (text := li.get_text(strip=True))]
 
-    return title, paragraphs, list_items, outline
+    return title, paragraphs, list_items
 
 
 def _default_output_path() -> Path:
@@ -69,7 +68,7 @@ class SlidesGeneratorTool(Tool):
 
         for slide_index, slide_markup in enumerate(slides):
             slide = presentation.slides.add_slide(blank_layout)
-            title, paragraphs, list_items, outline = _extract_slide_outline(slide_markup, slide_index)
+            title, paragraphs, list_items = _extract_slide_content(slide_markup, slide_index)
 
             if title:
                 _add_textbox(slide, title, left=0.5, top=0.3, width=9.0, height=1.2, font_size=40)
@@ -96,6 +95,7 @@ class SlidesGeneratorTool(Tool):
                     font_size=22,
                 )
 
+            outline = paragraphs + list_items
             preview_slides.append({"title": title, "bullets": outline})
 
         path = Path(output_path).expanduser() if output_path else _default_output_path()

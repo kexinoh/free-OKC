@@ -41,7 +41,7 @@ def test_slides_generator_returns_preview(tmp_path):
 
     assert slides[0] == {
         "title": "Overview",
-        "bullets": ["First point", "Second point"],
+        "bullets": ["Intro paragraph", "First point", "Second point"],
     }
     assert slides[1] == {
         "title": "Slide 2",
