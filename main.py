@@ -19,7 +19,14 @@ try:
     project_root = Path(__file__).resolve().parent
     src_path = project_root / "src"
     sys.path.insert(0, str(src_path))
-    from okcvm.config import AppConfig, configure, get_config, ModelEndpointConfig, MediaConfig
+    from okcvm.config import (
+        AppConfig,
+        MediaConfig,
+        ModelEndpointConfig,
+        _parse_bool,
+        configure,
+        get_config,
+    )
     from okcvm.logging_utils import get_logger, setup_logging
     from okcvm.registry import ToolRegistry
 except ImportError as e:
@@ -36,24 +43,6 @@ cli = typer.Typer(
 console = Console()
 setup_logging()
 logger = get_logger(__name__)
-
-
-def _parse_bool(value, default=True):
-    """Best-effort conversion of configuration values to booleans."""
-
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        normalised = value.strip().lower()
-        if normalised in {"1", "true", "yes", "on"}:
-            return True
-        if normalised in {"0", "false", "no", "off"}:
-            return False
-    return default
 
 # --- Helper Functions ---
 def _ensure_dependencies():
