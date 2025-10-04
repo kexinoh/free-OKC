@@ -109,9 +109,10 @@ class SessionState:
         except ValueError:
             return url
 
-        if not parsed.scheme or not parsed.netloc:
-            # Only augment absolute URLs that point to our orchestrator.
-            return url
+        if parsed.scheme and parsed.netloc:
+            host = parsed.hostname
+            if host and host not in {"127.0.0.1", "localhost", "0.0.0.0"}:
+                return url
 
         query = dict(parse_qsl(parsed.query, keep_blank_values=True))
         if query.get("client_id"):
@@ -119,7 +120,8 @@ class SessionState:
 
         query["client_id"] = client_id
         new_query = urlencode(query, doseq=True)
-        return urlunparse(parsed._replace(query=new_query))
+        updated = parsed._replace(query=new_query)
+        return urlunparse(updated)
 
     def _meta(self, model: str, summary: str) -> Dict[str, str]:
         # 这个方法可以保留，用于生成前端需要的元数据

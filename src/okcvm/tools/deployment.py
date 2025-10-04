@@ -248,7 +248,7 @@ class DeployWebsiteTool(Tool):
             "session_id": self._workspace.session_id,
         }
 
-        preview_url = f"http://127.0.0.1:8000/?s={deployment_id}&path={quote(entry_path)}"
+        preview_url = f"/?s={deployment_id}&path={quote(entry_path)}"
         manifest["preview_url"] = preview_url
         manifest["entry_path"] = entry_path
 
