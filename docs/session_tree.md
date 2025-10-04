@@ -4,7 +4,7 @@
 
 ## 节点模型
 
-1. **根节点：会话实例** – `SessionState.boot()` 创建会话时会记录欢迎内容，并初始化 `VirtualMachine` 与 `WorkspaceManager`。根节点携带模型配置、会话 ID 以及初始预览信息，是所有后续节点的起点。【F:src/okcvm/session.py†L67-L150】
+1. **根节点：会话实例** – `SessionState.boot()` 在第一次请求时记录欢迎内容，并返回当前 `VirtualMachine` / `WorkspaceManager` 的描述信息。若需要重新初始化工作台，应通过 `SessionState.delete_history()` 或 `SessionState.reset()` 触发清理，再由下一次 `boot` 请求生成新的根节点元数据。【F:src/okcvm/session.py†L18-L220】
 2. **对话节点：历史消息** – `VirtualMachine.record_history_entry()` 会为每条消息生成带命名空间的递增 ID（如 `okcvm-12ab34cd-0001`），确保树形结构中每个节点都有稳定引用。`/api/session/history/{entry_id}` 接口可按 ID 取回任意节点的详细内容，前端据此绘制时间轴与分支。【F:src/okcvm/vm.py†L52-L108】【F:src/okcvm/vm.py†L118-L178】【F:src/okcvm/api/main.py†L148-L182】
 3. **工件节点：工具输出** – 当代理调用工具时，`VirtualMachine.call_tool()` 会把输入、输出和成功状态写入历史节点，使部署结果、PPT 文件等都成为会话树上的子节点，可被快照和回放。【F:src/okcvm/vm.py†L110-L157】
 

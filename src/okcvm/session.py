@@ -11,6 +11,7 @@ from .config import get_config
 from .logging_utils import get_logger
 from .registry import ToolRegistry
 from .vm import VirtualMachine
+from .tools.deployment import cleanup_deployments_for_session
 from .workspace import WorkspaceError, WorkspaceManager, WorkspaceStateError
 
 
@@ -22,6 +23,7 @@ class SessionState:
 
     def __init__(self) -> None:
         logger.debug("Initialising SessionState and tool registry")
+        self._booted = False
         self._initialise_vm()
         self._rng = random.Random()
         # 注意：VM现在管理自己的历史，SessionState的历史可以作为副本或移除
@@ -38,6 +40,7 @@ class SessionState:
             system_prompt=system_prompt,
             registry=self.registry,
         )
+        self._booted = False
 
     def _workspace_state_summary(self, *, latest: Optional[str] = None, limit: int = 10) -> Dict[str, object]:
         state = getattr(self.workspace, "state", None)
@@ -53,7 +56,7 @@ class SessionState:
             summary["latest_snapshot"] = snapshots[0]["id"]
         return summary
 
-    def _cleanup_workspace(self) -> Dict[str, object] | None:
+    def _cleanup_workspace(self, *, remove_deployments: bool = False) -> Dict[str, object] | None:
         workspace = getattr(self, "workspace", None)
         if workspace is None:
             return None
@@ -68,12 +71,18 @@ class SessionState:
             "internal_tmp": str(getattr(paths, "internal_tmp", paths.internal_root / "tmp")),
         }
 
+        session_id = workspace.session_id
         try:
             details["removed"] = workspace.cleanup()
         except WorkspaceError as exc:  # pragma: no cover - defensive guard
             details["removed"] = False
             details["error"] = str(exc)
             logger.exception("Workspace cleanup failed")
+        if remove_deployments:
+            deployment_summary = cleanup_deployments_for_session(
+                workspace.deployments_root, session_id
+            )
+            details["deployments"] = deployment_summary
         return details
 
     def reset(self) -> None:
@@ -210,15 +219,20 @@ class SessionState:
         }
 
     def boot(self) -> Dict[str, object]:
-        """
-        Boots the session, but now it doesn't need to return hardcoded content.
-        It simply initializes the state.
-        """
-        self.reset()
+        """Return the welcome payload without resetting existing workspace state."""
 
-        # 引导信息仍然可以是静态的
-        boot_reply = constants.WELCOME_MESSAGE
-        self.vm.record_history_entry({"role": "assistant", "content": boot_reply})
+        logger.info("Session boot requested (booted=%s)", self._booted)
+
+        if not self._booted:
+            boot_reply = constants.WELCOME_MESSAGE
+            self.vm.record_history_entry({"role": "assistant", "content": boot_reply})
+            self._booted = True
+        else:
+            history = self.vm.history
+            if history and history[0].get("role") == "assistant":
+                boot_reply = str(history[0].get("content", constants.WELCOME_MESSAGE))
+            else:
+                boot_reply = constants.WELCOME_MESSAGE
 
         logger.info("Session booted (history=%s)", len(self.vm.history))
 
@@ -241,7 +255,7 @@ class SessionState:
 
         logger.info("Session history deletion requested")
         history_length = len(self.vm.history)
-        workspace_details = self._cleanup_workspace() or {"removed": False}
+        workspace_details = self._cleanup_workspace(remove_deployments=True) or {"removed": False}
         self._initialise_vm()
 
         return {

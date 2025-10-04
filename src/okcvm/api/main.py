@@ -86,7 +86,7 @@ def _deployments_root() -> Path:
     workspace = getattr(state, "workspace", None)
     if workspace is None:
         raise HTTPException(status_code=500, detail="Workspace not initialised")
-    return workspace.paths.internal_output / "deployments"
+    return workspace.deployments_root
 
 
 def _resolve_deployment_asset(deployment_id: str, relative_path: str | None) -> Path:
