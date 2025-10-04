@@ -79,6 +79,7 @@ class ToolRegistry:
                 "tool_input": tool_input,
                 "tool_output": serialized,
                 "payload": payload,
+                "source": "registry",
             }
         )
 

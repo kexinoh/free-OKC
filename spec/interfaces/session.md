@@ -46,6 +46,22 @@
 | `artifacts` | `array` | 工件列表，每项含 `type`、`name`、`url`。若响应包含网页预览，列表中也会追加对应条目。|
 | `vm_history` | `array` | 最近 25 条会话历史记录，条目包含 `id`、`role` (`user`/`assistant`/`tool`)、`content` 及（对工具）额外字段。可传给 `GET /api/session/history/{entry_id}` 深入查看。|
 | `workspace_state` | `object` | 当前工作区快照状态摘要，结构见下文。|
+| `tool_calls` | `array` | 本轮对话期间触发的工具调用详情，详见下文。|
+
+### 工具调用详情结构
+
+`tool_calls` 数组中的每一项都会记录一条工具执行记录，便于前端或调用方调试：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `step` | `integer` | 工具调用在本轮对话中的顺序（从 `1` 开始）。|
+| `tool_name` | `string` | LangChain/注册表中声明的工具名称。|
+| `tool_input` | `object \| string \| null` | 模型传给工具的原始参数。具体类型由工具定义。|
+| `tool_output` | `object \| string \| null` | 工具返回值的原始内容。为字符串时通常是 JSON 序列化文本。|
+| `payload` | `object \| null` | 当工具由注册表直接执行时，记录标准化的 `{"output", "data"}` 结构；LangChain 中间步骤无此字段。|
+| `source` | `string` | 调用来源，常见取值为 `"langchain"` 或 `"registry"`。|
+| `invocation_id` | `string` | 服务端生成的调用唯一标识，便于与日志或工作区记录关联。|
+| `log` | `string \| null` | LangChain 动作提供的原始日志信息（若存在）。|
 
 ## GET `/api/session/history/{entry_id}`
 按 ID 读取某条历史记录。

@@ -364,6 +364,7 @@ class SessionState:
             "web_preview": web_preview,
             "ppt_slides": ppt_slides,
             "artifacts": artifacts,
+            "tool_calls": tool_calls,
             "vm_history": self.vm.describe_history(limit=25),
             "workspace_state": workspace_state,
         }

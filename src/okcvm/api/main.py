@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
-from ..config import ModelEndpointConfig, configure, get_config
+from ..config import MediaConfig, ModelEndpointConfig, configure, get_config
 from ..logging_utils import get_logger, setup_logging
 from ..session import SessionState
 from ..workspace import WorkspaceStateError
