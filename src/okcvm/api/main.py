@@ -396,6 +396,12 @@ def create_app() -> FastAPI:
                         and config.chat is not None
                     ):
                         chat_config.api_key = config.chat.api_key
+                    if (
+                        "supports_streaming" not in payload.chat.model_fields_set
+                        and config.chat is not None
+                        and config.chat.supports_streaming is not None
+                    ):
+                        chat_config.supports_streaming = config.chat.supports_streaming
                     configure_kwargs["chat"] = chat_config
 
         media_fields = ("image", "speech", "sound_effects", "asr")
@@ -424,6 +430,11 @@ def create_app() -> FastAPI:
                     and current_value is not None
                 ):
                     endpoint_config.api_key = current_value.api_key
+                if (
+                    "supports_streaming" not in endpoint_payload.model_fields_set
+                    and current_value is not None
+                ):
+                    endpoint_config.supports_streaming = current_value.supports_streaming
                 return endpoint_config
 
             media_config = MediaConfig(
@@ -493,7 +504,17 @@ def create_app() -> FastAPI:
             payload.replace_last,
             payload.message[:120],
         )
-        if payload.stream:
+        streaming_requested = payload.stream
+        if streaming_requested:
+            chat_config = get_config().chat
+            if chat_config is None or not chat_config.supports_streaming:
+                logger.warning(
+                    "Streaming requested but disabled (configured=%s)",
+                    chat_config is not None,
+                )
+                streaming_requested = False
+
+        if streaming_requested:
             loop = asyncio.get_running_loop()
             publisher = EventStreamPublisher(loop)
 

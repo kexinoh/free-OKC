@@ -105,8 +105,10 @@ def test_read_config_endpoint_returns_current_settings(client):
     assert payload["chat"]["model"] == "gpt-test"
     assert payload["chat"]["base_url"] == "https://api.example.com/chat"
     assert payload["chat"]["api_key_present"] is True
+    assert payload["chat"]["supports_streaming"] is True
     assert payload["image"]["model"] == "image-alpha"
     assert payload["image"]["api_key_present"] is True
+    assert payload["image"]["supports_streaming"] is True
     assert payload["speech"] is None
     assert payload["sound_effects"] is None
     assert payload["asr"] is None
@@ -133,8 +135,10 @@ def test_update_config_endpoint_accepts_trimmed_payload(client):
     assert payload["chat"]["model"] == "gpt-4o-mini"
     assert payload["chat"]["base_url"] == "https://chat.invalid/v1"
     assert payload["chat"]["api_key_present"] is True
+    assert payload["chat"]["supports_streaming"] is True
     assert payload["image"]["model"] == "painterly"
     assert payload["image"]["base_url"] == "https://image.invalid/v1"
+    assert payload["image"]["supports_streaming"] is True
 
     updated = config_mod.get_config()
     assert updated.chat is not None
@@ -187,6 +191,33 @@ def test_session_endpoints_use_session_state(monkeypatch, client):
     info = client.get("/api/session/info")
     assert info.status_code == 200
     assert "system_prompt" in info.json()
+
+
+def test_chat_endpoint_falls_back_when_streaming_disabled(monkeypatch, client):
+    config_mod.configure(
+        chat=ModelEndpointConfig(
+            model="no-stream",
+            base_url="https://chat.invalid",
+            api_key="secret",
+            supports_streaming=False,
+        )
+    )
+    session = main.session_store.get(TEST_CLIENT_ID)
+
+    def fake_respond(message, **kwargs):  # noqa: ANN001
+        return {
+            "reply": f"pong:{message}",
+            "meta": {"model": "no-stream"},
+            "web_preview": None,
+            "ppt_slides": [],
+            "vm_history": [],
+        }
+
+    monkeypatch.setattr(session, "respond", fake_respond)
+    response = client.post("/api/chat", json={"message": "ping", "stream": True})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["reply"] == "pong:ping"
 
 
 def test_chat_endpoint_allows_replacing_last_exchange(monkeypatch, client):

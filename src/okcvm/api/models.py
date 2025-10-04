@@ -13,6 +13,10 @@ class EndpointConfigPayload(BaseModel):
     model: Optional[str] = Field(default=None, description="Model identifier")
     base_url: Optional[str] = Field(default=None, description="Endpoint base URL")
     api_key: Optional[str] = Field(default=None, description="Provider API key")
+    supports_streaming: Optional[bool] = Field(
+        default=None,
+        description="Whether the endpoint supports server-sent event streaming.",
+    )
 
     def to_model(self) -> ModelEndpointConfig | None:
         model = self.model.strip() if self.model is not None else None
@@ -20,7 +24,14 @@ class EndpointConfigPayload(BaseModel):
         api_key = self.api_key.strip() if self.api_key is not None else None
         if not model or not base_url:
             return None
-        return ModelEndpointConfig(model=model, base_url=base_url, api_key=api_key or None)
+        return ModelEndpointConfig(
+            model=model,
+            base_url=base_url,
+            api_key=api_key or None,
+            supports_streaming=self.supports_streaming
+            if self.supports_streaming is not None
+            else True,
+        )
 
 
 class ConfigUpdatePayload(BaseModel):

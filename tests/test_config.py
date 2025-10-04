@@ -33,9 +33,19 @@ def test_model_endpoint_config_from_env_with_partial_values():
     assert cfg.model == "stable-pixel"
     assert cfg.base_url == "https://image.api"
     assert cfg.api_key is None
+    assert cfg.supports_streaming is True
 
     missing = ModelEndpointConfig.from_env("OKCVM_SPEECH", env)
     assert missing is None
+
+    env_with_flag = {
+        "OKCVM_IMAGE_MODEL": "stable-pixel",
+        "OKCVM_IMAGE_BASE_URL": "https://image.api",
+        "OKCVM_IMAGE_SUPPORTS_STREAMING": "false",
+    }
+    cfg_flag = ModelEndpointConfig.from_env("OKCVM_IMAGE", env_with_flag)
+    assert cfg_flag is not None
+    assert cfg_flag.supports_streaming is False
 
 
 def test_model_endpoint_config_describe_hides_api_key():
@@ -49,6 +59,7 @@ def test_model_endpoint_config_describe_hides_api_key():
         "model": "speech-pro",
         "base_url": "https://speech.api",
         "api_key_present": True,
+        "supports_streaming": True,
     }
 
 
@@ -94,12 +105,14 @@ def test_load_config_from_yaml_supports_env_keys(tmp_path: Path, monkeypatch):
             "model": "gpt-yaml",
             "base_url": "https://chat.yaml",
             "api_key_env": "CHAT_API_KEY",
+            "supports_streaming": False,
         },
         "media": {
             "image": {
                 "model": "image-yaml",
                 "base_url": "https://image.yaml",
                 "api_key": "inline-image",
+                "supports_streaming": False,
             },
             "speech": {
                 "model": "speech-yaml",
@@ -117,8 +130,10 @@ def test_load_config_from_yaml_supports_env_keys(tmp_path: Path, monkeypatch):
 
     assert cfg.chat is not None
     assert cfg.chat.api_key == "sk-chat"
+    assert cfg.chat.supports_streaming is False
     assert cfg.media.image is not None
     assert cfg.media.image.api_key == "inline-image"
+    assert cfg.media.image.supports_streaming is False
     assert cfg.media.speech is not None
     assert cfg.media.speech.api_key == "sk-speech"
     assert cfg.workspace.preview_base_url is None
