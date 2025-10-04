@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+import shutil
+import stat
 import subprocess
 import tempfile
-import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -291,8 +292,24 @@ class WorkspaceManager:
             self._cleaned = True
             return False
 
+        def _handle_remove_readonly(func, path, exc_info):  # pragma: no cover - filesystem specific
+            _, exc, _ = exc_info
+            if not isinstance(exc, PermissionError):
+                raise exc
+
+            try:
+                os.chmod(path, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+            except OSError:
+                # If we fail to adjust permissions fall back to the original error.
+                raise exc
+
+            try:
+                func(path)
+            except PermissionError as retry_exc:
+                raise retry_exc
+
         try:
-            shutil.rmtree(internal_root)
+            shutil.rmtree(internal_root, onerror=_handle_remove_readonly)
         except OSError as exc:  # pragma: no cover - defensive guard
             raise WorkspaceError(f"Failed to remove workspace: {exc}") from exc
 
