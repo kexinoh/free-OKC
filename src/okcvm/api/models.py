@@ -37,6 +37,14 @@ class ChatRequest(BaseModel):
     """Request model for the chat endpoint."""
 
     message: str = Field(..., description="User utterance to process")
+    replace_last: bool = Field(
+        default=False,
+        description=(
+            "When true, discard the most recent user/assistant exchange before processing "
+            "this message. This allows regenerating a previous reply without duplicating "
+            "conversation turns."
+        ),
+    )
 
 
 class SnapshotCreatePayload(BaseModel):

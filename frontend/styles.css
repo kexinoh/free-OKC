@@ -769,6 +769,81 @@ body.no-scroll { overflow: hidden; }
 .settings-header p { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }
 .settings-close { white-space: nowrap; }
 
+.message-editor-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 2rem);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1200;
+}
+
+.message-editor-overlay[hidden] {
+  display: none !important;
+}
+
+.message-editor-dialog {
+  width: min(720px, 100%);
+  max-height: min(640px, 100%);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-large);
+  box-shadow: 0 24px 48px rgba(15, 15, 15, 0.16);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.message-editor-header,
+.message-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.message-editor-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.message-editor-header .ghost-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  justify-content: center;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.message-editor-footer {
+  border-top: 1px solid var(--border-color);
+  border-bottom: none;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.message-editor-footer .ghost-button {
+  margin-right: auto;
+}
+
+.message-editor-body {
+  padding: 0.75rem 1.25rem 1.25rem;
+  overflow: hidden;
+}
+
+.message-editor-body .toastui-editor-defaultUI {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--shadow-soft);
+}
+
 .config-form { display: grid; gap: 1rem; }
 .config-group {
   border: 1px solid var(--border-color);

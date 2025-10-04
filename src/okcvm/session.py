@@ -92,10 +92,13 @@ class SessionState:
             "summary": summary,
         }
 
-    def respond(self, message: str) -> Dict[str, object]:
-        
+    def respond(self, message: str, *, replace_last: bool = False) -> Dict[str, object]:
+
         # 调用 VM 来获取真实的 LLM 响应
         logger.info("Session respond invoked with: %s", message[:120])
+        if replace_last:
+            removed = self.vm.discard_last_exchange()
+            logger.debug("Discarded last exchange before regeneration: %s", removed)
         vm_result = self.vm.execute(message)
 
         # 从 VM 的结果中提取信息

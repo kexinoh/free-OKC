@@ -1,5 +1,6 @@
 import { cloneMessageActionIcon } from './messageActionIcons.js';
 import { renderMarkdown } from './markdown.js';
+import { initializeMessageEditor, openMessageEditor, isMessageEditorOpen } from './editor.js';
 import {
   chatMessages,
   chatForm,
@@ -161,6 +162,9 @@ function markMessagePending(messageElement, placeholderText) {
   if (!(messageElement instanceof HTMLElement)) return;
   messageElement.dataset.pending = 'true';
   messageElement.classList.add('pending');
+  if (messageElement.dataset) {
+    messageElement.dataset.contentRaw = '';
+  }
   const body = messageElement.querySelector('.message-content');
   if (body) {
     body.classList.add('pending');
@@ -352,6 +356,9 @@ function createMessageElement(role, text, options = {}) {
   body.className = 'message-content';
   const initialText = typeof text === 'string' ? text : '';
   body.innerHTML = renderMarkdown(initialText);
+  if (message.dataset) {
+    message.dataset.contentRaw = initialText;
+  }
 
   const actions = document.createElement('div');
   actions.className = 'message-actions';
@@ -454,6 +461,7 @@ function finalizePendingMessage(message, text, messageId) {
   message.classList.remove('pending');
   if (message.dataset) {
     delete message.dataset.pending;
+    message.dataset.contentRaw = finalText;
   }
   message.removeAttribute('data-pending');
   setMessageActionsDisabled(message, false);
@@ -471,6 +479,10 @@ async function handleCopyMessageAction(messageId, button, messageElement) {
   if (!button) return;
 
   let content = '';
+
+  if (messageElement?.dataset?.contentRaw) {
+    content = messageElement.dataset.contentRaw;
+  }
 
   const match = findConversationByMessageId(messageId);
   if (match) {
@@ -502,7 +514,7 @@ async function handleCopyMessageAction(messageId, button, messageElement) {
   }
 }
 
-function handleEditMessageAction(messageElement, messageId) {
+async function handleEditMessageAction(messageElement, messageId) {
   if (!messageElement) return;
   const match = findConversationByMessageId(messageId);
   if (!match) return;
@@ -515,10 +527,18 @@ function handleEditMessageAction(messageElement, messageId) {
 
   const body = messageElement.querySelector('.message-content');
   const currentContent = typeof message.content === 'string' ? message.content : body?.textContent ?? '';
-  const nextContent = window.prompt('编辑这条消息', currentContent ?? '');
+  const currentNormalized = (currentContent ?? '').replace(/\r\n/g, '\n');
+
+  const nextContent = await openMessageEditor({
+    title: '编辑用户消息',
+    initialValue: currentNormalized,
+  });
   if (nextContent === null) return;
 
   const normalized = nextContent.replace(/\r\n/g, '\n');
+  if (normalized === currentNormalized) {
+    return;
+  }
   message.content = normalized;
   const timestamp = new Date().toISOString();
   message.timestamp = timestamp;
@@ -527,6 +547,10 @@ function handleEditMessageAction(messageElement, messageId) {
 
   if (body) {
     body.innerHTML = renderMarkdown(normalized);
+  }
+
+  if (messageElement.dataset) {
+    messageElement.dataset.contentRaw = normalized;
   }
 
   const timeElement = messageElement.querySelector('time');
@@ -601,7 +625,10 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
     const data = await fetchJson('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: precedingUserMessage.content }),
+      body: JSON.stringify({
+        message: precedingUserMessage.content,
+        replace_last: true,
+      }),
     });
     finalizePendingMessage(messageElement, data.reply, messageId);
     if (data.meta) {
@@ -957,7 +984,7 @@ function initializeEventListeners() {
   }
 
   if (chatMessages) {
-    chatMessages.addEventListener('click', (event) => {
+    chatMessages.addEventListener('click', async (event) => {
       const origin = event.target instanceof HTMLElement ? event.target : null;
       if (!origin) return;
 
@@ -990,13 +1017,13 @@ function initializeEventListeners() {
 
       switch (action) {
         case 'copy':
-          handleCopyMessageAction(messageId, target, messageElement);
+          await handleCopyMessageAction(messageId, target, messageElement);
           break;
         case 'edit':
-          handleEditMessageAction(messageElement, messageId);
+          await handleEditMessageAction(messageElement, messageId);
           break;
         case 'refresh':
-          regenerateAssistantMessage(messageElement, messageId, target);
+          await regenerateAssistantMessage(messageElement, messageId, target);
           break;
         default:
           break;
@@ -1066,6 +1093,9 @@ function initializeEventListeners() {
   }
 
   document.addEventListener('keydown', (event) => {
+    if (isMessageEditorOpen()) {
+      return;
+    }
     if (event.key !== 'Escape') return;
     if (!settingsOverlay?.hidden) {
       event.preventDefault();
@@ -1081,6 +1111,7 @@ function initializeEventListeners() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initializeMessageEditor();
   initializePreviewControls();
   initializeConfigForm();
   initializeEventListeners();

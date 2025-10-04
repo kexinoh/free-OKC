@@ -157,7 +157,7 @@ def test_session_endpoints_use_session_state(monkeypatch, client):
 
     captured = {}
 
-    def fake_respond(message):  # noqa: ANN001
+    def fake_respond(message, **kwargs):  # noqa: ANN001
         captured["message"] = message
         return {
             "reply": "pong",
@@ -177,6 +177,36 @@ def test_session_endpoints_use_session_state(monkeypatch, client):
     info = client.get("/api/session/info")
     assert info.status_code == 200
     assert "system_prompt" in info.json()
+
+
+def test_chat_endpoint_allows_replacing_last_exchange(monkeypatch, client):
+    client.get("/api/session/boot")
+
+    vm = main.state.vm
+
+    def fake_execute(message):  # noqa: ANN001
+        vm.record_history_entry({"role": "user", "content": message})
+        reply = f"echo:{message}"
+        vm.record_history_entry({"role": "assistant", "content": reply})
+        return {"reply": reply, "tool_calls": []}
+
+    monkeypatch.setattr(vm, "execute", fake_execute)
+
+    first = client.post("/api/chat", json={"message": "hello"})
+    assert first.status_code == 200
+    history_after_first = first.json()["vm_history"]
+    assert isinstance(history_after_first, list)
+    assert len(history_after_first) >= 2
+
+    second = client.post("/api/chat", json={"message": "hello", "replace_last": True})
+    assert second.status_code == 200
+    history_after_second = second.json()["vm_history"]
+
+    assert len(history_after_second) == len(history_after_first)
+    assert history_after_second[-2]["role"] == "user"
+    assert history_after_second[-2]["content"] == "hello"
+    assert history_after_second[-1]["role"] == "assistant"
+    assert history_after_second[-1]["content"].startswith("echo:")
 
 
 def test_delete_session_history_removes_workspace(client):
