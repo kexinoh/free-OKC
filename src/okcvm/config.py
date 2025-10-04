@@ -23,6 +23,7 @@ import threading
 from typing import Mapping, Optional
 
 import yaml
+from dotenv import load_dotenv
 
 from .logging_utils import get_logger
 
@@ -53,6 +54,7 @@ class ModelEndpointConfig:
     base_url: str
     api_key: Optional[str] = None
     supports_streaming: bool = True
+    api_key_env: Optional[str] = None
 
     @classmethod
     def from_env(
@@ -76,6 +78,7 @@ class ModelEndpointConfig:
         api_key = env_mapping.get(f"{prefix}_API_KEY")
         supports_streaming_raw = env_mapping.get(f"{prefix}_SUPPORTS_STREAMING")
         if model and base_url:
+            api_key_env = f"{prefix}_API_KEY" if api_key is not None else None
             return cls(
                 model=model,
                 base_url=base_url,
@@ -84,6 +87,7 @@ class ModelEndpointConfig:
                     supports_streaming_raw,
                     default=True,
                 ),
+                api_key_env=api_key_env,
             )
         return None
 
@@ -97,7 +101,18 @@ class ModelEndpointConfig:
         }
         if self.api_key:
             description["api_key_present"] = True
+        if self.api_key_env:
+            description["api_key_env"] = self.api_key_env
         return description
+
+    def resolve_api_key(self) -> Optional[str]:
+        """Return the configured API key, consulting environment variables if needed."""
+
+        if self.api_key:
+            return self.api_key
+        if self.api_key_env:
+            return os.environ.get(self.api_key_env)
+        return None
 
 
 @dataclass(slots=True)
@@ -249,6 +264,8 @@ def reset_config(env: Mapping[str, str] | None = None) -> None:
 
 def load_config_from_yaml(path: Path) -> None:
     """Loads configuration from a YAML file and applies it."""
+    _load_sidecar_env_files(path)
+
     if not path.exists():
         message = f"Config file not found: {path}"
         logger.warning(message)
@@ -323,7 +340,12 @@ def _merge_endpoint_config(
     yaml_model = yaml_mapping.get("model")
     yaml_base_url = yaml_mapping.get("base_url")
     yaml_api_key = yaml_mapping.get("api_key")
-    yaml_api_key_env = yaml_mapping.get("api_key_env")
+    yaml_api_key_env_raw = yaml_mapping.get("api_key_env")
+    yaml_api_key_env = (
+        str(yaml_api_key_env_raw).strip()
+        if isinstance(yaml_api_key_env_raw, (str, bytes))
+        else None
+    )
     yaml_supports_streaming = yaml_mapping.get("supports_streaming")
 
     existing_model = existing.model if existing else None
@@ -341,6 +363,13 @@ def _merge_endpoint_config(
         existing_api_key,
     ]
     api_key = next((value for value in api_key_candidates if value is not None), None)
+
+    if env_api_key is not None:
+        api_key_env_name = f"{env_prefix}_API_KEY"
+    elif yaml_api_key_env:
+        api_key_env_name = yaml_api_key_env
+    else:
+        api_key_env_name = existing.api_key_env if existing else None
 
     if env_supports_streaming is not None:
         supports_streaming = _parse_bool(
@@ -361,6 +390,7 @@ def _merge_endpoint_config(
             base_url=base_url,
             api_key=api_key,
             supports_streaming=supports_streaming,
+            api_key_env=api_key_env_name,
         )
 
     return None
@@ -403,3 +433,28 @@ def _parse_workspace(data: Mapping[str, object] | None, *, config_dir: Path) -> 
     )
 
     return workspace
+
+
+def _load_sidecar_env_files(path: Path) -> None:
+    """Load ``.env`` files located next to the provided configuration path."""
+
+    candidates = []
+    try:
+        resolved = path.resolve()
+    except FileNotFoundError:
+        resolved = path
+
+    candidates.append(resolved.parent / ".env")
+    candidates.append(Path.cwd() / ".env")
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            candidate_resolved = candidate.resolve()
+        except FileNotFoundError:
+            candidate_resolved = candidate
+        if candidate_resolved in seen:
+            continue
+        seen.add(candidate_resolved)
+        if candidate_resolved.exists():
+            load_dotenv(candidate_resolved, override=False)
