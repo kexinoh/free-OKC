@@ -334,9 +334,18 @@ def _merge_endpoint_config(
     model = env_model or yaml_model or existing_model
     base_url = env_base_url or yaml_base_url or existing_base_url
 
+    if isinstance(yaml_api_key, str):
+        # ``api_key`` can now point at an environment variable directly.  If a
+        # variable with that name exists we use its value; otherwise we fall
+        # back to the literal string which preserves backwards compatibility
+        # with inline secrets stored directly in the YAML file.
+        yaml_api_key_value = os.environ.get(yaml_api_key, yaml_api_key)
+    else:
+        yaml_api_key_value = yaml_api_key if yaml_api_key is not None else None
+
     api_key_candidates = [
         env_api_key,
-        yaml_api_key,
+        yaml_api_key_value,
         os.environ.get(yaml_api_key_env) if yaml_api_key_env else None,
         existing_api_key,
     ]

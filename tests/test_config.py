@@ -139,6 +139,27 @@ def test_load_config_from_yaml_supports_env_keys(tmp_path: Path, monkeypatch):
     assert cfg.workspace.preview_base_url is None
 
 
+def test_load_config_from_yaml_allows_api_key_env_alias(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("kimi_key", "123")
+
+    payload = {
+        "chat": {
+            "model": "kimi-model",
+            "base_url": "https://kimi.invalid",
+            "api_key": "kimi_key",
+        }
+    }
+
+    config_file = tmp_path / "env-inline.yaml"
+    config_file.write_text(config_mod.yaml.safe_dump(payload), encoding="utf-8")
+
+    config_mod.load_config_from_yaml(config_file)
+    cfg = config_mod.get_config()
+
+    assert cfg.chat is not None
+    assert cfg.chat.api_key == "123"
+
+
 def test_load_config_from_yaml_missing_file_is_noop(tmp_path: Path, capsys):
     config_mod.load_config_from_yaml(tmp_path / "missing.yaml")
     captured = capsys.readouterr().out

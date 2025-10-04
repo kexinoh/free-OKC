@@ -2,13 +2,16 @@
 # Configuration for the OKCVM Language Model Endpoints
 # -------------------------------------------------------------
 # You can directly provide an 'api_key' or use 'api_key_env'
-# to load the key from an environment variable.
+# to load the key from an environment variable.  When 'api_key' matches an
+# environment variable name, the loader will automatically pick up the value
+# from that variable (e.g. api_key: "kimi_key").
 # -------------------------------------------------------------
 
 chat:
   model: "kimi-k2-0905-preview"
   base_url: "https://api.moonshot.cn/v1"
-  # Reference an environment variable so secrets stay in .env
+  # Reference an environment variable so secrets stay in .env.  You can also
+  # set `api_key: "kimi_key"` if you prefer pointing at a custom variable.
   api_key_env: "OPENAI_API_KEY"
   # Set to false if the upstream provider does not support SSE streaming.
   supports_streaming: true
