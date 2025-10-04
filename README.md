@@ -151,7 +151,13 @@ On your first visit, the UI will guide you through the setup process.
 
 Once configured, you're ready to interact with the agent in the chat interface! All messages are sent to the backend VM for processing and will return curated previews and results.
 
-#### 5. Troubleshooting Tool Errors
+#### 5. Concurrency & Multi-User Access
+
+The demo FastAPI service keeps a single global `SessionState` instance in [`src/okcvm/api/main.py`](src/okcvm/api/main.py), so every browser tab shares the same conversation and workspace context. There is no automatic per-visitor isolation in this mode.【F:src/okcvm/api/main.py†L63-L69】
+
+To run multi-user or multi-session deployments, allocate a dedicated `SessionState` per user (for example by binding it to an authenticated account or an explicit session ID) and pass that instance into the relevant API routes.
+
+#### 6. Troubleshooting Tool Errors
 
 - **Session workspace paths**: Every chat session is assigned a random virtual mount such as `/mnt/okcvm-12ab34cd/`. The file tools (`mshtools-write_file`, `mshtools-read_file`, `mshtools-edit_file`) automatically resolve relative paths inside this mount, so commands like `resume-website/index.html` are stored safely without leaking across sessions. Passing a path outside the mount will raise a "path outside workspace" error.
 - **State snapshots**: Each workspace is Git-backed. OKCVM automatically checkpoints the sandbox after every assistant reply and exposes API endpoints so you can list snapshots or roll back to a previous turn—perfect for "oops" moments in long multi-turn projects.
