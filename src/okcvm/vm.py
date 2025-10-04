@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from itertools import count
 from typing import Any, Dict, List
 from uuid import uuid4
@@ -15,6 +16,34 @@ from .tools.base import ToolResult
 
 
 logger = get_logger(__name__)
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    try:
+        json.dumps(value, ensure_ascii=False)
+    except TypeError:
+        return repr(value)
+    return value
+
+
+def _serialise_tool_observation(observation: Any) -> Any:
+    if isinstance(observation, ToolResult):
+        payload = {
+            "success": observation.success,
+            "output": observation.output,
+            "data": _json_safe(observation.data),
+            "error": observation.error,
+        }
+        return {key: value for key, value in payload.items() if value is not None}
+    if isinstance(observation, Exception):
+        return {"success": False, "error": str(observation)}
+    return observation
 
 
 class VirtualMachine:
@@ -103,7 +132,7 @@ class VirtualMachine:
                 tool_calls_info.append({
                     "tool_name": action.tool,
                     "tool_input": action.tool_input,
-                    "tool_output": observation
+                    "tool_output": _serialise_tool_observation(observation)
                 })
 
         logger.debug(

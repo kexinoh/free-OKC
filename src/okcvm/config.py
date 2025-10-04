@@ -91,12 +91,14 @@ class WorkspaceConfig:
 
     path: Optional[str] = None
     confirm_on_start: bool = True
+    preview_base_url: Optional[str] = None
     _config_dir: Optional[Path] = None
 
     def copy(self) -> "WorkspaceConfig":
         return WorkspaceConfig(
             path=self.path,
             confirm_on_start=self.confirm_on_start,
+            preview_base_url=self.preview_base_url,
             _config_dir=self._config_dir,
         )
 
@@ -276,6 +278,7 @@ def _parse_workspace(data: Mapping[str, object] | None, *, config_dir: Path) -> 
 
     path_value: Optional[str] = None
     confirm_on_start = True
+    preview_base_url: Optional[str] = None
 
     if isinstance(data, Mapping):
         raw_path = data.get("path")
@@ -287,9 +290,21 @@ def _parse_workspace(data: Mapping[str, object] | None, *, config_dir: Path) -> 
         if "confirm_on_start" in data:
             confirm_on_start = bool(data.get("confirm_on_start"))
 
+        raw_preview = data.get("preview_base_url")
+        if isinstance(raw_preview, str) and raw_preview.strip():
+            preview_base_url = raw_preview.strip()
+        elif raw_preview not in (None, ""):
+            logger.warning("Ignoring invalid preview_base_url configuration: %s", raw_preview)
+
+    if not preview_base_url:
+        env_preview = os.environ.get("OKCVM_PREVIEW_BASE_URL")
+        if env_preview and env_preview.strip():
+            preview_base_url = env_preview.strip()
+
     workspace = WorkspaceConfig(
         path=path_value,
         confirm_on_start=confirm_on_start,
+        preview_base_url=preview_base_url,
         _config_dir=config_dir,
     )
 

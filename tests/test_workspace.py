@@ -24,6 +24,8 @@ def test_workspace_cleanup_removes_directory(tmp_path: Path) -> None:
     # second call is a no-op
     removed_again = manager.cleanup()
     assert removed_again is False
+
+
 def test_resolve_anchors_generic_absolute_path(tmp_path: Path) -> None:
     """Absolute paths outside the mount are mapped inside the workspace."""
 

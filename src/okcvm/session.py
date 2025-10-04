@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 from datetime import datetime
 from json import JSONDecodeError
 from typing import Dict, List, Optional
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from . import constants, spec
 from .config import get_config
@@ -34,8 +35,12 @@ class SessionState:
 
     def _initialise_vm(self) -> None:
         cfg = get_config()
-        workspace_root = cfg.workspace.resolve_and_prepare()
-        self.workspace = WorkspaceManager(base_dir=workspace_root)
+        workspace_config = cfg.workspace
+        workspace_root = workspace_config.resolve_and_prepare()
+        self.workspace = WorkspaceManager(
+            base_dir=workspace_root,
+            preview_base_url=workspace_config.preview_base_url,
+        )
         self.registry = ToolRegistry.from_default_spec(workspace=self.workspace)
         system_prompt = self.workspace.adapt_prompt(spec.load_system_prompt())
         self.vm = VirtualMachine(
@@ -97,6 +102,38 @@ class SessionState:
         cleaned = (client_id or "").strip()
         self.client_id = cleaned or "default"
 
+    def _preview_base_url(self) -> Optional[str]:
+        workspace = getattr(self, "workspace", None)
+        base_url = getattr(workspace, "preview_base_url", None)
+        if not base_url:
+            cfg = get_config()
+            workspace_cfg = getattr(cfg, "workspace", None)
+            base_url = getattr(workspace_cfg, "preview_base_url", None) if workspace_cfg else None
+        if isinstance(base_url, str) and base_url.strip():
+            candidate = base_url.strip()
+        else:
+            env_candidate = os.environ.get("OKCVM_PREVIEW_BASE_URL")
+            candidate = env_candidate.strip() if isinstance(env_candidate, str) else None
+        if candidate and "://" not in candidate:
+            return f"https://{candidate}".rstrip("/")
+        return candidate.rstrip("/") if isinstance(candidate, str) else None
+
+    def _resolve_preview_url(self, url: str) -> str:
+        candidate = (url or "").strip()
+        if not candidate:
+            return candidate
+
+        parsed = urlparse(candidate)
+        if parsed.scheme and parsed.netloc:
+            return candidate
+
+        base = self._preview_base_url()
+        if not base:
+            return candidate
+
+        resolved = urljoin(f"{base}/", candidate.lstrip("/"))
+        return resolved
+
     def _append_client_id_to_url(self, url: str) -> str:
         """Ensure the provided URL carries the associated client identifier."""
 
@@ -109,9 +146,17 @@ class SessionState:
         except ValueError:
             return url
 
+        preview_base = self._preview_base_url()
+        preview_host = None
+        if preview_base:
+            preview_host = urlparse(preview_base).hostname
+
         if parsed.scheme and parsed.netloc:
             host = parsed.hostname
-            if host and host not in {"127.0.0.1", "localhost", "0.0.0.0"}:
+            allowed_hosts = {"127.0.0.1", "localhost", "0.0.0.0"}
+            if preview_host:
+                allowed_hosts.add(preview_host)
+            if host and host not in allowed_hosts:
                 return url
 
         query = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -151,6 +196,7 @@ class SessionState:
         web_preview = None
         ppt_slides = []
         summary = ""
+        artifacts: List[Dict[str, object]] = []
         
         tool_calls = vm_result.get("tool_calls", [])
         if tool_calls:
@@ -174,6 +220,7 @@ class SessionState:
             )
             if isinstance(parsed_payload, dict):
                 preview_details: Dict[str, str] = {}
+                deployment_details: Dict[str, object] | None = None
 
                 def _string_field(candidate: object) -> str | None:
                     if isinstance(candidate, str) and candidate.strip():
@@ -181,7 +228,7 @@ class SessionState:
                     return None
 
                 def _maybe_update_preview(container: Dict[str, object]) -> None:
-                    nonlocal ppt_slides
+                    nonlocal ppt_slides, deployment_details
                     html_value = _string_field(
                         container.get("html")
                         or container.get("rendered_html")
@@ -204,6 +251,22 @@ class SessionState:
                             )
                     if url_value:
                         preview_details["url"] = url_value
+                    deployment_info = container.get("deployment")
+                    deployment_name = None
+                    if isinstance(deployment_info, dict):
+                        deployment_details = deployment_info
+                        deployment_name = _string_field(
+                            deployment_info.get("name")
+                            or deployment_info.get("slug")
+                        )
+
+                    title_value = _string_field(
+                        container.get("title")
+                        or container.get("name")
+                        or deployment_name
+                    )
+                    if title_value and "title" not in preview_details:
+                        preview_details["title"] = title_value
 
                     slides_value = container.get("slides")
                     if isinstance(slides_value, list):
@@ -218,9 +281,29 @@ class SessionState:
                 if preview_details:
                     url_value = preview_details.get("url")
                     if isinstance(url_value, str) and url_value:
-                        preview_details["url"] = self._append_client_id_to_url(url_value)
+                        resolved_url = self._resolve_preview_url(url_value)
+                        resolved_url = self._append_client_id_to_url(resolved_url)
+                        preview_details["url"] = resolved_url
                         if isinstance(parsed_payload, dict):
-                            parsed_payload["preview_url"] = preview_details["url"]
+                            parsed_payload["preview_url"] = resolved_url
+
+                        if isinstance(deployment_details, dict) and resolved_url:
+                            artifact_name = _string_field(
+                                deployment_details.get("name")
+                                or deployment_details.get("slug")
+                                or preview_details.get("title")
+                                or "Web preview"
+                            )
+                            artifact_entry: Dict[str, object] = {
+                                "type": "web",
+                                "url": resolved_url,
+                            }
+                            if artifact_name:
+                                artifact_entry["name"] = artifact_name
+                            deployment_id = deployment_details.get("id")
+                            if isinstance(deployment_id, (str, int)):
+                                artifact_entry["deployment_id"] = str(deployment_id)
+                            artifacts.append(artifact_entry)
                     web_preview = preview_details
 
                 output_text = parsed_payload.get("output")
@@ -253,6 +336,7 @@ class SessionState:
             "meta": meta,
             "web_preview": web_preview,
             "ppt_slides": ppt_slides,
+            "artifacts": artifacts,
             "vm_history": self.vm.describe_history(limit=25),
             "workspace_state": workspace_state,
         }
@@ -285,6 +369,7 @@ class SessionState:
                 {"title": "灵感孵化室能力", "bullets": ["网页 / PPT 一体生成", "模型调用透明可追踪", "可视化实时预览"]},
                 {"title": "示例需求", "bullets": ["品牌落地页", "产品发布会演示", "活动招募物料"]},
             ],
+            "artifacts": [],
             "vm": self.vm.describe(),
             "workspace_state": workspace_state,
         }

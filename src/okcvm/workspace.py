@@ -194,6 +194,7 @@ class WorkspaceManager:
         base_dir: Path | str | None = None,
         mount_root: PurePosixPath | str = PurePosixPath("/mnt"),
         prefix: str = "okcvm",
+        preview_base_url: str | None = None,
     ) -> None:
         token = secrets.token_hex(8)
         mount_root_path = (
@@ -229,12 +230,17 @@ class WorkspaceManager:
         self._session_id = mount_path.name
         self._storage_root = storage_root
         self._deployments_root = deployments_root
+        self._preview_base_url = preview_base_url.rstrip("/") if isinstance(preview_base_url, str) else None
         candidate_state = GitWorkspaceState(internal_root)
         self.state = candidate_state if candidate_state.enabled else _NullWorkspaceState()
 
     @property
     def paths(self) -> WorkspacePaths:
         return self._paths
+
+    @property
+    def preview_base_url(self) -> Optional[str]:
+        return self._preview_base_url
 
     @property
     def storage_root(self) -> Path:
