@@ -1,6 +1,7 @@
 export const chatMessages = document.getElementById('chat-messages');
 export const chatForm = document.getElementById('chat-form');
 export const userInput = document.getElementById('user-input');
+export const chatPanel = document.querySelector('.chat-panel');
 export const statusPill = document.getElementById('status-pill');
 export const modelLogList = document.getElementById('model-log');
 export const modelLogEmpty = document.getElementById('model-log-empty');
