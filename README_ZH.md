@@ -97,7 +97,7 @@ OKCVM 内置了一个功能齐全的 Web 应用，让你通过图形界面与智
 # 在执行过 `pip install -e .[dev]` 之后
 okcvm-server
 ```
-这个命令行入口与 `python -m okcvm.server` 使用同一个 Typer 应用，
+这个命令行入口与 `cd src & python -m okcvm.server` 使用同一个 Typer 应用，
 因此无需再切换目录，直接在项目根目录即可启动服务，默认地址为
 `http://localhost:8000`。
 
