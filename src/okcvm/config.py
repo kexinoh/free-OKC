@@ -341,11 +341,12 @@ def _merge_endpoint_config(
     yaml_base_url = yaml_mapping.get("base_url")
     yaml_api_key = yaml_mapping.get("api_key")
     yaml_api_key_env_raw = yaml_mapping.get("api_key_env")
-    yaml_api_key_env = (
-        str(yaml_api_key_env_raw).strip()
-        if isinstance(yaml_api_key_env_raw, (str, bytes))
-        else None
-    )
+    if isinstance(yaml_api_key_env_raw, str):
+        yaml_api_key_env = yaml_api_key_env_raw.strip()
+    elif isinstance(yaml_api_key_env_raw, bytes):
+        yaml_api_key_env = yaml_api_key_env_raw.decode().strip()
+    else:
+        yaml_api_key_env = None
     yaml_supports_streaming = yaml_mapping.get("supports_streaming")
 
     existing_model = existing.model if existing else None
