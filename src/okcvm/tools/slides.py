@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 from bs4 import BeautifulSoup
 from pptx import Presentation
@@ -19,6 +19,21 @@ def _parse_slides(html: str) -> List[BeautifulSoup]:
     if not slides:
         raise ToolError("No elements with class 'ppt-slide' were found in the HTML")
     return slides
+
+
+def _extract_slide_outline(
+    slide_markup: BeautifulSoup, index: int
+) -> Tuple[str, List[str], List[str], List[str]]:
+    title_tag = slide_markup.find(["h1", "h2", "h3"])
+    title = title_tag.get_text(strip=True) if title_tag else ""
+    if not title:
+        title = f"Slide {index + 1}"
+
+    paragraphs = [p.get_text(strip=True) for p in slide_markup.find_all("p") if p.get_text(strip=True)]
+    list_items = [li.get_text(strip=True) for li in slide_markup.find_all("li") if li.get_text(strip=True)]
+    outline = list_items or paragraphs
+
+    return title, paragraphs, list_items, outline
 
 
 def _default_output_path() -> Path:
@@ -50,29 +65,46 @@ class SlidesGeneratorTool(Tool):
         presentation = Presentation()
         blank_layout = presentation.slide_layouts[6]
 
-        for slide_markup in slides:
+        preview_slides = []
+
+        for slide_index, slide_markup in enumerate(slides):
             slide = presentation.slides.add_slide(blank_layout)
-            title = slide_markup.find(["h1", "h2", "h3"])
+            title, paragraphs, list_items, outline = _extract_slide_outline(slide_markup, slide_index)
+
             if title:
-                _add_textbox(slide, title.get_text(strip=True), left=0.5, top=0.3, width=9.0, height=1.2, font_size=40)
-            paragraphs = slide_markup.find_all("p")
-            for idx, paragraph in enumerate(paragraphs):
+                _add_textbox(slide, title, left=0.5, top=0.3, width=9.0, height=1.2, font_size=40)
+
+            for idx, text in enumerate(paragraphs):
                 _add_textbox(
                     slide,
-                    paragraph.get_text(strip=True),
+                    text,
                     left=0.8,
                     top=1.8 + 0.8 * idx,
                     width=8.5,
                     height=0.7,
                     font_size=24,
                 )
-            for li_index, bullet in enumerate(slide_markup.find_all("li")):
-                text = f"• {bullet.get_text(strip=True)}"
-                _add_textbox(slide, text, left=1.0, top=2.5 + li_index * 0.6, width=8.0, height=0.6, font_size=22)
+
+            for li_index, bullet in enumerate(list_items):
+                _add_textbox(
+                    slide,
+                    f"• {bullet}",
+                    left=1.0,
+                    top=2.5 + li_index * 0.6,
+                    width=8.0,
+                    height=0.6,
+                    font_size=22,
+                )
+
+            preview_slides.append({"title": title, "bullets": outline})
 
         path = Path(output_path).expanduser() if output_path else _default_output_path()
         presentation.save(path)
-        return ToolResult(success=True, output=f"Slides saved to {path}", data={"path": str(path)})
+        return ToolResult(
+            success=True,
+            output=f"Slides saved to {path}",
+            data={"path": str(path), "slides": preview_slides},
+        )
 
 
 __all__ = ["SlidesGeneratorTool"]
