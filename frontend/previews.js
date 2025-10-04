@@ -13,6 +13,10 @@ import {
   pptSlideTemplate,
 } from './elements.js';
 
+const HTML_PREVIEW_SANDBOX = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox';
+const EMPTY_PREVIEW_SANDBOX = 'allow-popups';
+let previewSandboxMode = null;
+
 const modelLogs = [];
 let currentWebPreview = null;
 let currentPptSlides = [];
@@ -54,6 +58,30 @@ export function resetModelLogs() {
     modelLogEmpty.hidden = false;
   }
 }
+
+function applyPreviewSandbox(mode) {
+  if (!webPreviewFrame) return;
+
+  if (previewSandboxMode === mode) {
+    return;
+  }
+
+  switch (mode) {
+    case 'html':
+      webPreviewFrame.setAttribute('sandbox', HTML_PREVIEW_SANDBOX);
+      break;
+    case 'url':
+      webPreviewFrame.removeAttribute('sandbox');
+      break;
+    default:
+      webPreviewFrame.setAttribute('sandbox', EMPTY_PREVIEW_SANDBOX);
+      break;
+  }
+
+  previewSandboxMode = mode;
+}
+
+applyPreviewSandbox('empty');
 
 function normalizeWebPreview(preview) {
   if (!preview || typeof preview !== 'object') {
@@ -100,7 +128,9 @@ export function updateWebPreview(preview) {
 
   if (!hasContent) {
     if (webPreviewFrame) {
+      applyPreviewSandbox('empty');
       webPreviewFrame.srcdoc = '';
+      webPreviewFrame.src = 'about:blank';
       webPreviewFrame.hidden = true;
     }
     if (webPreviewEmpty) {
@@ -115,7 +145,20 @@ export function updateWebPreview(preview) {
 
   if (hasHtml) {
     if (webPreviewFrame) {
+      applyPreviewSandbox('html');
+      webPreviewFrame.src = 'about:blank';
       webPreviewFrame.srcdoc = normalizedPreview.html;
+      webPreviewFrame.hidden = false;
+    }
+    if (webPreviewEmpty) {
+      webPreviewEmpty.hidden = true;
+      webPreviewEmpty.textContent = defaultWebPreviewEmptyMessage;
+    }
+  } else if (hasUrl) {
+    if (webPreviewFrame) {
+      applyPreviewSandbox('url');
+      webPreviewFrame.srcdoc = '';
+      webPreviewFrame.src = normalizedPreview.url;
       webPreviewFrame.hidden = false;
     }
     if (webPreviewEmpty) {
@@ -124,7 +167,9 @@ export function updateWebPreview(preview) {
     }
   } else {
     if (webPreviewFrame) {
+      applyPreviewSandbox('empty');
       webPreviewFrame.srcdoc = '';
+      webPreviewFrame.src = 'about:blank';
       webPreviewFrame.hidden = true;
     }
     if (webPreviewEmpty) {
@@ -137,6 +182,7 @@ export function updateWebPreview(preview) {
     openWebPreviewButton.disabled = false;
   }
 }
+
 
 export function updatePptPreview(slides) {
   currentPptSlides = Array.isArray(slides) ? slides : [];
