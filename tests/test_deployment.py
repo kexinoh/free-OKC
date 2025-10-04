@@ -87,6 +87,9 @@ def test_deploy_website_and_start_server(tmp_path, deployed_site_pid):
     pid = server_info["pid"]
     port = server_info["port"]
     preview_url = manifest_data["preview_url"]
+    preview_path = manifest_data["preview_path"]
+    assert preview_path == f"/?s={manifest_data['id']}&path=index.html"
+    assert preview_url.startswith("http://127.0.0.1:")
     assert preview_url.endswith("&path=index.html")
     server_preview_url = manifest_data.get("server_preview_url")
     assert server_preview_url is not None
@@ -138,7 +141,9 @@ def test_deploy_website_without_starting_server(tmp_path):
     # 验证没有服务器信息
     assert manifest_data["server_info"] is None
     assert manifest_data.get("server_preview_url") is None
+    assert manifest_data["preview_path"].endswith("&path=index.html")
     assert manifest_data["preview_url"].endswith("&path=index.html")
+    assert manifest_data["preview_url"].startswith("/?s=")
     # 验证 PID 不存在（以防万一）
     assert not psutil.pid_exists(manifest_data.get("server_info", {}).get("pid", -1))
 

@@ -47,6 +47,7 @@ class ToolRegistry:
         self._tools: Dict[str, Tool] = {}
         self._langchain_cache: Dict[str, object] = {}
         self._workspace = workspace
+        self._pending_invocations: List[Dict[str, object]] = []
 
     @classmethod
     def from_default_spec(cls, *, workspace: WorkspaceManager | None = None) -> "ToolRegistry":
@@ -61,6 +62,25 @@ class ToolRegistry:
             raise KeyError(f"Tool '{tool.name}' is not part of the manifest")
         self._tools[tool.name] = tool
         self._langchain_cache.pop(tool.name, None)
+
+    def _record_tool_invocation(
+        self,
+        *,
+        name: str,
+        tool_input: Mapping[str, Any] | Any,
+        payload: Mapping[str, Any],
+        serialized: str,
+    ) -> None:
+        """Store invocation details until consumed by the virtual machine."""
+
+        self._pending_invocations.append(
+            {
+                "tool_name": name,
+                "tool_input": tool_input,
+                "tool_output": serialized,
+                "payload": payload,
+            }
+        )
 
     def register_default_implementations(self) -> None:
         mapping: Mapping[str, type[Tool]] = {
@@ -122,6 +142,13 @@ class ToolRegistry:
     def call(self, name: str, **kwargs) -> ToolResult:
         tool = self.get(name)
         return tool.call(**kwargs)
+
+    def consume_pending_invocations(self) -> List[Dict[str, Any]]:
+        """Return and clear any tool invocations recorded via LangChain wrappers."""
+
+        pending = list(self._pending_invocations)
+        self._pending_invocations.clear()
+        return pending
 
     def list_specs(self) -> List[ToolSpec]:
         return list(self._specs.values())
@@ -242,7 +269,14 @@ class ToolRegistry:
                             "output": _safe_json_value(result.output),
                             "data": _safe_json_value(result.data),
                         }
-                        return json.dumps(payload_dict, ensure_ascii=False)
+                        serialized = json.dumps(payload_dict, ensure_ascii=False)
+                        self._record_tool_invocation(
+                            name=tool_name,
+                            tool_input=kwargs,
+                            payload=payload_dict,
+                            serialized=serialized,
+                        )
+                        return serialized
 
                     _invoke.__name__ = f"invoke_{tool_name.replace('-', '_')}"
                     _invoke.__doc__ = (

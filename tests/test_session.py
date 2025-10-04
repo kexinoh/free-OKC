@@ -58,10 +58,12 @@ def test_session_collects_preview_from_non_terminal_tool(monkeypatch):
         "data": {
             "deployment_id": "761043",
             "preview_url": "/?s=761043&path=index.html",
+            "preview_path": "/?s=761043&path=index.html",
             "deployment": {
                 "id": "761043",
                 "name": "Hello World",
                 "preview_url": "/?s=761043&path=index.html",
+                "preview_path": "/?s=761043&path=index.html",
             },
         },
     }
@@ -91,3 +93,57 @@ def test_session_collects_preview_from_non_terminal_tool(monkeypatch):
 
     assert result["ppt_slides"] == []
     assert result["meta"]["summary"].startswith("Wrote file")
+
+
+def test_session_collects_preview_without_intermediate_steps(tmp_path, monkeypatch):
+    from okcvm import llm as llm_module
+    from okcvm import vm as vm_module
+
+    workspace_dir = tmp_path / "workspace"
+    configure(
+        workspace=WorkspaceConfig(
+            path=str(workspace_dir), preview_base_url="http://127.0.0.1:9000"
+        )
+    )
+
+    class FakeChain:
+        def __init__(self, registry):
+            self.registry = registry
+
+        def invoke(self, inputs):
+            workspace = self.registry.workspace
+            site_root = workspace.resolve("site")
+            site_root.mkdir(parents=True, exist_ok=True)
+            (site_root / "index.html").write_text(
+                "<html><body><h1>Hello</h1></body></html>",
+                encoding="utf-8",
+            )
+
+            deploy_tool = next(
+                tool
+                for tool in self.registry.get_langchain_tools()
+                if tool.name == "mshtools-deploy_website"
+            )
+            deploy_tool.func(
+                directory=str(site_root),
+                site_name="LangChain Demo",
+                start_server=False,
+            )
+
+            return {
+                "output": "网站已部署。",
+                "intermediate_steps": [],
+            }
+
+    factory = lambda registry: FakeChain(registry)
+    monkeypatch.setattr(llm_module, "create_llm_chain", factory)
+    monkeypatch.setattr(vm_module, "create_llm_chain", factory)
+
+    state = session_module.SessionState()
+    result = state.respond("生成网页")
+
+    preview = result["web_preview"]
+    assert preview is not None
+    assert preview["url"].startswith("http://127.0.0.1:9000")
+    assert preview["deployment_id"]
+    assert any(artifact["url"] == preview["url"] for artifact in result["artifacts"])

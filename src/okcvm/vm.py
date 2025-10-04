@@ -83,6 +83,7 @@ class VirtualMachine:
         except Exception as e:
             # 捕获并返回错误信息，防止服务崩溃
             logger.exception("Error invoking LangChain agent")
+            self.registry.consume_pending_invocations()
             return {
                 "reply": f"An error occurred: {e}",
                 "tool_calls": [],
@@ -105,6 +106,26 @@ class VirtualMachine:
                     "tool_input": action.tool_input,
                     "tool_output": observation
                 })
+
+        pending_invocations = self.registry.consume_pending_invocations()
+        if pending_invocations:
+            existing_pairs = {
+                (call.get("tool_name"), call.get("tool_output"))
+                for call in tool_calls_info
+            }
+            for record in pending_invocations:
+                pair = (record.get("tool_name"), record.get("tool_output"))
+                if pair in existing_pairs:
+                    continue
+                tool_calls_info.append(
+                    {
+                        "tool_name": record.get("tool_name"),
+                        "tool_input": record.get("tool_input"),
+                        "tool_output": record.get("tool_output"),
+                        "source": "registry",
+                    }
+                )
+                existing_pairs.add(pair)
 
         logger.debug(
             "Utterance processed (reply_length=%s tool_calls=%s)",
