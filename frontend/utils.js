@@ -186,68 +186,53 @@ export async function streamJson(url, options = {}, onEvent) {
       }
     : () => {};
 
+  const parseAndEmit = (rawEvent, errorContext = '') => {
+    const dataLines = rawEvent
+      .split('\n')
+      .filter((line) => line.startsWith('data:'));
+    if (dataLines.length === 0) {
+      return null;
+    }
+    const dataString = dataLines.map((line) => line.slice(5).trim()).join('\n');
+    if (!dataString) {
+      return null;
+    }
+    let payload;
+    try {
+      payload = JSON.parse(dataString);
+    } catch (error) {
+      console.warn(`无法解析${errorContext}流式事件：`, error);
+      return null;
+    }
+    safeEmit(payload);
+    if (payload?.type === 'final') {
+      finalPayload = payload.payload ?? null;
+      return 'final';
+    }
+    if (payload?.type === 'error') {
+      const message =
+        typeof payload.message === 'string' && payload.message.trim()
+          ? payload.message.trim()
+          : '流式响应出错';
+      throw new Error(message);
+    }
+    return null;
+  };
+
   const processBuffer = (flush = false) => {
     let boundary;
     while ((boundary = buffer.indexOf('\n\n')) !== -1) {
       const rawEvent = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
-      const dataLines = rawEvent
-        .split('\n')
-        .filter((line) => line.startsWith('data:'));
-      if (dataLines.length === 0) {
-        continue;
-      }
-      const dataString = dataLines.map((line) => line.slice(5).trim()).join('\n');
-      if (!dataString) {
-        continue;
-      }
-      let payload;
-      try {
-        payload = JSON.parse(dataString);
-      } catch (error) {
-        console.warn('无法解析流式事件：', error);
-        continue;
-      }
-      safeEmit(payload);
-      if (payload?.type === 'final') {
-        finalPayload = payload.payload ?? null;
-        return 'final';
-      }
-      if (payload?.type === 'error') {
-        const message =
-          typeof payload.message === 'string' && payload.message.trim()
-            ? payload.message.trim()
-            : '流式响应出错';
-        throw new Error(message);
-      }
+      const state = parseAndEmit(rawEvent, '');
+      if (state === 'final') return 'final';
     }
 
     if (flush && buffer.trim()) {
       const tail = buffer.trim();
       buffer = '';
-      const tailLines = tail.split('\n').filter((line) => line.startsWith('data:'));
-      if (tailLines.length > 0) {
-        const tailString = tailLines.map((line) => line.slice(5).trim()).join('\n');
-        if (tailString) {
-          try {
-            const payload = JSON.parse(tailString);
-            safeEmit(payload);
-            if (payload?.type === 'final') {
-              finalPayload = payload.payload ?? null;
-              return 'final';
-            }
-            if (payload?.type === 'error') {
-              const message =
-                typeof payload.message === 'string' && payload.message.trim()
-                  ? payload.message.trim()
-                  : '流式响应出错';
-              throw new Error(message);
-            }
-          } catch (error) {
-            console.warn('无法解析尾部流式事件：', error);
-          }
-        }
-      }
+      const state = parseAndEmit(tail, '尾部');
+      if (state === 'final') return 'final';
     }
 
     return null;
