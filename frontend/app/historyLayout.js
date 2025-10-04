@@ -1,11 +1,14 @@
-function resolveChatPanel(chatPanel, chatMessages) {
+function resolveLayoutTarget(layoutTarget, chatPanel, chatMessages) {
+  if (layoutTarget instanceof HTMLElement) {
+    return layoutTarget;
+  }
   if (chatPanel instanceof HTMLElement) {
     return chatPanel;
   }
   return chatMessages?.closest?.('.chat-panel') ?? null;
 }
 
-export function createHistoryLayoutManager({ historySidebar, chatPanel, chatMessages }) {
+export function createHistoryLayoutManager({ historySidebar, layoutTarget, chatPanel, chatMessages }) {
   if (!(historySidebar instanceof HTMLElement)) {
     return {
       requestLayoutSync: () => {},
@@ -18,17 +21,17 @@ export function createHistoryLayoutManager({ historySidebar, chatPanel, chatMess
   let resizeObserver = null;
 
   const applyMeasurements = () => {
-    const targetChatPanel = resolveChatPanel(chatPanel, chatMessages);
-    if (!(targetChatPanel instanceof HTMLElement)) {
+    const target = resolveLayoutTarget(layoutTarget, chatPanel, chatMessages);
+    if (!(target instanceof HTMLElement)) {
       historySidebar.style.removeProperty('--history-offset');
       historySidebar.style.removeProperty('--history-height');
       return;
     }
 
     const sidebarRect = historySidebar.getBoundingClientRect();
-    const chatRect = targetChatPanel.getBoundingClientRect();
-    const offset = Math.max(chatRect.top - sidebarRect.top, 0);
-    const height = chatRect.height;
+    const targetRect = target.getBoundingClientRect();
+    const offset = Math.max(targetRect.top - sidebarRect.top, 0);
+    const height = targetRect.height;
 
     if (!Number.isFinite(offset) || !Number.isFinite(height) || height <= 0) {
       historySidebar.style.removeProperty('--history-offset');

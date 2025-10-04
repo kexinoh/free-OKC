@@ -279,7 +279,7 @@ export function createMessageRenderer({
     const target = conversation ?? getCurrentConversation();
 
     if (editingController.isEditing()) {
-      editingController.cancelActiveEdit({ focusInput: false });
+      editingController.cancelActiveEdit({ focusInput: false, focusEditButton: false });
     }
 
     if (!target) {

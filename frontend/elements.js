@@ -1,8 +1,8 @@
 export const chatMessages = document.getElementById('chat-messages');
 export const chatForm = document.getElementById('chat-form');
 export const userInput = document.getElementById('user-input');
-export const cancelEditButton = document.getElementById('cancel-edit');
 export const chatEditingHint = document.getElementById('chat-editing-hint');
+export const appShell = document.querySelector('.app-shell');
 export const chatPanel = document.querySelector('.chat-panel');
 export const statusPill = document.getElementById('status-pill');
 export const modelLogList = document.getElementById('model-log');

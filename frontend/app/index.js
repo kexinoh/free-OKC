@@ -2,10 +2,9 @@ import {
   chatMessages,
   chatForm,
   userInput,
-  cancelEditButton,
-  chatEditingHint,
   chatPanel,
   statusPill,
+  chatEditingHint,
   configForm,
   settingsToggle,
   settingsOverlay,
@@ -17,6 +16,7 @@ import {
   conversationList,
   conversationEmptyState,
   newConversationButton,
+  appShell,
 } from '../elements.js';
 import {
   getConversations,
@@ -48,12 +48,15 @@ import { createConversationPanel } from './conversationPanel.js';
 
 let previousFocusedElement = null;
 
-const historyLayout = createHistoryLayoutManager({ historySidebar, chatPanel, chatMessages });
+const historyLayout = createHistoryLayoutManager({
+  historySidebar,
+  layoutTarget: appShell,
+  chatPanel,
+  chatMessages,
+});
 const sendButton = chatForm?.querySelector('.send-button') ?? null;
 
-const defaultSendButtonLabel = sendButton?.textContent?.trim() || '发送';
-const defaultInputPlaceholder = userInput?.getAttribute('placeholder') ?? '';
-const editingHintFallback = '正在编辑历史消息，点击“保存”完成修改。';
+const editingHintFallback = '正在编辑历史消息，点击“发送”完成修改。';
 const editingHintInitial = chatEditingHint?.textContent?.trim();
 const defaultEditingHintText =
   editingHintInitial && editingHintInitial.length > 0 ? editingHintInitial : editingHintFallback;
@@ -69,10 +72,7 @@ const editingController = createEditingController({
   chatForm,
   userInput,
   sendButton,
-  cancelEditButton,
   chatEditingHint,
-  defaultSendButtonLabel,
-  defaultInputPlaceholder,
   defaultEditingHintText,
   findMessageElementById: (messageId) => messageRendererApi?.findMessageElementById(messageId) ?? null,
   renderConversationList: () => conversationPanelApi?.renderConversationList(),
@@ -84,6 +84,7 @@ const editingController = createEditingController({
   commitBranchTransition,
   syncActiveBranchSnapshots,
   saveConversationsToStorage,
+  setMessageActionsDisabled,
 });
 
 messageRendererApi = createMessageRenderer({
@@ -117,14 +118,14 @@ conversationPanelApi = createConversationPanel({
 });
 
 function setInteractionDisabled(disabled) {
+  if (chatForm) {
+    chatForm.dataset.interactionDisabled = disabled ? 'true' : 'false';
+  }
   if (userInput) {
     userInput.disabled = disabled;
   }
   if (sendButton) {
     sendButton.disabled = disabled;
-  }
-  if (cancelEditButton) {
-    cancelEditButton.disabled = disabled;
   }
 }
 
@@ -415,11 +416,6 @@ function handleUserSubmit(event) {
   if (!input) return;
   const rawValue = typeof input.value === 'string' ? input.value : '';
 
-  if (editingController.isEditing()) {
-    editingController.applyActiveEdit(rawValue);
-    return;
-  }
-
   const value = rawValue.trim();
   if (!value) return;
   messageRendererApi.addAndRenderMessage('user', value);
@@ -463,9 +459,18 @@ function initializeEventListeners() {
     chatForm.addEventListener('submit', handleUserSubmit);
   }
 
-  if (cancelEditButton) {
-    cancelEditButton.addEventListener('click', () => {
-      editingController.cancelActiveEdit({ focusInput: true });
+  if (userInput) {
+    userInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      if (chatForm?.requestSubmit) {
+        chatForm.requestSubmit();
+      } else if (chatForm) {
+        chatForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      }
     });
   }
 
@@ -584,7 +589,7 @@ function initializeEventListeners() {
     if (event.key !== 'Escape') return;
     if (editingController.isEditing()) {
       event.preventDefault();
-      editingController.cancelActiveEdit({ focusInput: true });
+      editingController.cancelActiveEdit({ focusInput: true, focusEditButton: false });
       return;
     }
     if (!settingsOverlay?.hidden) {
@@ -609,7 +614,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', historyLayout.requestLayoutSync);
   }
 
-  const observedChatPanel = chatPanel instanceof HTMLElement ? chatPanel : chatMessages?.closest('.chat-panel');
+  const observedChatPanel =
+    appShell instanceof HTMLElement
+      ? appShell
+      : chatPanel instanceof HTMLElement
+      ? chatPanel
+      : chatMessages?.closest('.chat-panel');
   historyLayout.observe(observedChatPanel);
   historyLayout.requestLayoutSync();
 
