@@ -45,8 +45,7 @@ class EventStreamPublisher:
             return
 
         def _enqueue() -> None:
-            if not self._closed:
-                self._queue.put_nowait(event)
+            self._queue.put_nowait(event)
 
         self._loop.call_soon_threadsafe(_enqueue)
 
@@ -70,7 +69,8 @@ class EventStreamPublisher:
                     break
                 payload = json.dumps(event, ensure_ascii=False)
                 yield f"data: {payload}\n\n".encode("utf-8")
-                if event.get("type") in {"final", "error"}:
+                event_type = event.get("type")
+                if event_type in {"error", "stop"}:
                     break
         finally:
             self._closed = True
