@@ -116,9 +116,34 @@ class SessionStore:
     def reset(self) -> None:
         with self._lock:
             self._sessions.clear()
+        state.clear()
 
 
 session_store = SessionStore()
+
+
+class _LegacyStateProxy:
+    """Expose the most recently accessed session for backwards compatibility."""
+
+    def __init__(self) -> None:
+        self._session: SessionState | None = None
+
+    def set(self, session: SessionState | None) -> None:
+        self._session = session
+
+    def get(self) -> SessionState:
+        if self._session is None:
+            raise AttributeError("state has not been initialised")
+        return self._session
+
+    def clear(self) -> None:
+        self._session = None
+
+    def __getattr__(self, item: str):  # type: ignore[override]
+        return getattr(self.get(), item)
+
+
+state = _LegacyStateProxy()
 
 # --- Helper Functions ---
 def _resolve_client_id(request: Request, explicit: Optional[str] = None) -> str:
@@ -145,6 +170,7 @@ def _get_session(request: Request, client_id: Optional[str] = None) -> SessionSt
     session = session_store.get(resolved, create=True)
     if session is None:  # pragma: no cover - defensive
         raise HTTPException(status_code=500, detail="Failed to initialise session")
+    state.set(session)
     return session
 
 

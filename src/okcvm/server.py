@@ -9,7 +9,7 @@ from okcvm.config import get_config, load_config_from_yaml
 cli = typer.Typer(
     name="OKCVM Server",
     help="🚀 Starts the OK Computer Virtual Machine server.",
-    add_completion=False
+    add_completion=False,
 )
 
 def _get_default_config_path() -> Path:
@@ -62,22 +62,11 @@ def main(
             "Proceed with using this workspace directory?", default=False
         )
         if not confirmed:
-            typer.echo(
-                typer.style(
-                    "Server start aborted. Please adjust the workspace path in "
-                    f"{config_path} before retrying.",
-                    fg=typer.colors.RED,
-                )
+            message = (
+                "Server start aborted. Please adjust the workspace path in "
+                f"{config_path} before retrying."
             )
-            typer.echo(
-                typer.style(
-                    "Server start aborted. Please adjust the workspace path in "
-                    f"{config_path} before retrying.",
-                    fg=typer.colors.RED,
-                )
-            )
-            # Log the abort event for monitoring purposes
-            typer.echo("Please adjust the workspace path in {config_path} before retrying.")
+            typer.echo(typer.style(message, fg=typer.colors.RED))
             return  # Exit the function gracefully
 
     workspace_cfg.resolve_and_prepare()
