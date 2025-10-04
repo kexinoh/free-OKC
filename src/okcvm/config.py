@@ -437,7 +437,7 @@ def _parse_workspace(data: Mapping[str, object] | None, *, config_dir: Path) -> 
 
 
 def _load_sidecar_env_files(path: Path) -> None:
-    """Load ``.env`` files located next to the provided configuration path."""
+    """Load ``.env`` files from the config file's directory and the current working directory."""
 
     candidates = []
     try:
