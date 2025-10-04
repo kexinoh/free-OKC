@@ -121,7 +121,7 @@ directories. The service will start on `http://localhost:8000`.
 > okcvm-server
 > ```
 >
-> You can always fall back to `python -m okcvm.server` after confirming you are
+> You can always fall back to `cd src & python -m okcvm.server` after confirming you are
 > using the correct interpreter.
 
 #### 2. Open the UI
