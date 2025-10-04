@@ -9,11 +9,11 @@
 
 ## 客户端标识（`client_id`）
 后端会为每一个逻辑会话维护独立的工作空间与历史记录。服务器通过以下优先级解析客户端标识：
-1. 显式传入的查询参数 `client_id`
-2. HTTP 头 `x-okc-client-id`
-3. Cookie `okc_client_id`
-4. 查询参数 `client_id`
-5. 默认值 `default`
+1. FastAPI 解析到的 `client_id` 参数（例如查询字符串或路由参数显式声明）。
+2. HTTP 头 `x-okc-client-id`。
+3. Cookie `okc_client_id`。
+4. 查询字符串中剩余的 `client_id` 值（兜底检查）。
+5. 默认值 `default`。
 
 客户端可任选一种方式传递标识，推荐在浏览器环境下使用 Cookie，并在需要跨标签共享状态时使用 HTTP 头。所有会返回带链接的字段（如预览地址、工件下载地址）都会自动补全 `client_id` 查询参数，以便前端在同一会话上下文内继续访问。
 

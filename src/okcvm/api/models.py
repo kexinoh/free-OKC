@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from ..config import MediaConfig, ModelEndpointConfig
+from ..config import ModelEndpointConfig
 
 
 class EndpointConfigPayload(BaseModel):
@@ -61,13 +61,3 @@ class SnapshotRestorePayload(BaseModel):
     """Payload to restore the workspace to an earlier snapshot."""
 
     snapshot_id: str = Field(..., description="Git commit identifier to restore")
-
-
-def build_media_config(payload: ConfigUpdatePayload) -> MediaConfig:
-    """Helper to build MediaConfig from a payload."""
-    return MediaConfig(
-        image=payload.image.to_model() if payload.image else None,
-        speech=payload.speech.to_model() if payload.speech else None,
-        sound_effects=payload.sound_effects.to_model() if payload.sound_effects else None,
-        asr=payload.asr.to_model() if payload.asr else None,
-    )

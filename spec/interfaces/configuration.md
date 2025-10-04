@@ -27,13 +27,18 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `chat` | `object` | （可选）聊天模型配置。字段为 `model`、`base_url`、`api_key`。若 `model` 或 `base_url` 留空，则视为删除该配置。|
-| `image` | `object` | （可选）图像生成端点配置。结构同上。|
-| `speech` | `object` | （可选）语音合成端点配置。|
-| `sound_effects` | `object` | （可选）音效端点配置。|
-| `asr` | `object` | （可选）语音识别端点配置。|
+| `chat` | `object \| null` | （可选）聊天模型配置。字段为 `model`、`base_url`、`api_key`。显式提交 `null` 或者 `model`/`base_url` 为空字符串会清除该段配置。|
+| `image` | `object \| null` | （可选）图像生成端点配置。结构同上。|
+| `speech` | `object \| null` | （可选）语音合成端点配置。|
+| `sound_effects` | `object \| null` | （可选）音效端点配置。|
+| `asr` | `object \| null` | （可选）语音识别端点配置。|
 
 > **提示**：服务器会在日志中打点更新内容，并在返回体中隐藏任何明文 API Key，方便审计同时避免泄漏。
+
+- **部分更新规则**：
+  1. 仅当请求体显式携带对应字段时才会修改该段配置；缺省字段会沿用现有值。
+  2. `api_key` 字段留空或缺省时，服务器会继续沿用已保存的密钥；若希望清除密钥，请显式传入空字符串。
+  3. 端点对象中缺少 `model` 或 `base_url` 会被视为删除该段配置。
 
 - **响应体**：同 `GET /api/config`。
 - **错误码**：当字段缺失或值非法导致配置更新失败时返回 `400 Bad Request`，`detail` 字段包含失败原因。
