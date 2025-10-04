@@ -10,8 +10,9 @@ import subprocess
 import sys
 from contextlib import closing
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlparse
 
+from ..config import get_config
 from ..workspace import WorkspaceError, WorkspaceManager
 from .base import Tool, ToolError, ToolResult
 
@@ -248,8 +249,14 @@ class DeployWebsiteTool(Tool):
             "session_id": self._workspace.session_id,
         }
 
-        preview_url = f"/?s={deployment_id}&path={quote(entry_path)}"
-        manifest["preview_url"] = preview_url
+        preview_path = f"/?s={deployment_id}&path={quote(entry_path)}"
+        manifest["preview_path"] = preview_path
+        preview_url = preview_path
+
+        cfg = get_config()
+        workspace_cfg = getattr(cfg, "workspace", None)
+        preview_base_url = getattr(workspace_cfg, "preview_base_url", None) if workspace_cfg else None
+
         manifest["entry_path"] = entry_path
 
         if start_server:
@@ -262,10 +269,13 @@ class DeployWebsiteTool(Tool):
                     "status": "running" if process and process.poll() is None else "unknown",
                 }
                 manifest["server_preview_url"] = server_preview_url
+                if not preview_base_url:
+                    parsed_server = urlparse(server_preview_url)
+                    preview_base_url = f"{parsed_server.scheme}://{parsed_server.netloc}"
                 output = (
                     "Deployment complete. Site is now available via the FastAPI preview endpoint.\n"
                     f"  Deployment ID: {deployment_id}\n"
-                    f"  Preview URL: {preview_url}\n"
+                    f"  Preview URL: {urljoin(preview_base_url, preview_path) if preview_base_url else preview_path}\n"
                     f"  Static server port: {port}\n"
                     f"  Direct server URL: {server_preview_url}"
                 )
@@ -290,6 +300,10 @@ class DeployWebsiteTool(Tool):
                 f"  Preview URL: {preview_url}"
             )
 
+        if preview_base_url:
+            preview_url = urljoin(preview_base_url, preview_path)
+        manifest["preview_url"] = preview_url
+
         deployment_manifest_path = target / "deployment.json"
         deployment_manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         self._update_index(manifest)
@@ -301,6 +315,7 @@ class DeployWebsiteTool(Tool):
             "index_path": str(self._manifest_index),
             "target": manifest["target"],
             "preview_url": manifest["preview_url"],
+            "preview_path": preview_path,
         }
         return ToolResult(success=True, output=output, data=data)
 
