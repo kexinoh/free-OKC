@@ -15,6 +15,9 @@ covers the moving parts you will touch most often when extending the system.
 - The FastAPI `/api/config` route deserialises incoming payloads into the same
   dataclasses, redacts secrets in logs, and reuses `configure` so operators can
   adjust credentials without restarts. [src/okcvm/api/main.py#L210-L256](../src/okcvm/api/main.py#L210-L256)
+- Request payloads flow through [`okcvm.api.models`](../src/okcvm/api/models.py),
+  which maps JSON into runtime dataclasses while preserving unset API keys and
+  validating snapshot operations. [src/okcvm/api/models.py#L1-L80](../src/okcvm/api/models.py#L1-L80)
 
 ## Tool registry and workspace injection
 - [`okcvm.registry.ToolRegistry`](../src/okcvm/registry.py) parses the packaged
@@ -37,15 +40,19 @@ covers the moving parts you will touch most often when extending the system.
 - [`okcvm.session.SessionState`](../src/okcvm/session.py) orchestrates the runtime
   by wiring the registry, VM, and workspace together. It exposes high-level
   methods (`boot`, `respond`, `snapshot_workspace`, etc.) consumed by the API and
-  returns JSON-ready payloads for the frontend. [src/okcvm/session.py#L22-L207](../src/okcvm/session.py#L22-L207)
+  returns JSON-ready payloads with normalised previews, deduplicated artefacts,
+  and client-aware URLs for the frontend. [src/okcvm/session.py#L22-L279](../src/okcvm/session.py#L22-L279)
 
 ## FastAPI surface
 - [`okcvm.api.main`](../src/okcvm/api/main.py) creates the FastAPI app, mounts the
   static frontend, adds CORS and structured request logging middleware, and keeps
-  track of per-client sessions via `SessionStore`. [src/okcvm/api/main.py#L30-L209](../src/okcvm/api/main.py#L30-L209)
+  track of per-client sessions via `SessionStore` and the shared `AppState`
+  helper. [src/okcvm/api/main.py#L30-L206](../src/okcvm/api/main.py#L30-L206)
 - REST endpoints expose configuration CRUD, session boot, chat, history lookup,
-  workspace snapshot management, and deployment asset serving. Error handling
-  normalises exceptions into HTTP responses with helpful messages for operators. [src/okcvm/api/main.py#L210-L309](../src/okcvm/api/main.py#L210-L309)
+  workspace snapshot management, and deployment asset serving. `_resolve_deployment_asset`
+  enforces path safety while appending `client_id` context so previews remain
+  scoped to the requesting session. Error handling normalises exceptions into
+  HTTP responses with helpful messages for operators. [src/okcvm/api/main.py#L146-L309](../src/okcvm/api/main.py#L146-L309)
 
 ## Command line interface
 - [`okcvm.server:cli`](../src/okcvm/server.py) is a Typer app that loads

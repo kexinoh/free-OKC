@@ -9,8 +9,8 @@ together. If you are onboarding, start here before diving into the source tree.
 | File | Purpose |
 | ---- | ------- |
 | [`architecture.md`](./architecture.md) | System decomposition, runtime flow, and integration points between backend, frontend, and tooling. |
-| [`backend.md`](./backend.md) | Detailed explanation of configuration, LangChain orchestration, FastAPI routes, and supporting utilities. |
-| [`frontend.md`](./frontend.md) | Walkthrough of the static control panel, state management, accessibility patterns, and preview rendering. |
+| [`backend.md`](./backend.md) | Configuration loading, LangChain orchestration, FastAPI routes, and supporting utilities. |
+| [`frontend.md`](./frontend.md) | Module-by-module walkthrough of the static control panel, accessibility patterns, and preview rendering. |
 | [`workspace.md`](./workspace.md) | Deep dive into per-session sandboxes, Git snapshots, path resolution, and tool injection. |
 | [`session_tree.md`](./session_tree.md) | Conceptual model for how chat history, workspace commits, deployments, and artefacts form a navigable tree. |
 
