@@ -25,12 +25,20 @@ def create_llm_chain(registry: ToolRegistry):
 
     # 2. 初始化 LangChain Chat Model
     # 它会自动处理 base_url 和 api_key
+    api_key = chat_config.resolve_api_key()
+    if not api_key:
+        raise ValueError(
+            "API key for chat model is not configured. "
+            "Ensure the `api_key` or `api_key_env` fields are set and that the corresponding "
+            "environment variable is loaded."
+        )
+
     llm = ChatOpenAI(
         model=chat_config.model,
-        api_key=chat_config.api_key,
+        api_key=api_key,
         base_url=chat_config.base_url,
         temperature=0.7,
-        streaming=True,
+        streaming=chat_config.supports_streaming,
     )
 
     # 3. 将我们的工具绑定到模型上
