@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OK Computer 创意工坊</title>
     <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -228,6 +232,40 @@
       </div>
     </div>
 
+    <div class="message-editor-overlay" id="message-editor-overlay" hidden>
+      <div
+        class="message-editor-dialog"
+        id="message-editor-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="message-editor-title"
+        tabindex="-1"
+      >
+        <header class="message-editor-header">
+          <h2 id="message-editor-title">编辑消息</h2>
+          <button
+            type="button"
+            class="ghost-button"
+            data-action="cancel-edit-message"
+            aria-label="关闭编辑器"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </header>
+        <div class="message-editor-body">
+          <div id="message-editor-container"></div>
+        </div>
+        <footer class="message-editor-footer">
+          <button type="button" class="ghost-button" data-action="cancel-edit-message">
+            放弃更改
+          </button>
+          <button type="button" class="primary-button" data-action="confirm-edit-message">
+            保存修改
+          </button>
+        </footer>
+      </div>
+    </div>
+
     <template id="model-log-item-template">
       <li class="model-log-item">
         <header>
@@ -259,6 +297,7 @@
       </section>
     </template>
 
+    <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
     <script type="module" src="app.js"></script>
   </body>
 </html>
