@@ -9,7 +9,7 @@ chat:
   model: "kimi-k2-0905-preview"
   base_url: "https://api.moonshot.cn/v1"
   # Reference an environment variable so secrets stay in .env
-  api_key_env: "OPENAI_API_KEY"
+  api_key_env: "kimi_key"
   # Set to false if the upstream provider does not support SSE streaming.
   supports_streaming: true
 

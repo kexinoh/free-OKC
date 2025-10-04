@@ -10,5 +10,5 @@ src/okcvm.egg-info/
 uv.lock
 logs/
 workspace
-config.yaml
+*.env
 src/generated_slides
