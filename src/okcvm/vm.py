@@ -99,13 +99,20 @@ class VirtualMachine:
         # 从LangChain的中间步骤提取工具调用信息（可选，但对于调试很有用）
         tool_calls_info = []
         if "intermediate_steps" in response:
-            for step in response["intermediate_steps"]:
+            for index, step in enumerate(response["intermediate_steps"], start=1):
                 action, observation = step
-                tool_calls_info.append({
-                    "tool_name": action.tool,
-                    "tool_input": action.tool_input,
-                    "tool_output": observation
-                })
+                call_record: Dict[str, Any] = {
+                    "step": index,
+                    "tool_name": getattr(action, "tool", None),
+                    "tool_input": getattr(action, "tool_input", None),
+                    "tool_output": observation,
+                    "source": "langchain",
+                    "invocation_id": uuid4().hex,
+                }
+                action_log = getattr(action, "log", None)
+                if action_log:
+                    call_record["log"] = action_log
+                tool_calls_info.append(call_record)
 
         pending_invocations = self.registry.consume_pending_invocations()
         if pending_invocations:
@@ -113,24 +120,30 @@ class VirtualMachine:
                 (call.get("tool_name"), call.get("tool_output"))
                 for call in tool_calls_info
             }
+            step_counter = len(tool_calls_info)
             for record in pending_invocations:
                 pair = (record.get("tool_name"), record.get("tool_output"))
                 if pair in existing_pairs:
                     continue
+                step_counter += 1
                 tool_calls_info.append(
                     {
+                        "step": step_counter,
                         "tool_name": record.get("tool_name"),
                         "tool_input": record.get("tool_input"),
                         "tool_output": record.get("tool_output"),
-                        "source": "registry",
+                        "payload": record.get("payload"),
+                        "source": record.get("source", "registry"),
+                        "invocation_id": uuid4().hex,
                     }
                 )
                 existing_pairs.add(pair)
 
         logger.debug(
-            "Utterance processed (reply_length=%s tool_calls=%s)",
+            "Utterance processed (reply_length=%s tool_calls=%s names=%s)",
             len(final_reply),
             len(tool_calls_info),
+            [call.get("tool_name") for call in tool_calls_info],
         )
 
         return {
