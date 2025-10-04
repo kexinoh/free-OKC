@@ -145,6 +145,25 @@ class VirtualMachine:
         """Return a deep copy of the internal history to prevent mutation."""
         return copy.deepcopy(self.history)
 
+    def discard_last_exchange(self) -> bool:
+        """Remove the most recent user/assistant exchange from history."""
+
+        if not self.history:
+            return False
+
+        removed_user = False
+        removed_assistant = False
+
+        while self.history and (not removed_user or not removed_assistant):
+            entry = self.history.pop()
+            role = entry.get("role")
+            if role == "assistant" and not removed_assistant:
+                removed_assistant = True
+            elif role == "user" and not removed_user:
+                removed_user = True
+
+        return removed_user or removed_assistant
+
     def _next_history_id(self) -> str:
         return f"{self._history_prefix}-{next(self._history_id_counter):04d}"
 

@@ -229,7 +229,7 @@ def create_app() -> FastAPI:
     @app.post("/api/chat")
     async def chat(request: ChatRequest) -> Dict[str, object]:
         logger.info("Chat request received: %s", request.message[:120])
-        response = state.respond(request.message)
+        response = state.respond(request.message, replace_last=request.replace_last)
         logger.debug(
             "Chat response generated (preview=%s, history=%s, summary=%s)",
             bool(response.get("web_preview")),
