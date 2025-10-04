@@ -100,6 +100,7 @@ export function updateWebPreview(preview) {
 
   if (!hasContent) {
     if (webPreviewFrame) {
+      webPreviewFrame.removeAttribute('src');
       webPreviewFrame.srcdoc = '';
       webPreviewFrame.hidden = true;
     }
@@ -113,7 +114,22 @@ export function updateWebPreview(preview) {
     return;
   }
 
-  if (hasHtml) {
+  if (webPreviewFrame) {
+    webPreviewFrame.hidden = true;
+    webPreviewFrame.removeAttribute('src');
+    webPreviewFrame.removeAttribute('srcdoc');
+  }
+
+  if (hasUrl) {
+    if (webPreviewFrame) {
+      webPreviewFrame.src = normalizedPreview.url;
+      webPreviewFrame.hidden = false;
+    }
+    if (webPreviewEmpty) {
+      webPreviewEmpty.hidden = true;
+      webPreviewEmpty.textContent = defaultWebPreviewEmptyMessage;
+    }
+  } else if (hasHtml) {
     if (webPreviewFrame) {
       webPreviewFrame.srcdoc = normalizedPreview.html;
       webPreviewFrame.hidden = false;
