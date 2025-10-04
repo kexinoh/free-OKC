@@ -172,6 +172,8 @@ body.no-scroll { overflow: hidden; }
 
 /* --- Conversation History Sidebar --- */
 .history-sidebar {
+  --history-offset: 0px;
+  --history-height: auto;
   position: relative;
   display: flex;
   align-items: stretch;
@@ -182,7 +184,7 @@ body.no-scroll { overflow: hidden; }
 
 .history-toggle {
   position: absolute;
-  top: 0;
+  top: var(--history-offset, 0px);
   left: 0;
   width: 2.5rem;
   height: 2.5rem;
@@ -242,7 +244,9 @@ body.no-scroll { overflow: hidden; }
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  height: calc(var(--viewport-height) - (var(--workspace-padding-block) * 2));
+  height: var(--history-height, calc(var(--viewport-height) - (var(--workspace-padding-block) * 2)));
+  max-height: var(--history-height, calc(var(--viewport-height) - (var(--workspace-padding-block) * 2)));
+  margin-top: var(--history-offset, 0px);
   overflow: hidden;
   transform: translateX(-1rem);
   will-change: transform, opacity;

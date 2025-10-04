@@ -5,6 +5,7 @@ import {
   chatMessages,
   chatForm,
   userInput,
+  chatPanel,
   statusPill,
   configForm,
   settingsToggle,
@@ -55,6 +56,50 @@ let lastRenderedConversationId = null;
 
 const messageActionStatusTimers = new WeakMap();
 const messageActionFeedbackTimers = new WeakMap();
+let historyLayoutRafId = null;
+let historyLayoutObserver = null;
+
+function applyHistoryLayoutMeasurements() {
+  if (!(historySidebar instanceof HTMLElement)) {
+    return;
+  }
+
+  const targetChatPanel = chatPanel instanceof HTMLElement ? chatPanel : chatMessages?.closest('.chat-panel');
+  if (!(targetChatPanel instanceof HTMLElement)) {
+    historySidebar.style.removeProperty('--history-offset');
+    historySidebar.style.removeProperty('--history-height');
+    return;
+  }
+
+  const sidebarRect = historySidebar.getBoundingClientRect();
+  const chatRect = targetChatPanel.getBoundingClientRect();
+  const offset = Math.max(chatRect.top - sidebarRect.top, 0);
+  const height = chatRect.height;
+
+  if (!Number.isFinite(offset) || !Number.isFinite(height) || height <= 0) {
+    historySidebar.style.removeProperty('--history-offset');
+    historySidebar.style.removeProperty('--history-height');
+    return;
+  }
+
+  historySidebar.style.setProperty('--history-offset', `${offset}px`);
+  historySidebar.style.setProperty('--history-height', `${height}px`);
+}
+
+function requestHistoryLayoutSync() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (historyLayoutRafId !== null) {
+    window.cancelAnimationFrame(historyLayoutRafId);
+  }
+
+  historyLayoutRafId = window.requestAnimationFrame(() => {
+    historyLayoutRafId = null;
+    applyHistoryLayoutMeasurements();
+  });
+}
 
 function setInteractionDisabled(disabled) {
   if (userInput) {
@@ -70,6 +115,7 @@ function setStatus(text, busy = false) {
   if (!statusPill) return;
   statusPill.textContent = text;
   statusPill.dataset.busy = busy ? 'true' : 'false';
+  requestHistoryLayoutSync();
 }
 
 function setMessageActionStatus(button, text) {
@@ -777,6 +823,7 @@ function setHistoryOpen(shouldOpen) {
   if (shouldOpen) {
     historyPanel?.focus();
   }
+  requestHistoryLayoutSync();
   return shouldOpen;
 }
 
@@ -1126,6 +1173,20 @@ document.addEventListener('DOMContentLoaded', () => {
   initializePreviewControls();
   initializeConfigForm();
   initializeEventListeners();
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', requestHistoryLayoutSync);
+  }
+
+  const observedChatPanel = chatPanel instanceof HTMLElement ? chatPanel : chatMessages?.closest('.chat-panel');
+  if (typeof ResizeObserver === 'function' && observedChatPanel instanceof HTMLElement) {
+    historyLayoutObserver = new ResizeObserver(() => {
+      requestHistoryLayoutSync();
+    });
+    historyLayoutObserver.observe(observedChatPanel);
+  }
+
+  requestHistoryLayoutSync();
 
   const conversation = initializeConversationState();
   loadConfig();
