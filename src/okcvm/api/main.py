@@ -142,6 +142,10 @@ class AppState:
     store, matching the behaviour of the HTTP handlers.
     """
 
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._cached_session: Optional[SessionState] = None
+
     @staticmethod
     def _store() -> SessionStore:
         return session_store
@@ -161,11 +165,31 @@ class AppState:
             raise RuntimeError("Unable to resolve session state")
         return session
 
+    def set(self, session: SessionState) -> None:
+        """Cache the provided session for subsequent helper access."""
+
+        with self._lock:
+            self._cached_session = session
+
+    def clear(self) -> None:
+        """Forget any cached session reference."""
+
+        with self._lock:
+            self._cached_session = None
+
     @property
     def session(self) -> SessionState:
         """Return the most relevant session, creating the default if needed."""
 
-        return self._resolve_session()
+        with self._lock:
+            cached = self._cached_session
+        if cached is not None:
+            return cached
+
+        session = self._resolve_session()
+        with self._lock:
+            self._cached_session = session
+        return session
 
     @property
     def vm(self) -> "VirtualMachine":
