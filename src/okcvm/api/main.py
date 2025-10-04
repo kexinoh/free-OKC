@@ -506,7 +506,7 @@ def create_app() -> FastAPI:
         )
         streaming_requested = payload.stream
         if streaming_requested:
-            chat_config = config.chat if (config := get_config()) else None
+            chat_config = get_config().chat
             if chat_config is None or not chat_config.supports_streaming:
                 logger.warning(
                     "Streaming requested but disabled (configured=%s)",
