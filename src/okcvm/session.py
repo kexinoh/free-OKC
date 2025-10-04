@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import random
-from json import JSONDecodeError
 from datetime import datetime
+from json import JSONDecodeError
 from typing import Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from . import constants, spec
 from .config import get_config
@@ -26,6 +27,7 @@ class SessionState:
         self._booted = False
         self._initialise_vm()
         self._rng = random.Random()
+        self.client_id: Optional[str] = None
         # 注意：VM现在管理自己的历史，SessionState的历史可以作为副本或移除
         # 为了简单起见，我们让VM成为历史的唯一来源
         # self.history: List[Dict[str, str]] = []
@@ -88,6 +90,36 @@ class SessionState:
     def reset(self) -> None:
         self._cleanup_workspace()
         self._initialise_vm()
+
+    def attach_client(self, client_id: str) -> None:
+        """Associate the session state with a specific client identifier."""
+
+        cleaned = (client_id or "").strip()
+        self.client_id = cleaned or "default"
+
+    def _append_client_id_to_url(self, url: str) -> str:
+        """Ensure the provided URL carries the associated client identifier."""
+
+        client_id = getattr(self, "client_id", None)
+        if not client_id:
+            return url
+
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return url
+
+        if not parsed.scheme or not parsed.netloc:
+            # Only augment absolute URLs that point to our orchestrator.
+            return url
+
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        if query.get("client_id"):
+            return url
+
+        query["client_id"] = client_id
+        new_query = urlencode(query, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
 
     def _meta(self, model: str, summary: str) -> Dict[str, str]:
         # 这个方法可以保留，用于生成前端需要的元数据
@@ -179,6 +211,11 @@ class SessionState:
                     _maybe_update_preview(data_section)
 
                 if preview_details:
+                    url_value = preview_details.get("url")
+                    if isinstance(url_value, str) and url_value:
+                        preview_details["url"] = self._append_client_id_to_url(url_value)
+                        if isinstance(parsed_payload, dict):
+                            parsed_payload["preview_url"] = preview_details["url"]
                     web_preview = preview_details
 
                 output_text = parsed_payload.get("output")

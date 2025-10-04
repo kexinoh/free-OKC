@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Dict, Optional
+from threading import Lock
+from typing import Dict, Iterable, Optional, Tuple
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -78,23 +79,76 @@ def _ensure_frontend() -> None:
 _ensure_frontend()
 
 # --- Application State ---
-# Single global session state for this demo application
-state = SessionState()
+
+
+class SessionStore:
+    """Thread-safe registry mapping client identifiers to session states."""
+
+    def __init__(self) -> None:
+        self._sessions: Dict[str, SessionState] = {}
+        self._lock = Lock()
+
+    @staticmethod
+    def _normalise(client_id: Optional[str]) -> str:
+        cleaned = (client_id or "").strip()
+        return cleaned or "default"
+
+    def get(self, client_id: Optional[str], *, create: bool = True) -> Optional[SessionState]:
+        key = self._normalise(client_id)
+        with self._lock:
+            session = self._sessions.get(key)
+            if session is None and create:
+                session = SessionState()
+                session.attach_client(key)
+                self._sessions[key] = session
+            elif session is not None:
+                session.attach_client(key)
+            return session
+
+    def iter_sessions(self, preferred: Optional[str] = None) -> Iterable[Tuple[str, SessionState]]:
+        preferred_key = self._normalise(preferred) if preferred else None
+        with self._lock:
+            items = list(self._sessions.items())
+        if preferred_key:
+            items.sort(key=lambda item: (0 if item[0] == preferred_key else 1, item[0]))
+        return items
+
+    def reset(self) -> None:
+        with self._lock:
+            self._sessions.clear()
+
+
+session_store = SessionStore()
 
 # --- Helper Functions ---
-def _deployments_root() -> Path:
-    workspace = getattr(state, "workspace", None)
-    if workspace is None:
-        raise HTTPException(status_code=500, detail="Workspace not initialised")
-    return workspace.deployments_root
+def _resolve_client_id(request: Request, explicit: Optional[str] = None) -> str:
+    if explicit and explicit.strip():
+        return explicit.strip()
+
+    header = request.headers.get("x-okc-client-id")
+    if header and header.strip():
+        return header.strip()
+
+    cookie = request.cookies.get("okc_client_id")
+    if cookie and cookie.strip():
+        return cookie.strip()
+
+    query_value = request.query_params.get("client_id")
+    if query_value and query_value.strip():
+        return query_value.strip()
+
+    return "default"
 
 
-def _resolve_deployment_asset(deployment_id: str, relative_path: str | None) -> Path:
-    deployments_root = _deployments_root()
-    target_dir = deployments_root / deployment_id
-    if not target_dir.exists() or not target_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Deployment not found")
+def _get_session(request: Request, client_id: Optional[str] = None) -> SessionState:
+    resolved = _resolve_client_id(request, client_id)
+    session = session_store.get(resolved, create=True)
+    if session is None:  # pragma: no cover - defensive
+        raise HTTPException(status_code=500, detail="Failed to initialise session")
+    return session
 
+
+def _normalise_asset_path(relative_path: str | None) -> Path:
     path_hint = (relative_path or "index.html").strip()
     if not path_hint or path_hint.endswith("/"):
         path_hint = f"{path_hint}index.html" if path_hint else "index.html"
@@ -102,17 +156,37 @@ def _resolve_deployment_asset(deployment_id: str, relative_path: str | None) -> 
     candidate = Path(path_hint)
     if candidate.is_absolute() or ".." in candidate.parts:
         raise HTTPException(status_code=400, detail="Invalid path")
+    return candidate
 
-    resolved = (target_dir / candidate).resolve()
-    try:
-        resolved.relative_to(target_dir.resolve())
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid path") from exc
 
-    if not resolved.exists() or not resolved.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
+def _resolve_deployment_asset(
+    deployment_id: str, relative_path: str | None, client_id: Optional[str]
+) -> Path:
+    candidate_path = _normalise_asset_path(relative_path)
+    for key, session in session_store.iter_sessions(preferred=client_id):
+        workspace = getattr(session, "workspace", None)
+        if workspace is None:
+            continue
+        target_dir = workspace.deployments_root / deployment_id
+        if not target_dir.exists() or not target_dir.is_dir():
+            continue
 
-    return resolved
+        resolved = (target_dir / candidate_path).resolve()
+        try:
+            resolved.relative_to(target_dir.resolve())
+        except ValueError:
+            continue
+
+        if resolved.exists() and resolved.is_file():
+            logger.debug(
+                "Resolved deployment asset deployment=%s client=%s path=%s",
+                deployment_id,
+                key,
+                resolved,
+            )
+            return resolved
+
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 def _describe_endpoint(config: ModelEndpointConfig | None) -> Optional[Dict[str, object]]:
@@ -143,36 +217,55 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def root(
+        request: Request,
         s: Optional[str] = Query(default=None, description="Deployment identifier"),
         path: Optional[str] = Query(default=None, description="Relative asset path"),
+        client_id: Optional[str] = Query(default=None, description="Client identifier"),
     ) -> Response:
         if s:
-            asset = _resolve_deployment_asset(s, path)
+            hint = _resolve_client_id(request, client_id)
+            asset = _resolve_deployment_asset(s, path, hint)
             return FileResponse(asset)
         return RedirectResponse(url="/ui/")
 
     def _deployment_file_response(
         deployment_id: str,
         relative_path: str | None,
+        request: Request,
+        client_id: Optional[str],
     ) -> FileResponse:
-        asset = _resolve_deployment_asset(deployment_id, relative_path)
+        hint = _resolve_client_id(request, client_id)
+        asset = _resolve_deployment_asset(deployment_id, relative_path, hint)
         media_type = None
         if asset.suffix.lower() in {".html", ".htm"}:
             media_type = "text/html"
         return FileResponse(asset, media_type=media_type)
 
     @app.get("/{deployment_id:int}", include_in_schema=False)
-    async def deployment_index(deployment_id: int) -> Response:
-        return _deployment_file_response(str(deployment_id), None)
+    async def deployment_index(
+        request: Request,
+        deployment_id: int,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Response:
+        return _deployment_file_response(str(deployment_id), None, request, client_id)
 
     @app.get("/{deployment_id:int}/", include_in_schema=False)
-    async def deployment_index_trailing_slash(deployment_id: int) -> Response:
-        return _deployment_file_response(str(deployment_id), None)
+    async def deployment_index_trailing_slash(
+        request: Request,
+        deployment_id: int,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Response:
+        return _deployment_file_response(str(deployment_id), None, request, client_id)
 
     @app.get("/{deployment_id:int}/{asset_path:path}", include_in_schema=False)
-    async def deployment_asset(deployment_id: int, asset_path: str) -> Response:
+    async def deployment_asset(
+        request: Request,
+        deployment_id: int,
+        asset_path: str,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Response:
         normalised = asset_path.lstrip("/") or None
-        return _deployment_file_response(str(deployment_id), normalised)
+        return _deployment_file_response(str(deployment_id), normalised, request, client_id)
 
     # --- API Routes ---
     @app.get("/api/config")
@@ -208,28 +301,52 @@ def create_app() -> FastAPI:
         return await read_config()
 
     @app.get("/api/session/info")
-    async def session_info() -> Dict[str, object]:
-        description = state.vm.describe()
-        logger.debug("Session info requested (history=%s)", description.get("history_length"))
+    async def session_info(
+        request: Request, client_id: Optional[str] = Query(default=None)
+    ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
+        description = session.vm.describe()
+        logger.debug(
+            "Session info requested (history=%s client=%s)",
+            description.get("history_length"),
+            session.client_id,
+        )
         return description
 
     @app.get("/api/session/history/{entry_id}")
-    async def session_history_entry(entry_id: str) -> Dict[str, object]:
-        logger.debug("History entry requested id=%s", entry_id)
-        entry = state.vm.get_history_entry(entry_id)
+    async def session_history_entry(
+        request: Request,
+        entry_id: str,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
+        logger.debug("History entry requested id=%s client=%s", entry_id, session.client_id)
+        entry = session.vm.get_history_entry(entry_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="History entry not found")
         return entry
 
     @app.get("/api/session/boot")
-    async def session_boot() -> Dict[str, object]:
-        logger.info("Session boot requested")
-        return state.boot()
+    async def session_boot(
+        request: Request, client_id: Optional[str] = Query(default=None)
+    ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
+        logger.info("Session boot requested client=%s", session.client_id)
+        return session.boot()
 
     @app.post("/api/chat")
-    async def chat(request: ChatRequest) -> Dict[str, object]:
-        logger.info("Chat request received: %s", request.message[:120])
-        response = state.respond(request.message)
+    async def chat(
+        request: Request,
+        payload: ChatRequest,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
+        logger.info(
+            "Chat request received client=%s: %s",
+            session.client_id,
+            payload.message[:120],
+        )
+        response = session.respond(payload.message)
         logger.debug(
             "Chat response generated (preview=%s, history=%s, summary=%s)",
             bool(response.get("web_preview")),
@@ -239,9 +356,12 @@ def create_app() -> FastAPI:
         return response
 
     @app.delete("/api/session/history")
-    async def delete_session_history() -> Dict[str, object]:
-        logger.info("Session history deletion endpoint called")
-        result = state.delete_history()
+    async def delete_session_history(
+        request: Request, client_id: Optional[str] = Query(default=None)
+    ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
+        logger.info("Session history deletion endpoint called client=%s", session.client_id)
+        result = session.delete_history()
         logger.debug(
             "Session history cleared (workspace_removed=%s)",
             result.get("workspace", {}).get("removed"),
@@ -249,35 +369,52 @@ def create_app() -> FastAPI:
         return result
 
     @app.get("/api/session/workspace/snapshots")
-    async def list_workspace_snapshots(limit: int = 20) -> Dict[str, object]:
-        logger.debug("Workspace snapshot list requested limit=%s", limit)
-        return state.list_workspace_snapshots(limit=limit)
+    async def list_workspace_snapshots(
+        request: Request,
+        limit: int = 20,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
+        logger.debug(
+            "Workspace snapshot list requested limit=%s client=%s",
+            limit,
+            session.client_id,
+        )
+        return session.list_workspace_snapshots(limit=limit)
 
     @app.post("/api/session/workspace/snapshots")
     async def create_workspace_snapshot(
-        payload: SnapshotCreatePayload, limit: int = 20
+        request: Request,
+        payload: SnapshotCreatePayload,
+        limit: int = 20,
+        client_id: Optional[str] = Query(default=None),
     ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
         logger.info(
             "Workspace snapshot creation requested label=%s, limit=%s",
             payload.label,
             limit,
         )
         try:
-            return state.snapshot_workspace(payload.label, limit=limit)
+            return session.snapshot_workspace(payload.label, limit=limit)
         except WorkspaceStateError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/session/workspace/restore")
     async def restore_workspace_snapshot(
-        payload: SnapshotRestorePayload, limit: int = 20
+        request: Request,
+        payload: SnapshotRestorePayload,
+        limit: int = 20,
+        client_id: Optional[str] = Query(default=None),
     ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
         logger.info(
             "Workspace restore requested snapshot=%s, limit=%s",
             payload.snapshot_id,
             limit,
         )
         try:
-            return state.restore_workspace(payload.snapshot_id, limit=limit)
+            return session.restore_workspace(payload.snapshot_id, limit=limit)
         except WorkspaceStateError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

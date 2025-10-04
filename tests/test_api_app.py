@@ -9,7 +9,9 @@ from fastapi.testclient import TestClient
 import okcvm.config as config_mod
 from okcvm.config import MediaConfig, ModelEndpointConfig, WorkspaceConfig
 from okcvm.api import main
-from okcvm.session import SessionState
+
+
+TEST_CLIENT_ID = "test-client"
 
 
 @pytest.fixture(autouse=True)
@@ -30,8 +32,13 @@ def restore_config_state():
 @pytest.fixture
 def client(tmp_path):
     config_mod.configure(workspace=WorkspaceConfig(path=str(tmp_path)))
-    main.state = SessionState()
-    return TestClient(main.create_app())
+    main.session_store = main.SessionStore()
+    main.session_store.reset()
+    main.session_store.get(TEST_CLIENT_ID)
+    return TestClient(
+        main.create_app(),
+        headers={"x-okc-client-id": TEST_CLIENT_ID},
+    )
 
 
 def test_root_redirects_to_frontend(client):
@@ -42,7 +49,8 @@ def test_root_redirects_to_frontend(client):
 
 def test_deployment_assets_accessible_via_query_and_direct_paths(client):
     deployment_id = "123456"
-    deployments_root = main.state.workspace.deployments_root
+    session = main.session_store.get(TEST_CLIENT_ID)
+    deployments_root = session.workspace.deployments_root
     site_dir = deployments_root / deployment_id
     site_dir.mkdir(parents=True, exist_ok=True)
     (site_dir / "index.html").write_text(
@@ -168,7 +176,8 @@ def test_session_endpoints_use_session_state(monkeypatch, client):
             "vm_history": [],
         }
 
-    monkeypatch.setattr(main.state, "respond", fake_respond)
+    session = main.session_store.get(TEST_CLIENT_ID)
+    monkeypatch.setattr(session, "respond", fake_respond)
 
     chat = client.post("/api/chat", json={"message": "ping"})
     assert chat.status_code == 200
@@ -184,7 +193,8 @@ def test_boot_does_not_reset_existing_workspace(client):
     first_boot = client.get("/api/session/boot")
     assert first_boot.status_code == 200
 
-    workspace = main.state.workspace
+    session = main.session_store.get(TEST_CLIENT_ID)
+    workspace = session.workspace
     workspace_root = workspace.paths.internal_root
     sentinel = workspace.paths.internal_output / "sentinel.txt"
     sentinel.write_text("preserve", encoding="utf-8")
@@ -193,21 +203,22 @@ def test_boot_does_not_reset_existing_workspace(client):
     assert second_boot.status_code == 200
 
     assert sentinel.exists()
-    assert main.state.workspace.paths.internal_root == workspace_root
+    assert session.workspace.paths.internal_root == workspace_root
 
 
 def test_delete_session_history_removes_workspace(client):
     boot = client.get("/api/session/boot")
     assert boot.status_code == 200
 
-    previous_root = main.state.workspace.paths.internal_root
+    session = main.session_store.get(TEST_CLIENT_ID)
+    previous_root = session.workspace.paths.internal_root
     assert previous_root.exists()
 
-    deployments_root = main.state.workspace.deployments_root
+    deployments_root = session.workspace.deployments_root
     deployment_dir = deployments_root / "999001"
     deployment_dir.mkdir(parents=True, exist_ok=True)
     (deployment_dir / "deployment.json").write_text(
-        json.dumps({"id": "999001", "session_id": main.state.workspace.session_id}),
+        json.dumps({"id": "999001", "session_id": session.workspace.session_id}),
         encoding="utf-8",
     )
     index_path = deployments_root / "manifest.json"
@@ -224,13 +235,14 @@ def test_delete_session_history_removes_workspace(client):
     assert "999001" in payload["workspace"].get("deployments", {}).get("removed_ids", [])
 
     assert not previous_root.exists()
-    assert main.state.workspace.paths.internal_root != previous_root
-    assert len(main.state.vm.history) == 0
+    assert session.workspace.paths.internal_root != previous_root
+    assert len(session.vm.history) == 0
 
 
 def test_boot_preserves_existing_deployments(client):
     deployment_id = "777777"
-    workspace = main.state.workspace
+    session = main.session_store.get(TEST_CLIENT_ID)
+    workspace = session.workspace
     deployments_root = workspace.deployments_root
     site_dir = deployments_root / deployment_id
     site_dir.mkdir(parents=True, exist_ok=True)
@@ -245,7 +257,7 @@ def test_boot_preserves_existing_deployments(client):
     before = client.get(f"/{deployment_id}/index.html")
     assert before.status_code == 200
 
-    main.state.boot()
+    session.boot()
 
     after = client.get(f"/{deployment_id}/index.html")
     assert after.status_code == 200
@@ -261,7 +273,8 @@ def test_workspace_snapshot_endpoints(client):
     if not payload["enabled"]:
         pytest.skip("Git snapshots are disabled in this environment")
 
-    workspace_path = main.state.workspace.resolve("report.md")
+    session = main.session_store.get(TEST_CLIENT_ID)
+    workspace_path = session.workspace.resolve("report.md")
     workspace_path.write_text("draft v1", encoding="utf-8")
 
     created = client.post("/api/session/workspace/snapshots", json={"label": "Draft"})
