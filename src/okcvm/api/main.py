@@ -505,6 +505,13 @@ def create_app() -> FastAPI:
             payload.message[:120],
         )
         streaming_requested = payload.stream
+        accept_header = request.headers.get("accept", "")
+        accepts_event_stream = "text/event-stream" in accept_header.lower()
+        if streaming_requested and not accepts_event_stream:
+            logger.debug(
+                "Streaming requested but client does not accept event streams",
+            )
+            streaming_requested = False
         if streaming_requested:
             chat_config = get_config().chat
             if chat_config is None or not chat_config.supports_streaming:
