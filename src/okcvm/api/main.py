@@ -25,7 +25,6 @@ from .models import (
     ConfigUpdatePayload,
     SnapshotCreatePayload,
     SnapshotRestorePayload,
-    build_media_config,
 )
 
 # --- Frontend Setup ---
@@ -344,19 +343,78 @@ def create_app() -> FastAPI:
 
     @app.post("/api/config")
     async def update_config(payload: ConfigUpdatePayload) -> Dict[str, object]:
-        payload_dump = payload.model_dump(exclude_none=True)
-        chat_payload = payload_dump.get("chat")
+        raw_payload = payload.model_dump(mode="json")
+        chat_payload = raw_payload.get("chat")
         if isinstance(chat_payload, dict) and chat_payload.get("api_key"):
             chat_payload = dict(chat_payload)
             chat_payload["api_key"] = "***redacted***"
-            payload_dump["chat"] = chat_payload
+            raw_payload["chat"] = chat_payload
 
-        logger.info("Updating configuration sections=%s", list(payload_dump.keys()))
-        logger.debug("Configuration payload details: %s", payload_dump)
+        logger.debug("Configuration payload received: %s", raw_payload)
+
+        config = get_config()
+        configure_kwargs: Dict[str, object] = {}
+        updated_sections: list[str] = []
+
+        if "chat" in payload.model_fields_set:
+            updated_sections.append("chat")
+            if payload.chat is None:
+                configure_kwargs["chat"] = None
+            else:
+                chat_config = payload.chat.to_model()
+                if chat_config is None:
+                    configure_kwargs["chat"] = None
+                else:
+                    if (
+                        "api_key" not in payload.chat.model_fields_set
+                        and config.chat is not None
+                    ):
+                        chat_config.api_key = config.chat.api_key
+                    configure_kwargs["chat"] = chat_config
+
+        media_fields = ("image", "speech", "sound_effects", "asr")
+        media_updates = {
+            field
+            for field in media_fields
+            if field in payload.model_fields_set
+        }
+
+        if media_updates:
+            updated_sections.extend(sorted(media_updates))
+            current_media = config.media
+
+            def resolve_media(field: str) -> ModelEndpointConfig | None:
+                if field not in media_updates:
+                    return getattr(current_media, field)
+                endpoint_payload = getattr(payload, field)
+                if endpoint_payload is None:
+                    return None
+                endpoint_config = endpoint_payload.to_model()
+                if endpoint_config is None:
+                    return None
+                current_value = getattr(current_media, field)
+                if (
+                    "api_key" not in endpoint_payload.model_fields_set
+                    and current_value is not None
+                ):
+                    endpoint_config.api_key = current_value.api_key
+                return endpoint_config
+
+            media_config = MediaConfig(
+                image=resolve_media("image"),
+                speech=resolve_media("speech"),
+                sound_effects=resolve_media("sound_effects"),
+                asr=resolve_media("asr"),
+            )
+            configure_kwargs["media"] = media_config
+
+        if not configure_kwargs:
+            logger.info("Configuration update requested with no effective changes")
+            return await read_config()
+
+        logger.info("Updating configuration sections=%s", updated_sections)
         try:
-            media_config = build_media_config(payload)
-            chat_config = payload.chat.to_model() if payload.chat else None
-            configure(media=media_config, chat=chat_config)
+            configure(**configure_kwargs)
         except Exception as exc:
             logger.exception("Configuration update failed")
             raise HTTPException(status_code=400, detail=str(exc)) from exc
