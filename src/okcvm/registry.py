@@ -141,8 +141,8 @@ class ToolRegistry:
 
         try:
             from langchain_core.tools import ToolException
-            from langchain.pydantic_v1 import BaseModel, Extra, Field, create_model
             from langchain.tools import StructuredTool
+            from pydantic.v1 import BaseModel, Extra, Field, create_model
         except ImportError as exc:  # pragma: no cover - defensive guard
             raise RuntimeError(
                 "LangChain is not installed. Install the 'langchain' and "
