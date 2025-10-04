@@ -152,6 +152,8 @@ export function updateWebPreview(preview) {
 
   if (hasUrl) {
     if (webPreviewFrame) {
+      applyPreviewSandbox('url');
+      webPreviewFrame.srcdoc = '';
       webPreviewFrame.src = normalizedPreview.url;
       webPreviewFrame.hidden = false;
     }
