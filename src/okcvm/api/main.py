@@ -539,6 +539,7 @@ def create_app() -> FastAPI:
                     logger.exception("Streaming chat failed for client=%s", session.client_id)
                     publisher.publish({"type": "error", "message": str(exc)})
                 finally:
+                    publisher.publish({"type": "stop"})
                     publisher.close()
 
             asyncio.create_task(_run_stream())

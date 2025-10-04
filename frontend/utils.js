@@ -175,6 +175,7 @@ export async function streamJson(url, options = {}, onEvent) {
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
   let finalPayload = null;
+  let finalReceived = false;
 
   const safeEmit = typeof onEvent === 'function'
     ? (payload) => {
@@ -207,7 +208,11 @@ export async function streamJson(url, options = {}, onEvent) {
     safeEmit(payload);
     if (payload?.type === 'final') {
       finalPayload = payload.payload ?? null;
+      finalReceived = true;
       return 'final';
+    }
+    if (payload?.type === 'stop') {
+      return 'stop';
     }
     if (payload?.type === 'error') {
       const message =
@@ -225,14 +230,14 @@ export async function streamJson(url, options = {}, onEvent) {
       const rawEvent = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
       const state = parseAndEmit(rawEvent, '');
-      if (state === 'final') return 'final';
+      if (state === 'stop') return 'stop';
     }
 
     if (flush && buffer.trim()) {
       const tail = buffer.trim();
       buffer = '';
       const state = parseAndEmit(tail, '尾部');
-      if (state === 'final') return 'final';
+      if (state === 'stop') return 'stop';
     }
 
     return null;
@@ -249,7 +254,7 @@ export async function streamJson(url, options = {}, onEvent) {
       if (value) {
         buffer += decoder.decode(value, { stream: true });
         const state = processBuffer(false);
-        if (state === 'final') {
+        if (state === 'stop') {
           await reader.cancel().catch(() => {});
           break;
         }
@@ -266,8 +271,12 @@ export async function streamJson(url, options = {}, onEvent) {
     }
   }
 
-  if (finalPayload === null) {
+  if (!finalReceived) {
     throw new Error('未接收到完整的模型回复');
+  }
+
+  if (finalPayload === null) {
+    throw new Error('模型返回为空');
   }
 
   return finalPayload;
