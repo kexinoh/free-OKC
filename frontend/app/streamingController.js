@@ -63,7 +63,7 @@ function renderToolEvent(toolContainer, registry, event) {
     const body = document.createElement('div');
     body.className = 'tool-status-body';
 
-    if (event.input) {
+    if (event.input !== undefined && event.input !== null) {
       const pre = document.createElement('pre');
       pre.textContent = JSON.stringify(event.input, null, 2);
       body.appendChild(pre);
