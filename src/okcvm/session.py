@@ -11,6 +11,7 @@ from .config import get_config
 from .logging_utils import get_logger
 from .registry import ToolRegistry
 from .vm import VirtualMachine
+from .tools.deployment import cleanup_deployments_for_session
 from .workspace import WorkspaceError, WorkspaceManager, WorkspaceStateError
 
 
@@ -53,7 +54,7 @@ class SessionState:
             summary["latest_snapshot"] = snapshots[0]["id"]
         return summary
 
-    def _cleanup_workspace(self) -> Dict[str, object] | None:
+    def _cleanup_workspace(self, *, remove_deployments: bool = False) -> Dict[str, object] | None:
         workspace = getattr(self, "workspace", None)
         if workspace is None:
             return None
@@ -68,12 +69,18 @@ class SessionState:
             "internal_tmp": str(getattr(paths, "internal_tmp", paths.internal_root / "tmp")),
         }
 
+        session_id = workspace.session_id
         try:
             details["removed"] = workspace.cleanup()
         except WorkspaceError as exc:  # pragma: no cover - defensive guard
             details["removed"] = False
             details["error"] = str(exc)
             logger.exception("Workspace cleanup failed")
+        if remove_deployments:
+            deployment_summary = cleanup_deployments_for_session(
+                workspace.deployments_root, session_id
+            )
+            details["deployments"] = deployment_summary
         return details
 
     def reset(self) -> None:
@@ -238,7 +245,7 @@ class SessionState:
 
         logger.info("Session history deletion requested")
         history_length = len(self.vm.history)
-        workspace_details = self._cleanup_workspace() or {"removed": False}
+        workspace_details = self._cleanup_workspace(remove_deployments=True) or {"removed": False}
         self._initialise_vm()
 
         return {

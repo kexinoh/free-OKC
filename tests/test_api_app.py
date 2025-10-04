@@ -1,4 +1,5 @@
 import copy
+import json
 
 import pytest
 
@@ -41,7 +42,7 @@ def test_root_redirects_to_frontend(client):
 
 def test_deployment_assets_accessible_via_query_and_direct_paths(client):
     deployment_id = "123456"
-    deployments_root = main.state.workspace.paths.internal_output / "deployments"
+    deployments_root = main.state.workspace.deployments_root
     site_dir = deployments_root / deployment_id
     site_dir.mkdir(parents=True, exist_ok=True)
     (site_dir / "index.html").write_text(
@@ -186,6 +187,16 @@ def test_delete_session_history_removes_workspace(client):
     previous_root = main.state.workspace.paths.internal_root
     assert previous_root.exists()
 
+    deployments_root = main.state.workspace.deployments_root
+    deployment_dir = deployments_root / "999001"
+    deployment_dir.mkdir(parents=True, exist_ok=True)
+    (deployment_dir / "deployment.json").write_text(
+        json.dumps({"id": "999001", "session_id": main.state.workspace.session_id}),
+        encoding="utf-8",
+    )
+    index_path = deployments_root / "manifest.json"
+    index_path.write_text(json.dumps([{"id": "999001"}]), encoding="utf-8")
+
     response = client.delete("/api/session/history")
     assert response.status_code == 200
     payload = response.json()
@@ -194,10 +205,34 @@ def test_delete_session_history_removes_workspace(client):
     assert payload["workspace"]["removed"] is True
     assert payload["cleared_messages"] >= 1
 
+    assert "999001" in payload["workspace"].get("deployments", {}).get("removed_ids", [])
+
     assert not previous_root.exists()
     assert main.state.workspace.paths.internal_root != previous_root
     assert len(main.state.vm.history) == 0
 
+
+def test_boot_preserves_existing_deployments(client):
+    deployment_id = "777777"
+    workspace = main.state.workspace
+    deployments_root = workspace.deployments_root
+    site_dir = deployments_root / deployment_id
+    site_dir.mkdir(parents=True, exist_ok=True)
+    (site_dir / "index.html").write_text("<html><body>Persist</body></html>", encoding="utf-8")
+    (site_dir / "deployment.json").write_text(
+        json.dumps({"id": deployment_id, "session_id": workspace.session_id}),
+        encoding="utf-8",
+    )
+    index_path = deployments_root / "manifest.json"
+    index_path.write_text(json.dumps([{"id": deployment_id}]), encoding="utf-8")
+
+    before = client.get(f"/{deployment_id}/index.html")
+    assert before.status_code == 200
+
+    main.state.boot()
+
+    after = client.get(f"/{deployment_id}/index.html")
+    assert after.status_code == 200
 
 def test_workspace_snapshot_endpoints(client):
     boot = client.get("/api/session/boot")

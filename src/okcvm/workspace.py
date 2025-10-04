@@ -202,6 +202,8 @@ class WorkspaceManager:
 
         storage_root = Path(base_dir).expanduser().resolve() if base_dir else Path(tempfile.gettempdir()) / "okcvm" / "sessions"
         storage_root.mkdir(parents=True, exist_ok=True)
+        deployments_root = (storage_root / "deployments").resolve()
+        deployments_root.mkdir(parents=True, exist_ok=True)
         internal_root = (storage_root / mount_path.name).resolve()
         internal_root.mkdir(parents=True, exist_ok=True)
 
@@ -224,6 +226,8 @@ class WorkspaceManager:
 
         self._cleaned = False
         self._session_id = mount_path.name
+        self._storage_root = storage_root
+        self._deployments_root = deployments_root
         candidate_state = GitWorkspaceState(internal_root)
         self.state = candidate_state if candidate_state.enabled else _NullWorkspaceState()
 
@@ -232,9 +236,21 @@ class WorkspaceManager:
         return self._paths
 
     @property
+    def storage_root(self) -> Path:
+        """Return the parent directory that stores all session workspaces."""
+
+        return self._storage_root
+
+    @property
     def session_id(self) -> str:
         """Return the unique session identifier tied to this workspace."""
         return self._paths.session_id
+
+    @property
+    def deployments_root(self) -> Path:
+        """Return the persistent root for static site deployments."""
+
+        return self._deployments_root
 
     def resolve(self, raw_path: str) -> Path:
         """Map a user-provided path to the internal workspace location."""

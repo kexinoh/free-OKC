@@ -133,7 +133,7 @@ class DeployWebsiteTool(Tool):
     def __init__(self, spec, workspace: WorkspaceManager | None = None):
         super().__init__(spec)
         self._workspace = workspace or WorkspaceManager()
-        self._deploy_root = self._workspace.paths.internal_output / "deployments"
+        self._deploy_root = self._workspace.deployments_root
         self._deploy_root.mkdir(parents=True, exist_ok=True)
         self._manifest_index = self._deploy_root / "manifest.json"
         self._server_process: Optional[subprocess.Popen] = None
@@ -305,4 +305,67 @@ class DeployWebsiteTool(Tool):
         return ToolResult(success=True, output=output, data=data)
 
 
-__all__ = ["DeployWebsiteTool"]
+def cleanup_deployments_for_session(root: Path, session_id: str) -> Dict[str, Any]:
+    """Remove deployment artefacts associated with ``session_id``.
+
+    Parameters
+    ----------
+    root:
+        Persistent deployment root directory.
+    session_id:
+        Identifier of the workspace session whose deployments should be removed.
+
+    Returns
+    -------
+    Dict[str, Any]
+        Summary containing a list of removed deployment identifiers and
+        optionally any errors encountered.
+    """
+
+    removed: List[str] = []
+    errors: Dict[str, str] = {}
+
+    if not root.exists() or not root.is_dir():
+        return {"removed_ids": removed}
+
+    for path in root.iterdir():
+        if not path.is_dir():
+            continue
+
+        deployment_id = path.name
+        manifest_path = path / "deployment.json"
+
+        manifest_session: Optional[str] = None
+        if manifest_path.exists():
+            try:
+                manifest = load_manifest(manifest_path)
+            except (OSError, json.JSONDecodeError) as exc:
+                errors[deployment_id] = str(exc)
+                continue
+            manifest_session = manifest.get("session_id")
+            if manifest_session is not None:
+                manifest_session = str(manifest_session)
+
+        if manifest_session != session_id:
+            continue
+
+        try:
+            shutil.rmtree(path)
+        except OSError as exc:  # pragma: no cover - defensive guard
+            errors[deployment_id] = str(exc)
+        else:
+            removed.append(deployment_id)
+
+    if removed:
+        index_path = root / "manifest.json"
+        entries = _load_index(index_path)
+        filtered = [entry for entry in entries if str(entry.get("id")) not in removed]
+        _write_index(index_path, filtered)
+
+    summary: Dict[str, Any] = {"removed_ids": removed}
+    if errors:
+        summary["errors"] = errors
+    return summary
+
+
+__all__ = ["DeployWebsiteTool", "cleanup_deployments_for_session"]
