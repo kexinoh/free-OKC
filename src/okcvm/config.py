@@ -250,7 +250,9 @@ def reset_config(env: Mapping[str, str] | None = None) -> None:
 def load_config_from_yaml(path: Path) -> None:
     """Loads configuration from a YAML file and applies it."""
     if not path.exists():
-        logger.warning("Config file not found: %s", path)
+        message = f"Config file not found: {path}"
+        logger.warning(message)
+        print(message)
         return
 
     logger.info("Loading configuration from file: %s", path)
@@ -260,30 +262,42 @@ def load_config_from_yaml(path: Path) -> None:
     if not data:
         logger.warning("Config file is empty: %s", path)
         return
-        
+
     chat_config = data.get("chat")
-    media_data = data.get("media", {})
+    media_data = data.get("media")
     workspace_data = data.get("workspace")
 
     with _config_lock:
-        if chat_config:
-            api_key_env = chat_config.get("api_key_env")
-            _config.chat = ModelEndpointConfig(
-                model=chat_config.get("model"),
-                base_url=chat_config.get("base_url"),
-                api_key=chat_config.get("api_key")
-                or (os.environ.get(api_key_env) if api_key_env else None),
-                supports_streaming=_parse_bool(
-                    chat_config.get("supports_streaming"),
-                    default=True,
-                ),
-            )
+        current = _config.copy()
 
+        _config.chat = _merge_endpoint_config(
+            current.chat,
+            chat_config if isinstance(chat_config, Mapping) else None,
+            env_prefix="OKCVM_CHAT",
+        )
+
+        media_mapping = media_data if isinstance(media_data, Mapping) else {}
         _config.media = MediaConfig(
-            image=_parse_endpoint(media_data, "image"),
-            speech=_parse_endpoint(media_data, "speech"),
-            sound_effects=_parse_endpoint(media_data, "sound_effects"),
-            asr=_parse_endpoint(media_data, "asr"),
+            image=_merge_endpoint_config(
+                current.media.image,
+                media_mapping.get("image") if isinstance(media_mapping.get("image"), Mapping) else None,
+                env_prefix="OKCVM_IMAGE",
+            ),
+            speech=_merge_endpoint_config(
+                current.media.speech,
+                media_mapping.get("speech") if isinstance(media_mapping.get("speech"), Mapping) else None,
+                env_prefix="OKCVM_SPEECH",
+            ),
+            sound_effects=_merge_endpoint_config(
+                current.media.sound_effects,
+                media_mapping.get("sound_effects") if isinstance(media_mapping.get("sound_effects"), Mapping) else None,
+                env_prefix="OKCVM_SOUND_EFFECTS",
+            ),
+            asr=_merge_endpoint_config(
+                current.media.asr,
+                media_mapping.get("asr") if isinstance(media_mapping.get("asr"), Mapping) else None,
+                env_prefix="OKCVM_ASR",
+            ),
         )
 
         _config.workspace = _parse_workspace(workspace_data, config_dir=path.parent)
@@ -291,24 +305,65 @@ def load_config_from_yaml(path: Path) -> None:
     logger.info("Configuration loaded successfully from YAML: %s", path)
 
 
-def _parse_endpoint(data: dict, key: str) -> ModelEndpointConfig | None:
-    """Helper to parse an endpoint from a dict."""
-    endpoint_data = data.get(key)
-    if not endpoint_data or not endpoint_data.get("model"):
-        return None
-    
-    api_key_env = endpoint_data.get("api_key_env")
-    api_key = endpoint_data.get("api_key") or (os.environ.get(api_key_env) if api_key_env else None)
+def _merge_endpoint_config(
+    existing: ModelEndpointConfig | None,
+    yaml_data: Mapping[str, object] | None,
+    *,
+    env_prefix: str,
+) -> ModelEndpointConfig | None:
+    """Merge YAML and environment values while keeping existing overrides."""
 
-    return ModelEndpointConfig(
-        model=endpoint_data["model"],
-        base_url=endpoint_data.get("base_url"),
-        api_key=api_key,
-        supports_streaming=_parse_bool(
-            endpoint_data.get("supports_streaming"),
-            default=True,
-        ),
-    )
+    yaml_mapping = yaml_data if isinstance(yaml_data, Mapping) else {}
+
+    env_model = os.environ.get(f"{env_prefix}_MODEL")
+    env_base_url = os.environ.get(f"{env_prefix}_BASE_URL")
+    env_api_key = os.environ.get(f"{env_prefix}_API_KEY")
+    env_supports_streaming = os.environ.get(f"{env_prefix}_SUPPORTS_STREAMING")
+
+    yaml_model = yaml_mapping.get("model")
+    yaml_base_url = yaml_mapping.get("base_url")
+    yaml_api_key = yaml_mapping.get("api_key")
+    yaml_api_key_env = yaml_mapping.get("api_key_env")
+    yaml_supports_streaming = yaml_mapping.get("supports_streaming")
+
+    existing_model = existing.model if existing else None
+    existing_base_url = existing.base_url if existing else None
+    existing_api_key = existing.api_key if existing else None
+    existing_supports_streaming = existing.supports_streaming if existing else True
+
+    model = env_model or yaml_model or existing_model
+    base_url = env_base_url or yaml_base_url or existing_base_url
+
+    api_key_candidates = [
+        env_api_key,
+        yaml_api_key,
+        os.environ.get(yaml_api_key_env) if yaml_api_key_env else None,
+        existing_api_key,
+    ]
+    api_key = next((value for value in api_key_candidates if value is not None), None)
+
+    if env_supports_streaming is not None:
+        supports_streaming = _parse_bool(
+            env_supports_streaming,
+            default=existing_supports_streaming,
+        )
+    elif yaml_supports_streaming is not None:
+        supports_streaming = _parse_bool(
+            yaml_supports_streaming,
+            default=existing_supports_streaming,
+        )
+    else:
+        supports_streaming = existing_supports_streaming
+
+    if model and base_url:
+        return ModelEndpointConfig(
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+            supports_streaming=supports_streaming,
+        )
+
+    return None
 
 
 def _parse_workspace(data: Mapping[str, object] | None, *, config_dir: Path) -> WorkspaceConfig:
