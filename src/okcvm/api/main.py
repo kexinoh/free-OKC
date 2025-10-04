@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 from threading import Lock
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, Optional, Tuple, TYPE_CHECKING
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -17,6 +17,9 @@ from ..config import ModelEndpointConfig, configure, get_config
 from ..logging_utils import get_logger, setup_logging
 from ..session import SessionState
 from ..workspace import WorkspaceStateError
+
+if TYPE_CHECKING:  # pragma: no cover - import used for type checking only
+    from ..vm import VirtualMachine
 from .models import (
     ChatRequest,
     ConfigUpdatePayload,
@@ -119,6 +122,63 @@ class SessionStore:
 
 
 session_store = SessionStore()
+
+
+class AppState:
+    """Convenience wrapper exposing commonly accessed session resources.
+
+    The web application primarily interacts with ``SessionState`` instances
+    obtained from :data:`session_store`.  Some tests – and occasionally
+    debugging sessions – need quick access to the active virtual machine
+    without knowing the client identifier.  Historically this was exposed as a
+    module-level ``state`` object.  During recent refactors that attribute was
+    removed which regressed the behaviour relied upon by the test-suite.
+
+    To restore the ergonomics while keeping the ``SessionStore`` implementation
+    encapsulated, this lightweight wrapper lazily resolves the most relevant
+    session and exposes its virtual machine.  The helper is intentionally
+    conservative: if no sessions exist it initialises the default one via the
+    store, matching the behaviour of the HTTP handlers.
+    """
+
+    @staticmethod
+    def _store() -> SessionStore:
+        return session_store
+
+    def _resolve_session(self, client_id: Optional[str] = None) -> SessionState:
+        store = self._store()
+        if client_id:
+            session = store.get(client_id, create=True)
+        else:
+            session = next(
+                (candidate for _, candidate in store.iter_sessions(preferred=None)),
+                None,
+            )
+            if session is None:
+                session = store.get(None, create=True)
+        if session is None:  # pragma: no cover - defensive safety net
+            raise RuntimeError("Unable to resolve session state")
+        return session
+
+    @property
+    def session(self) -> SessionState:
+        """Return the most relevant session, creating the default if needed."""
+
+        return self._resolve_session()
+
+    @property
+    def vm(self) -> "VirtualMachine":
+        """Expose the active virtual machine for convenience."""
+
+        return self.session.vm
+
+    def reset(self) -> None:
+        """Clear all known sessions, mirroring :meth:`SessionStore.reset`."""
+
+        self._store().reset()
+
+
+state = AppState()
 
 # --- Helper Functions ---
 def _resolve_client_id(request: Request, explicit: Optional[str] = None) -> str:
