@@ -13,7 +13,8 @@ import {
   pptSlideTemplate,
 } from './elements.js';
 
-const HTML_PREVIEW_SANDBOX = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox';
+const HTML_PREVIEW_SANDBOX =
+  'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin';
 const EMPTY_PREVIEW_SANDBOX = 'allow-popups';
 let previewSandboxMode = null;
 
