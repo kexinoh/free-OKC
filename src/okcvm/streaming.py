@@ -35,7 +35,7 @@ class EventStreamPublisher:
 
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
-        self._queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+        self._queue: asyncio.Queue[Dict[str, Any] | None] = asyncio.Queue()
         self._closed = False
 
     def publish(self, event: Dict[str, Any]) -> None:
@@ -51,7 +51,14 @@ class EventStreamPublisher:
         self._loop.call_soon_threadsafe(_enqueue)
 
     def close(self) -> None:
+        if self._closed:
+            return
         self._closed = True
+
+        def _finalise() -> None:
+            self._queue.put_nowait(None)
+
+        self._loop.call_soon_threadsafe(_finalise)
 
     async def iter_sse(self) -> AsyncIterator[bytes]:
         """Yield server-sent event payloads until a terminal message is sent."""
@@ -59,6 +66,8 @@ class EventStreamPublisher:
         try:
             while True:
                 event = await self._queue.get()
+                if event is None:
+                    break
                 payload = json.dumps(event, ensure_ascii=False)
                 yield f"data: {payload}\n\n".encode("utf-8")
                 if event.get("type") in {"final", "error"}:
