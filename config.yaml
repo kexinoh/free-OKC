@@ -8,7 +8,7 @@
 chat:
   model: "kimi-k2-0905-preview"
   base_url: "https://api.moonshot.cn/v1"
-  api_key: "sk-EAbA0oVT4w7Ia5iM7tpkGegf0kxqrvixrrZsWfW5tG54OdhR"
+  api_key: "-----"
 
 # Media generation models are optional.
 # If you don't need a specific tool, you can comment it out or remove it.
