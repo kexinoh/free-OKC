@@ -1,37 +1,55 @@
-# 会话树（Session Tree）
+# Session tree
 
-会话树是 OKCVM 中连接“对话历史、工作空间快照、部署成果和 PPT 产物”的核心索引结构。它把一次会话视为根节点，通过快照与工件生成的节点形成分支，支持回溯、复制以及跨工具的状态追踪。本章节从数据结构、Git 管理、回退策略以及部署/PPT 协调等角度详解会话树的工作方式。
+The session tree links conversation history, workspace snapshots, deployments, and
+slide artefacts into a navigable structure. It allows operators to branch, restore,
+and audit multi-turn projects without losing context.
 
-## 节点模型
+## Node types
 
-1. **根节点：会话实例** – `SessionState.boot()` 在第一次请求时记录欢迎内容，并返回当前 `VirtualMachine` / `WorkspaceManager` 的描述信息。若需要重新初始化工作台，应通过 `SessionState.delete_history()` 或 `SessionState.reset()` 触发清理，再由下一次 `boot` 请求生成新的根节点元数据。【F:src/okcvm/session.py†L18-L220】
-2. **对话节点：历史消息** – `VirtualMachine.record_history_entry()` 会为每条消息生成带命名空间的递增 ID（如 `okcvm-12ab34cd-0001`），确保树形结构中每个节点都有稳定引用。`/api/session/history/{entry_id}` 接口可按 ID 取回任意节点的详细内容，前端据此绘制时间轴与分支。【F:src/okcvm/vm.py†L52-L108】【F:src/okcvm/vm.py†L118-L178】【F:src/okcvm/api/main.py†L148-L182】
-3. **工件节点：工具输出** – 当代理调用工具时，`VirtualMachine.call_tool()` 会把输入、输出和成功状态写入历史节点，使部署结果、PPT 文件等都成为会话树上的子节点，可被快照和回放。【F:src/okcvm/vm.py†L110-L157】
+1. **Root node – Session metadata.** `SessionState.boot()` seeds the tree with the
+   welcome message, workspace descriptors, and virtual machine summary. Resetting
+   history or the workspace clears this root and triggers a fresh initialisation
+   on the next request.【F:src/okcvm/session.py†L22-L207】
+2. **Conversation nodes – Message history.** `VirtualMachine.record_history_entry`
+   generates deterministic IDs (e.g. `okcvm-12ab34cd-0001`) for each exchange,
+   storing message content, tool traces, and metadata. `/api/session/history/{id}`
+   returns any node so the frontend can render branches and tool details.【F:src/okcvm/vm.py†L58-L178】【F:src/okcvm/api/main.py†L257-L309】
+3. **Artefact nodes – Tool outputs.** When the agent calls a tool, the input,
+   output, and status are persisted alongside the message so deployments, slide
+   decks, and files appear as children in the tree for later inspection.【F:src/okcvm/vm.py†L118-L178】
 
-## Git 快照与分支
+## Snapshot workflow
 
-- `SessionState.respond()` 在生成回复后会触发 `GitWorkspaceState.snapshot()`，用用户消息摘要作为 commit 信息，返回的哈希被保存到响应的 `workspace_state` 字段中。前端会把这些哈希映射为会话树上的快照节点，允许用户在任意时间点创建分支或回滚。【F:src/okcvm/session.py†L94-L150】【F:src/okcvm/workspace.py†L120-L162】
-- `SessionState.restore_workspace()` 基于用户选择的 commit 哈希执行 `git reset --hard`，同时更新 `workspace_state`，从而把会话树指针回滚到对应节点。恢复后的快照 ID 会回写到响应中，确保 UI 与后端保持同步。【F:src/okcvm/session.py†L180-L207】【F:src/okcvm/workspace.py†L156-L167】
+- `SessionState.respond()` labels each snapshot using the user prompt, then calls
+  `workspace.state.snapshot()` to commit filesystem changes. The response embeds
+  the commit hash and recent history so the UI can annotate the timeline.【F:src/okcvm/session.py†L94-L150】【F:src/okcvm/workspace.py†L120-L162】
+- `SessionState.restore_workspace()` applies `git reset --hard` to a requested
+  hash and refreshes the workspace metadata returned to the client. Errors bubble
+  up as `WorkspaceStateError`, which the API converts to HTTP 400 responses.【F:src/okcvm/session.py†L180-L207】【F:src/okcvm/workspace.py†L156-L167】【F:src/okcvm/api/main.py†L283-L309】
 
-## 会话与工作空间的互指
+## Linking workspaces and history
 
-- 每个会话节点都持有工作空间 ID，`VirtualMachine.describe()` 会把 `workspace_id`、`workspace_mount`、`workspace_output` 返回给 `/api/session/info`，供前端展示“当前指向的虚拟空间”。这保证了用户在树上切换节点时，始终能定位到对应的文件目录。【F:src/okcvm/vm.py†L158-L207】【F:src/okcvm/api/main.py†L148-L171】
-- 工具层通过注入的 `WorkspaceManager` 来解析路径，部署工具会把 `session_id` 写入 `deployment.json`，并把部署索引存放在工作空间根目录下。前端可以通过会话树节点读取这些元数据，判断某次部署来源于哪条对话分支。【F:src/okcvm/tools/deployment.py†L40-L170】
+- Each history node references the active workspace ID and mount paths via
+  `VirtualMachine.describe()`. `/api/session/info` exposes these values so the UI
+  can show the correct sandbox when operators jump between branches.【F:src/okcvm/vm.py†L158-L207】【F:src/okcvm/api/main.py†L233-L256】
+- Tool implementations receive the injected `WorkspaceManager`, write outputs to
+  namespaced directories (e.g. `deployments/`, `generated_slides/`), and include
+  session IDs in their metadata for cross-branch auditing.【F:src/okcvm/tools/deployment.py†L70-L208】【F:src/okcvm/tools/slides.py†L12-L78】
 
-## 回退与清理
+## Reset and cleanup
 
-1. **单节点回退** – 调用 `/api/session/workspace/restore` 恢复到指定快照后，最新的 `workspace_state` 会记录 `latest_snapshot`，让前端将树指针指向目标节点，同时保持对话历史不变，方便用户继续在旧上下文上分支。【F:src/okcvm/api/main.py†L187-L222】
-2. **全量重置** – `/api/session/history` 的 DELETE 操作会清除 VM 历史并调用 `WorkspaceManager.cleanup()` 删除物理目录，相当于把会话树重置到根节点，只保留新的初始化分支。【F:src/okcvm/session.py†L152-L207】【F:src/okcvm/api/main.py†L172-L186】
+1. **Selective rollback.** Calling `/api/session/workspace/restore` rewinds the
+   filesystem to a chosen snapshot but keeps the chat history intact, enabling
+   experimentation without losing conversation branches.【F:src/okcvm/api/main.py†L283-L309】
+2. **Full reset.** `/api/session/history` with DELETE wipes the VM history and
+   removes the workspace directory. The next interaction reinitialises the root
+   node and provisions a new sandbox.【F:src/okcvm/api/main.py†L267-L282】【F:src/okcvm/session.py†L152-L207】
 
-## 部署与 PPT 协作
+## Best practices
 
-- **网站部署**：`DeployWebsiteTool` 会把生成的静态站点复制到会话工作空间的 `deployments/` 子目录，生成 `deployment.json` 记录部署 ID、预览地址和 `session_id`，并维护全局索引 `manifest.json`。会话树节点可引用这些文件来呈现部署状态或启动预览服务。【F:src/okcvm/tools/deployment.py†L70-L208】
-- **PPT 生成**：`SlidesGeneratorTool` 接受 HTML 片段，将带 `.ppt-slide` 类名的结构渲染为 PPTX，并写入工作空间（默认在 `generated_slides/` 目录）。该工具返回的文件路径会被 `SessionState.respond()` 收录在 `ppt_slides` 字段，使会话树的可视化层能直接展示最新 PPT 工件。【F:src/okcvm/tools/slides.py†L12-L78】【F:src/okcvm/session.py†L94-L150】
-
-## 管理最佳实践
-
-- 在会话树中创建新分支前，建议显式调用“创建快照”接口或依赖自动快照机制，确保后续可以精确回退。
-- 若需要对比不同分支生成的部署或 PPT，可通过 `workspace_id` 和快照哈希快速定位相应目录，再结合 `deployment.json` / PPTX 文件进行比对。
-- 批量清理旧节点时，先回收部署服务（停止 HTTP 服务器）并确认 PPT 文件是否需要归档，然后再执行历史删除，避免丢失重要工件。
-
-通过会话树，OKCVM 能够把对话、文件、部署与演示稿统一在同一套索引体系下，使复杂项目的协作与回溯更加可控。
+- Create explicit snapshots before major tool runs so you can diff outputs across
+  branches.
+- Reference `workspace_state.latest_snapshot` when generating external previews or
+  deployments to avoid pointing users at stale assets.
+- Clean up idle branches by deleting history once artefacts are archived, keeping
+  disk usage predictable across long-running sessions.

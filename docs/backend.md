@@ -1,52 +1,65 @@
 # Backend internals
 
-The backend is a Python orchestrator that bundles the upstream OK Computer
-prompt, tool catalogue, and a LangChain-powered runtime. This note summarises
-the key modules and how they interact.
+The backend is a Python orchestrator that bundles the upstream OK Computer prompt,
+tool catalogue, LangChain-powered runtime, and a FastAPI surface. This document
+covers the moving parts you will touch most often when extending the system.
 
-## Configuration and global state
-- [`okcvm.config`](../src/okcvm/config.py) defines the `ModelEndpointConfig`,
-  `MediaConfig`, and `Config` dataclasses plus helpers for loading values from
-  environment variables or YAML. It exposes thread-safe `configure`,
-  `get_config`, and `reset_config` functions so the FastAPI layer can mutate
-  credentials safely. 【F:src/okcvm/config.py†L25-L227】
-- `load_config_from_yaml` accepts a path and applies the parsed chat/media
-  endpoints, honouring `*_API_KEY` environment overrides for secrets. This is
-  what the CLI uses when bootstrapping the server. 【F:src/okcvm/config.py†L177-L227】
+## Configuration management
+- [`okcvm.config`](../src/okcvm/config.py) defines dataclasses for chat endpoints,
+  media providers, and workspace settings. It supports layered loading from YAML,
+  environment variables, and in-memory overrides, exposing thread-safe `configure`
+  and `get_config` helpers for both CLI and API callers.【F:src/okcvm/config.py†L25-L227】
+- `load_config_from_yaml` resolves relative paths against the project root,
+  applies defaults, and prepares workspace directories before runtime
+  initialisation.【F:src/okcvm/config.py†L177-L227】
+- The FastAPI `/api/config` route deserialises incoming payloads into the same
+  dataclasses, redacts secrets in logs, and reuses `configure` so operators can
+  adjust credentials without restarts.【F:src/okcvm/api/main.py†L210-L256】
 
-## Tool registry and LLM integration
-- [`okcvm.registry.ToolRegistry`](../src/okcvm/registry.py) loads the packaged
-  tool manifest, registers concrete implementations, and injects a
-  `WorkspaceManager` when a tool advertises `requires_workspace`. It can also
-  emit LangChain-compatible tool wrappers for agent execution. 【F:src/okcvm/registry.py†L1-L200】
-- [`okcvm.llm.create_llm_chain`](../src/okcvm/llm.py) reads the active chat model
-  configuration, builds a `ChatOpenAI` client, binds registered tools, and
-  returns a LangChain agent executor capable of handling tool-calling loops.
-  【F:src/okcvm/llm.py†L13-L57】
-- [`okcvm.vm.VirtualMachine`](../src/okcvm/vm.py) lazily initialises the LangChain
-  agent, adapts chat history into LangChain message objects, tracks tool call
-  results, and exposes helpers for describing or replaying history. 【F:src/okcvm/vm.py†L20-L178】
-- [`okcvm.session.SessionState`](../src/okcvm/session.py) glues everything
-  together: it provisions a fresh `WorkspaceManager`, instantiates the registry
-  and VM, decorates responses with previews/meta, and surfaces boot and chat
-  operations to the API. 【F:src/okcvm/session.py†L18-L128】
+## Tool registry and workspace injection
+- [`okcvm.registry.ToolRegistry`](../src/okcvm/registry.py) parses the packaged
+  tool specification, registers Python implementations, and injects a
+  `WorkspaceManager` into tools that declare `requires_workspace`, ensuring file
+  operations stay within the session sandbox.【F:src/okcvm/registry.py†L1-L200】
+- Custom tools live in [`okcvm/tools`](../src/okcvm/tools). Highlights include
+  deployment helpers, slide generation, shell access, and data ingestion stubs.
+  Each tool adheres to the manifest schema and often wraps shared helpers from
+  `okcvm.tools.base`.【F:src/okcvm/tools/deployment.py†L40-L208】【F:src/okcvm/tools/slides.py†L12-L78】
 
-## API surface
-- [`src/okcvm/api/main.py`](../src/okcvm/api/main.py) constructs the FastAPI app,
-  wires request logging middleware, mounts the static frontend under `/ui`, and
-  implements `/api/config`, `/api/session/*`, and `/api/chat` endpoints. The
-  routes use `SessionState` to answer chat requests and expose system
-  descriptions. 【F:src/okcvm/api/main.py†L1-L145】
+## LangChain integration
+- [`okcvm.llm.create_llm_chain`](../src/okcvm/llm.py) builds a LangChain
+  `AgentExecutor` backed by the configured chat model, binds registered tools, and
+  returns a callable used by the virtual machine for every chat turn.【F:src/okcvm/llm.py†L13-L57】
+- [`okcvm.vm.VirtualMachine`](../src/okcvm/vm.py) stores conversation history,
+  lazily constructs the LangChain chain, adapts messages into the required
+  structure, records tool invocations, and generates telemetry for the
+  frontend.【F:src/okcvm/vm.py†L26-L178】
+- [`okcvm.session.SessionState`](../src/okcvm/session.py) orchestrates the runtime
+  by wiring the registry, VM, and workspace together. It exposes high-level
+  methods (`boot`, `respond`, `snapshot_workspace`, etc.) consumed by the API and
+  returns JSON-ready payloads for the frontend.【F:src/okcvm/session.py†L22-L207】
+
+## FastAPI surface
+- [`okcvm.api.main`](../src/okcvm/api/main.py) creates the FastAPI app, mounts the
+  static frontend, adds CORS and structured request logging middleware, and keeps
+  track of per-client sessions via `SessionStore`.【F:src/okcvm/api/main.py†L30-L209】
+- REST endpoints expose configuration CRUD, session boot, chat, history lookup,
+  workspace snapshot management, and deployment asset serving. Error handling
+  normalises exceptions into HTTP responses with helpful messages for operators.【F:src/okcvm/api/main.py†L210-L309】
 
 ## Command line interface
-- [`main.py`](../main.py) wraps Typer to expose commands for running the server,
-  validating configuration, and listing tools. It verifies dependencies, loads
-  `.env`/`config.yaml`, then launches Uvicorn against `okcvm.api.main:app`.
-  【F:main.py†L1-L120】【F:main.py†L120-L175】
+- [`okcvm.server:cli`](../src/okcvm/server.py) is a Typer app that loads
+  configuration, verifies workspace paths, and launches Uvicorn. Use
+  `python -m okcvm.server --reload` for local development or embed the CLI into
+  supervisor scripts in production.【F:src/okcvm/server.py†L1-L88】
+- The legacy entrypoint in [`main.py`](../main.py) still exposes Typer commands
+  for compatibility; prefer the dedicated server module for new tooling.【F:main.py†L1-L175】
 
 ## Testing
-- Pytest coverage exercises configuration, API routes, LangChain wiring, and the
-  workspace sandbox. Start with [`tests/test_api_app.py`](../tests/test_api_app.py)
-  for FastAPI endpoints, [`tests/test_vm.py`](../tests/test_vm.py) for VM
-  behaviour, and [`tests/test_workspace.py`](../tests/test_workspace.py) for path
-  resolution guarantees. 【F:tests/test_api_app.py†L1-L145】【F:tests/test_vm.py†L1-L14】【F:tests/test_workspace.py†L1-L24】
+- `pytest` coverage spans configuration, FastAPI routes, virtual machine
+  behaviour, workspace safety, and tool interactions. Start with
+  [`tests/test_api_app.py`](../tests/test_api_app.py) and
+  [`tests/test_workspace.py`](../tests/test_workspace.py) when debugging
+  regressions.【F:tests/test_api_app.py†L1-L145】【F:tests/test_workspace.py†L1-L24】
+- Add regression tests alongside new features; the suite runs quickly and is a
+  prerequisite for merging into main.

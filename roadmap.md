@@ -1,107 +1,79 @@
 # Roadmap
 
-## Implemented Capabilities
+This roadmap captures the state of the rebuilt OK Computer Virtual Machine (OKCVM)
+stack and highlights the near-term direction for the project. It is meant to be a
+living document—update it whenever major capabilities land or priorities shift.
 
-### Canonical prompt and tool specification bundling
-The project still ships the upstream OK Computer system prompt and tool manifest so
-embedders can initialise the VM with zero additional configuration.
-- `okcvm.spec` exposes dataclasses and helpers that read the packaged
-  `system_prompt.md` and `tools.json`, returning structured specifications for
-  downstream consumers. ([`src/okcvm/spec.py`](./src/okcvm/spec.py))
+## Recently Delivered
 
-### LangChain-powered virtual machine runtime
-We replaced the earlier stubbed façade with a real LangChain agent executor that
-binds the packaged tools and routes conversations to a configurable chat model.
-- `okcvm.llm.create_llm_chain` wires LangChain's `ChatOpenAI` client to the
-  registry's tool set and builds a tool-calling agent template that honours the
-  VM's conversation history. ([`src/okcvm/llm.py`](./src/okcvm/llm.py))
-- `okcvm.vm.VirtualMachine` now converts the stored history into LangChain
-  messages, invokes the agent, records intermediate tool calls, and keeps a
-  detailed trace that powers the UI's model log. ([`src/okcvm/vm.py`](./src/okcvm/vm.py))
+### Production-ready runtime and observability
+- FastAPI now powers the public surface, complete with CORS support, structured
+  request logging, and static hosting for the operator console so deployments are
+  inspectable with minimal configuration.【F:src/okcvm/api/main.py†L30-L209】
+- The logging stack wires Rich console handlers and rotating file output, making
+  API and agent traces actionable during incident response.【F:src/okcvm/logging_utils.py†L1-L115】
 
-### Runtime configuration and CLI experience
-We introduced a thread-safe configuration layer, YAML/env loading, and a Typer
-CLI so operators can manage endpoints without editing code.
-- `okcvm.config` provides dataclasses for chat and media endpoints, helpers for
-  environment/YAML sources, and atomic updates that feed both the API and
-  runtime. ([`src/okcvm/config.py`](./src/okcvm/config.py))
-- The top-level `main.py` exposes commands for launching the server, validating
-  config, and inspecting registered tools, including environment loading and
-  dependency checks. ([`main.py`](./main.py))
+### Virtual machine orchestration and tooling
+- The LangChain-backed `VirtualMachine` streams conversation history into a tool
+  aware agent executor and records the trace required by the UI’s model log.【F:src/okcvm/vm.py†L26-L178】
+- `ToolRegistry` loads the canonical tool manifest, injects workspace-aware
+  helpers, and exposes LangChain-compatible wrappers, closing the loop between
+  packaged specifications and runtime behaviour.【F:src/okcvm/registry.py†L1-L200】
 
-### Observability and HTTP surface
-The orchestrator now emits structured logs and request traces so deployments are
-inspectable out of the box.
-- `okcvm.logging_utils` configures Rich console output plus rotating file
-  handlers, while `okcvm.api.main` wraps FastAPI with request logging middleware
-  and mounts the bundled frontend. ([`src/okcvm/logging_utils.py`](./src/okcvm/logging_utils.py),
-  [`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
+### Session isolation and workspace lifecycle
+- Every client receives an isolated `WorkspaceManager` that rewrites prompt
+  mounts, restricts filesystem access, and snapshots state through Git-backed
+  commits for time-travel debugging.【F:src/okcvm/session.py†L22-L207】【F:src/okcvm/workspace.py†L32-L281】
+- Snapshot creation, listing, and restoration are exposed as first-class API
+  endpoints so the frontend can drive the session tree UI without bespoke glue
+  code.【F:src/okcvm/api/main.py†L210-L309】
 
-### Session management and chat workflow
-Session state is no longer mocked—requests flow through the VM and return tool
-metadata for the UI to render richer previews.
-- `okcvm.session.SessionState` wires the registry, VM, and configuration,
-  streaming tool call summaries, meta telemetry, and previews back to clients.
-  ([`src/okcvm/session.py`](./src/okcvm/session.py))
-- `/api/session/*` and `/api/chat` endpoints expose boot, info, and chat
-  workflows, trimming payloads and surfacing validation feedback. ([`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
+### Operator experience and automation
+- A Typer CLI now launches the FastAPI server, validates configuration, and
+  resolves workspace directories before Uvicorn starts, smoothing local and
+  production workflows.【F:src/okcvm/server.py†L1-L88】
+- Configuration dataclasses centralise chat and media credentials, providing
+  atomic updates from YAML, environment variables, or API requests.【F:src/okcvm/config.py†L25-L227】
 
-### Session virtual workspace isolation
-Every conversation is backed by an ephemeral sandbox so file tools operate in a
-predictable "virtual space" that mirrors the original OK Computer behaviour.
-- `okcvm.workspace.WorkspaceManager` mints randomised mount points, rewrites the
-  legacy system prompt to reference them, and resolves agent-supplied paths into
-  per-session storage on disk. ([`src/okcvm/workspace.py`](./src/okcvm/workspace.py))
-- The workspace manager is injected into the default tool registry, ensuring
-  helpers like `mshtools-write_file` automatically stay inside the session
-  sandbox. ([`src/okcvm/session.py`](./src/okcvm/session.py))
-- Regression tests assert that both absolute and relative paths are safely
-  anchored inside the workspace root. ([`tests/test_workspace.py`](./tests/test_workspace.py))
-- Documentation now spells out the virtual mount contract so operators know how
-  paths such as `/mnt/okcvm-xxxx/output/` appear in prompts and responses.
-  ([`README.md`](./README.md), [`README_ZH.md`](./README_ZH.md))
+### Control panel and presentation layer
+- The static frontend introduces persistent conversations, configuration
+  management, live previews for HTML/PPT assets, and a model telemetry timeline
+  that mirrors the VM trace.【F:frontend/index.html†L16-L220】【F:frontend/app.js†L1-L851】
+- Deployment assets are now served directly from per-session directories, giving
+  the preview UI predictable URLs for websites and other artefacts.【F:src/okcvm/api/main.py†L146-L209】
 
-### Frontend control panel enhancements
-The bundled UI matured into a productivity dashboard with persistent
-conversations, configuration drawer, and multi-modal previews.
-- `frontend/index.html` adds a history sidebar, settings overlay, and dedicated
-  insight panels for chat logs, web previews, and slide decks.
-- `frontend/app.js` synchronises configuration with the backend, caches
-  conversations in localStorage, handles accessibility shortcuts, and updates
-  previews as tool outputs arrive.
+### Quality and safety net
+- The pytest suite exercises API routes, workspace guarantees, and LangChain
+  integration so regressions surface quickly during CI.【F:tests/test_api_app.py†L1-L145】【F:tests/test_workspace.py†L1-L24】
 
-### Comprehensive regression test suite
-Unit tests now cover the API surface, configuration helpers, LangChain chain
-wiring, and tool registry so new changes remain safe.
-- The `tests/` directory exercises the FastAPI app, configuration loaders,
-  LangChain integration, and individual tool implementations.
+## Active Initiatives
 
-## Planned and In-Progress Work
+### Streaming and responsiveness
+We are investigating LangChain callback handlers to surface partial assistant
+responses, tool progress, and heartbeat updates to the frontend without waiting
+for the full completion. This requires expanding `VirtualMachine.respond` to
+support incremental yield semantics and adapting the UI to consume a stream.
 
-### Richer tool output rendering
-Tool payloads still need structured adapters so the web UI can render HTML and
-PPT assets without manual inspection.
-- Capture slide/page metadata and binary assets in a standard schema and extend
-  `SessionState.respond` to map them into previews automatically.
+### Rich asset representations
+Tool outputs currently ship as raw HTML snippets or file paths. The next sprint
+focuses on producing structured metadata (thumbnails, slide manifests, audio
+waveforms) so the control panel can render immersive previews while remaining
+agnostic of tool specifics.
 
-### Streaming and multi-turn fidelity
-The current agent executor runs synchronously and returns only the final reply.
-- Investigate LangChain streaming callbacks to surface partial responses and
-  tool progress to the UI.
-- Persist VM history per session server-side so refreshes and multiple clients
-  can share context safely.
+### Multi-session coordination
+The API already accepts caller-provided client IDs. We plan to extend this with
+persistent storage and eviction policies so teams can resume workspaces across
+restarts, expire dormant sessions, and safely share deployments between
+operators.【F:src/okcvm/api/main.py†L58-L145】
 
-### Expanded media and deployment integrations
-Only a subset of OK Computer's media endpoints ship with live implementations.
-- Continue adding reference integrations for speech, sound effects, and
-  deployment targets with consistent credential handling.
+## Future Exploration
 
-### Advanced browser automation
-The HTTP-based browser tool remains intentionally lightweight.
-- Explore Playwright/Selenium backends with resource controls while keeping the
-  deterministic crawler for tests and offline mode.
-
-### Packaging and distribution
-We want operators to get started without cloning the repo.
-- Produce container images and PyPI wheels that bundle the CLI, API, and
-  frontend assets with sensible defaults.
+- **Packaging and distribution** – Ship container images and Python wheels that
+  bundle the CLI, FastAPI app, and frontend for zero-effort installation.
+- **Advanced browser automation** – Offer Playwright-backed browsing with
+  resource limits while keeping the deterministic HTTP crawler for offline mode.
+- **Media integrations** – Continue adding reference connectors for speech,
+  sound effects, and ASR providers with consistent secret handling across
+  toolchains.
+- **Observability exports** – Push structured traces and workspace events into
+  OpenTelemetry so operators can correlate OKCVM activity with external systems.
