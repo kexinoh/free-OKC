@@ -4,6 +4,9 @@ export const CONVERSATION_TITLE_MAX_LENGTH = 20;
 export const STORAGE_KEYS = {
   conversations: 'okc.conversations',
   current: 'okc.conversations.current',
+  clientId: 'okc.clientId',
 };
 
 export const SERVICES = ['chat', 'image', 'speech', 'sound_effects', 'asr'];
+
+export const CLIENT_ID_HEADER = 'x-okc-client-id';
