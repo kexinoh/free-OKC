@@ -5,6 +5,7 @@ import {
   cancelEditButton,
   chatEditingHint,
   chatPanel,
+  appShell,
   statusPill,
   configForm,
   settingsToggle,
@@ -48,7 +49,7 @@ import { createConversationPanel } from './conversationPanel.js';
 
 let previousFocusedElement = null;
 
-const historyLayout = createHistoryLayoutManager({ historySidebar, chatPanel, chatMessages });
+const historyLayout = createHistoryLayoutManager({ historySidebar, chatPanel, chatMessages, appShell });
 const sendButton = chatForm?.querySelector('.send-button') ?? null;
 
 const defaultSendButtonLabel = sendButton?.textContent?.trim() || '发送';
@@ -84,6 +85,7 @@ const editingController = createEditingController({
   commitBranchTransition,
   syncActiveBranchSnapshots,
   saveConversationsToStorage,
+  setMessageActionsDisabled,
 });
 
 messageRendererApi = createMessageRenderer({
@@ -253,7 +255,7 @@ async function handleCopyMessageAction(messageId, button, messageElement) {
   }
 }
 
-function handleEditMessageAction(messageElement, messageId) {
+function handleEditMessageAction(messageElement, messageId, triggerButton) {
   if (!messageElement) return;
   const match = findConversationByMessageId(messageId);
   if (!match) return;
@@ -274,6 +276,8 @@ function handleEditMessageAction(messageElement, messageId) {
     initialValue: currentNormalized,
     previousMessages,
     previousSelections,
+    messageElement,
+    triggerButton,
   });
 }
 
@@ -416,7 +420,7 @@ function handleUserSubmit(event) {
   const rawValue = typeof input.value === 'string' ? input.value : '';
 
   if (editingController.isEditing()) {
-    editingController.applyActiveEdit(rawValue);
+    editingController.applyActiveEdit();
     return;
   }
 
@@ -463,6 +467,29 @@ function initializeEventListeners() {
     chatForm.addEventListener('submit', handleUserSubmit);
   }
 
+  if (userInput) {
+    userInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      if (event.isComposing) return;
+      if (!event.ctrlKey && !event.metaKey) return;
+
+      if (editingController.isEditing()) {
+        event.preventDefault();
+        editingController.applyActiveEdit();
+        return;
+      }
+
+      if (!chatForm) return;
+      event.preventDefault();
+      if (typeof chatForm.requestSubmit === 'function') {
+        chatForm.requestSubmit();
+      } else {
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        chatForm.dispatchEvent(submitEvent);
+      }
+    });
+  }
+
   if (cancelEditButton) {
     cancelEditButton.addEventListener('click', () => {
       editingController.cancelActiveEdit({ focusInput: true });
@@ -506,7 +533,7 @@ function initializeEventListeners() {
           await handleCopyMessageAction(messageId, target, messageElement);
           break;
         case 'edit':
-          handleEditMessageAction(messageElement, messageId);
+          handleEditMessageAction(messageElement, messageId, target);
           break;
         case 'refresh':
           await regenerateAssistantMessage(messageElement, messageId, target);
@@ -609,8 +636,13 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', historyLayout.requestLayoutSync);
   }
 
-  const observedChatPanel = chatPanel instanceof HTMLElement ? chatPanel : chatMessages?.closest('.chat-panel');
-  historyLayout.observe(observedChatPanel);
+  const observedLayoutTarget =
+    appShell instanceof HTMLElement
+      ? appShell
+      : chatPanel instanceof HTMLElement
+        ? chatPanel
+        : chatMessages?.closest('.chat-panel');
+  historyLayout.observe(observedLayoutTarget);
   historyLayout.requestLayoutSync();
 
   const conversation = conversationPanelApi.initializeConversationState();
