@@ -1,13 +1,11 @@
 # main.py (Advanced Application Runner)
 
 import importlib
-import os
 import sys
 from pathlib import Path
 from typing import Optional
 
 import typer
-import yaml
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -19,7 +17,7 @@ try:
     project_root = Path(__file__).resolve().parent
     src_path = project_root / "src"
     sys.path.insert(0, str(src_path))
-    from okcvm.config import AppConfig, configure, get_config, ModelEndpointConfig, MediaConfig
+    from okcvm.config import get_config, load_config_from_yaml, reset_config
     from okcvm.logging_utils import get_logger, setup_logging
     from okcvm.registry import ToolRegistry
 except ImportError as e:
@@ -37,24 +35,6 @@ console = Console()
 setup_logging()
 logger = get_logger(__name__)
 
-
-def _parse_bool(value, default=True):
-    """Best-effort conversion of configuration values to booleans."""
-
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        normalised = value.strip().lower()
-        if normalised in {"1", "true", "yes", "on"}:
-            return True
-        if normalised in {"0", "false", "no", "off"}:
-            return False
-    return default
-
 # --- Helper Functions ---
 def _ensure_dependencies():
     """Checks if essential packages are installed."""
@@ -70,54 +50,23 @@ def _ensure_dependencies():
         console.print("Please install them using: [cyan]pip install -r requirements.txt[/cyan] (or via pyproject.toml)")
         raise typer.Exit(code=1)
 
-def _load_environment_and_config(config_path: Path):
-    """Loads .env file and layered configuration."""
-    # 1. 加载 .env 文件
-    if (project_root / ".env").exists():
-        load_dotenv(override=True)
+def _load_environment_and_config(config_path: Path) -> None:
+    """Load environment variables and apply the layered YAML configuration."""
+
+    dotenv_path = project_root / ".env"
+    if dotenv_path.exists():
+        load_dotenv(dotenv_path, override=True)
         console.print("[green]✓[/green] Loaded environment variables from [cyan].env[/cyan] file.")
 
-    # 2. 从 YAML 文件加载基础配置
+    # Reset runtime config so freshly loaded env vars are taken into account.
+    reset_config()
+
     if not config_path.exists():
-        console.print(f"[yellow]Warning: Config file not found at {config_path}. Using defaults.[/yellow]")
+        console.print(f"[yellow]Warning: Config file not found at {config_path}. Using environment defaults.[/yellow]")
         return
-        
+
     console.print(f"🔧 Loading configuration from [cyan]{config_path}[/cyan]...")
-    with config_path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-
-    # 3. 构建配置对象 (允许环境变量覆盖)
-    # 环境变量格式: OKCVVM__SECTION__KEY=value (e.g., OKCVVM__CHAT__MODEL)
-    def env_override(section, key, default):
-        env_var = f"OKCVVM__{section.upper()}__{key.upper()}"
-        return os.environ.get(env_var, default)
-
-    chat_data = data.get("chat", {})
-    chat_model = env_override("chat", "model", chat_data.get("model"))
-    chat_supports_streaming = _parse_bool(
-        env_override("chat", "supports_streaming", chat_data.get("supports_streaming")),
-        default=True,
-    )
-    chat_config = (
-        ModelEndpointConfig(
-            model=chat_model,
-            base_url=env_override("chat", "base_url", chat_data.get("base_url")),
-            api_key=
-            os.environ.get(chat_data.get("api_key_env"))
-            if chat_data.get("api_key_env")
-            else chat_data.get("api_key"),
-            supports_streaming=chat_supports_streaming,
-        )
-        if chat_model
-        else None
-    )
-
-    # 此处可以为 media config 添加类似的环境变量覆盖逻辑
-    media_data = data.get("media", {})
-
-    # 4. 应用配置
-    # 注意：这里我们直接调用了 configure 函数，而不是通过 `load_config_from_yaml`
-    configure(chat=chat_config, media=MediaConfig()) # 简化版，可扩展
+    load_config_from_yaml(config_path)
     console.print("[green]✓[/green] Configuration loaded and applied.")
 
 # --- CLI Commands ---
