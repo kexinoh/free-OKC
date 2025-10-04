@@ -819,7 +819,18 @@ function selectConversation(conversationId) {
   }
 }
 
-function startNewConversation() {
+async function startNewConversation() {
+  setStatus('清理工作台…', true);
+
+  try {
+    await deleteSessionHistory();
+  } catch (error) {
+    console.error(error);
+    setStatus('待命中…');
+    addAndRenderMessage('assistant', `无法重置会话：${error?.message || '未知错误'}`);
+    return;
+  }
+
   const conversation = createConversation();
   renderConversationList();
   renderConversation(conversation);

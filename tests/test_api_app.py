@@ -179,6 +179,22 @@ def test_session_endpoints_use_session_state(monkeypatch, client):
     assert "system_prompt" in info.json()
 
 
+def test_boot_does_not_reset_existing_workspace(client):
+    first_boot = client.get("/api/session/boot")
+    assert first_boot.status_code == 200
+
+    workspace = main.state.workspace
+    workspace_root = workspace.paths.internal_root
+    sentinel = workspace.paths.internal_output / "sentinel.txt"
+    sentinel.write_text("preserve", encoding="utf-8")
+
+    second_boot = client.get("/api/session/boot")
+    assert second_boot.status_code == 200
+
+    assert sentinel.exists()
+    assert main.state.workspace.paths.internal_root == workspace_root
+
+
 def test_delete_session_history_removes_workspace(client):
     boot = client.get("/api/session/boot")
     assert boot.status_code == 200
