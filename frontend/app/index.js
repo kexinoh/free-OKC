@@ -462,7 +462,8 @@ function initializeEventListeners() {
   if (userInput) {
     userInput.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;
-      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) {
+      const isSubmitShortcut = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey;
+      if (!isSubmitShortcut) {
         return;
       }
       event.preventDefault();
