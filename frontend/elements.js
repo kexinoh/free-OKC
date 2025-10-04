@@ -4,6 +4,7 @@ export const userInput = document.getElementById('user-input');
 export const cancelEditButton = document.getElementById('cancel-edit');
 export const chatEditingHint = document.getElementById('chat-editing-hint');
 export const chatPanel = document.querySelector('.chat-panel');
+export const appShell = document.querySelector('.app-shell');
 export const statusPill = document.getElementById('status-pill');
 export const modelLogList = document.getElementById('model-log');
 export const modelLogEmpty = document.getElementById('model-log-empty');

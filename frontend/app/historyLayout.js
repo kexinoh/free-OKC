@@ -5,7 +5,7 @@ function resolveChatPanel(chatPanel, chatMessages) {
   return chatMessages?.closest?.('.chat-panel') ?? null;
 }
 
-export function createHistoryLayoutManager({ historySidebar, chatPanel, chatMessages }) {
+export function createHistoryLayoutManager({ historySidebar, chatPanel, chatMessages, appShell }) {
   if (!(historySidebar instanceof HTMLElement)) {
     return {
       requestLayoutSync: () => {},
@@ -17,18 +17,25 @@ export function createHistoryLayoutManager({ historySidebar, chatPanel, chatMess
   let rafId = null;
   let resizeObserver = null;
 
+  const resolveLayoutTarget = () => {
+    if (appShell instanceof HTMLElement) {
+      return appShell;
+    }
+    return resolveChatPanel(chatPanel, chatMessages);
+  };
+
   const applyMeasurements = () => {
-    const targetChatPanel = resolveChatPanel(chatPanel, chatMessages);
-    if (!(targetChatPanel instanceof HTMLElement)) {
+    const layoutTarget = resolveLayoutTarget();
+    if (!(layoutTarget instanceof HTMLElement)) {
       historySidebar.style.removeProperty('--history-offset');
       historySidebar.style.removeProperty('--history-height');
       return;
     }
 
     const sidebarRect = historySidebar.getBoundingClientRect();
-    const chatRect = targetChatPanel.getBoundingClientRect();
-    const offset = Math.max(chatRect.top - sidebarRect.top, 0);
-    const height = chatRect.height;
+    const layoutRect = layoutTarget.getBoundingClientRect();
+    const offset = Math.max(layoutRect.top - sidebarRect.top, 0);
+    const height = layoutRect.height;
 
     if (!Number.isFinite(offset) || !Number.isFinite(height) || height <= 0) {
       historySidebar.style.removeProperty('--history-offset');
@@ -64,14 +71,15 @@ export function createHistoryLayoutManager({ historySidebar, chatPanel, chatMess
       return;
     }
 
-    if (!(target instanceof HTMLElement)) {
+    const resolvedTarget = target instanceof HTMLElement ? target : resolveLayoutTarget();
+    if (!(resolvedTarget instanceof HTMLElement)) {
       return;
     }
 
     resizeObserver = new ResizeObserver(() => {
       requestLayoutSync();
     });
-    resizeObserver.observe(target);
+    resizeObserver.observe(resolvedTarget);
   };
 
   return {
