@@ -37,6 +37,24 @@ console = Console()
 setup_logging()
 logger = get_logger(__name__)
 
+
+def _parse_bool(value, default=True):
+    """Best-effort conversion of configuration values to booleans."""
+
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalised = value.strip().lower()
+        if normalised in {"1", "true", "yes", "on"}:
+            return True
+        if normalised in {"0", "false", "no", "off"}:
+            return False
+    return default
+
 # --- Helper Functions ---
 def _ensure_dependencies():
     """Checks if essential packages are installed."""
@@ -75,11 +93,24 @@ def _load_environment_and_config(config_path: Path):
         return os.environ.get(env_var, default)
 
     chat_data = data.get("chat", {})
-    chat_config = ModelEndpointConfig(
-        model=env_override("chat", "model", chat_data.get("model")),
-        base_url=env_override("chat", "base_url", chat_data.get("base_url")),
-        api_key=os.environ.get(chat_data.get("api_key_env")) if chat_data.get("api_key_env") else chat_data.get("api_key"),
-    ) if chat_data.get("model") else None
+    chat_model = env_override("chat", "model", chat_data.get("model"))
+    chat_supports_streaming = _parse_bool(
+        env_override("chat", "supports_streaming", chat_data.get("supports_streaming")),
+        default=True,
+    )
+    chat_config = (
+        ModelEndpointConfig(
+            model=chat_model,
+            base_url=env_override("chat", "base_url", chat_data.get("base_url")),
+            api_key=
+            os.environ.get(chat_data.get("api_key_env"))
+            if chat_data.get("api_key_env")
+            else chat_data.get("api_key"),
+            supports_streaming=chat_supports_streaming,
+        )
+        if chat_model
+        else None
+    )
 
     # 此处可以为 media config 添加类似的环境变量覆盖逻辑
     media_data = data.get("media", {})

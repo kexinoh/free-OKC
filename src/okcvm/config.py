@@ -29,6 +29,22 @@ from .logging_utils import get_logger
 
 logger = get_logger(__name__)
 
+def _parse_bool(value: object, *, default: bool = False) -> bool:
+    """Parse ``value`` into a boolean flag."""
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalised = value.strip().lower()
+        if normalised in {"1", "true", "yes", "on"}:
+            return True
+        if normalised in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
 @dataclass(slots=True)
 class ModelEndpointConfig:
     """Configuration for a single model endpoint."""
@@ -36,6 +52,7 @@ class ModelEndpointConfig:
     model: str
     base_url: str
     api_key: Optional[str] = None
+    supports_streaming: bool = True
 
     @classmethod
     def from_env(
@@ -57,14 +74,27 @@ class ModelEndpointConfig:
         model = env_mapping.get(f"{prefix}_MODEL")
         base_url = env_mapping.get(f"{prefix}_BASE_URL")
         api_key = env_mapping.get(f"{prefix}_API_KEY")
+        supports_streaming_raw = env_mapping.get(f"{prefix}_SUPPORTS_STREAMING")
         if model and base_url:
-            return cls(model=model, base_url=base_url, api_key=api_key)
+            return cls(
+                model=model,
+                base_url=base_url,
+                api_key=api_key,
+                supports_streaming=_parse_bool(
+                    supports_streaming_raw,
+                    default=True,
+                ),
+            )
         return None
 
     def describe(self) -> dict:
         """Return a serialisable view without leaking the API key."""
 
-        description = {"model": self.model, "base_url": self.base_url}
+        description = {
+            "model": self.model,
+            "base_url": self.base_url,
+            "supports_streaming": self.supports_streaming,
+        }
         if self.api_key:
             description["api_key_present"] = True
         return description
@@ -243,6 +273,10 @@ def load_config_from_yaml(path: Path) -> None:
                 base_url=chat_config.get("base_url"),
                 api_key=chat_config.get("api_key")
                 or (os.environ.get(api_key_env) if api_key_env else None),
+                supports_streaming=_parse_bool(
+                    chat_config.get("supports_streaming"),
+                    default=True,
+                ),
             )
 
         _config.media = MediaConfig(
@@ -269,7 +303,11 @@ def _parse_endpoint(data: dict, key: str) -> ModelEndpointConfig | None:
     return ModelEndpointConfig(
         model=endpoint_data["model"],
         base_url=endpoint_data.get("base_url"),
-        api_key=api_key
+        api_key=api_key,
+        supports_streaming=_parse_bool(
+            endpoint_data.get("supports_streaming"),
+            default=True,
+        ),
     )
 
 

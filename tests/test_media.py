@@ -41,6 +41,7 @@ def test_generate_image_and_audio():
         "model": "stub-model",
         "base_url": "https://example.invalid/v1",
         "api_key_present": True,
+        "supports_streaming": True,
     }
 
     voices = registry.call("mshtools-get_available_voices")
@@ -54,6 +55,7 @@ def test_generate_image_and_audio():
         "model": "stub-model",
         "base_url": "https://example.invalid/v1",
         "api_key_present": True,
+        "supports_streaming": True,
     }
 
     effect = registry.call("mshtools-generate_sound_effects", description="gentle rain", duration=1.0)
@@ -64,4 +66,5 @@ def test_generate_image_and_audio():
         "model": "stub-model",
         "base_url": "https://example.invalid/v1",
         "api_key_present": True,
+        "supports_streaming": True,
     }
