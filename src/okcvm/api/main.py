@@ -342,11 +342,12 @@ def create_app() -> FastAPI:
     ) -> Dict[str, object]:
         session = _get_session(request, client_id)
         logger.info(
-            "Chat request received client=%s: %s",
+            "Chat request received client=%s replace_last=%s: %s",
             session.client_id,
+            payload.replace_last,
             payload.message[:120],
         )
-        response = session.respond(payload.message)
+        response = session.respond(payload.message, replace_last=payload.replace_last)
         logger.debug(
             "Chat response generated (preview=%s, history=%s, summary=%s)",
             bool(response.get("web_preview")),
