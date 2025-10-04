@@ -92,6 +92,28 @@ function ensureClientId() {
   return cachedClientId;
 }
 
+function prepareRequest(url, options = {}, extraHeaders = {}) {
+  const clientId = ensureClientId();
+  const headers = new Headers(options.headers ?? {});
+  headers.set(CLIENT_ID_HEADER, clientId);
+
+  if (extraHeaders && typeof extraHeaders === 'object') {
+    Object.entries(extraHeaders).forEach(([key, value]) => {
+      if (typeof key === 'string' && typeof value === 'string' && value.trim()) {
+        headers.set(key, value);
+      }
+    });
+  }
+
+  const requestInit = { ...options, headers };
+  const targetUrl = new URL(url, window.location.origin);
+  if (!targetUrl.searchParams.has('client_id')) {
+    targetUrl.searchParams.set('client_id', clientId);
+  }
+
+  return { targetUrl, requestInit, clientId };
+}
+
 export function generateId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -112,15 +134,7 @@ export function formatConversationTime(isoString) {
 }
 
 export async function fetchJson(url, options = {}) {
-  const clientId = ensureClientId();
-  const headers = new Headers(options.headers ?? {});
-  headers.set(CLIENT_ID_HEADER, clientId);
-
-  const requestInit = { ...options, headers };
-  const targetUrl = new URL(url, window.location.origin);
-  if (!targetUrl.searchParams.has('client_id')) {
-    targetUrl.searchParams.set('client_id', clientId);
-  }
+  const { targetUrl, requestInit } = prepareRequest(url, options);
 
   const response = await fetch(targetUrl.toString(), requestInit);
   if (!response.ok) {
@@ -134,4 +148,142 @@ export async function fetchJson(url, options = {}) {
     throw new Error(detail || `请求失败：${response.status}`);
   }
   return response.json();
+}
+
+export async function streamJson(url, options = {}, onEvent) {
+  const { targetUrl, requestInit } = prepareRequest(url, options, {
+    Accept: 'text/event-stream',
+  });
+
+  const response = await fetch(targetUrl.toString(), requestInit);
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const body = await response.json();
+      detail = body?.detail || body?.message || '';
+    } catch (error) {
+      // ignore parse errors
+    }
+    throw new Error(detail || `请求失败：${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('当前浏览器不支持流式响应');
+  }
+
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  let finalPayload = null;
+
+  const safeEmit = typeof onEvent === 'function'
+    ? (payload) => {
+        try {
+          onEvent(payload);
+        } catch (error) {
+          console.error('Stream handler error', error);
+        }
+      }
+    : () => {};
+
+  const processBuffer = (flush = false) => {
+    let boundary;
+    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+      const rawEvent = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const dataLines = rawEvent
+        .split('\n')
+        .filter((line) => line.startsWith('data:'));
+      if (dataLines.length === 0) {
+        continue;
+      }
+      const dataString = dataLines.map((line) => line.slice(5).trim()).join('\n');
+      if (!dataString) {
+        continue;
+      }
+      let payload;
+      try {
+        payload = JSON.parse(dataString);
+      } catch (error) {
+        console.warn('无法解析流式事件：', error);
+        continue;
+      }
+      safeEmit(payload);
+      if (payload?.type === 'final') {
+        finalPayload = payload.payload ?? null;
+        return 'final';
+      }
+      if (payload?.type === 'error') {
+        const message =
+          typeof payload.message === 'string' && payload.message.trim()
+            ? payload.message.trim()
+            : '流式响应出错';
+        throw new Error(message);
+      }
+    }
+
+    if (flush && buffer.trim()) {
+      const tail = buffer.trim();
+      buffer = '';
+      const tailLines = tail.split('\n').filter((line) => line.startsWith('data:'));
+      if (tailLines.length > 0) {
+        const tailString = tailLines.map((line) => line.slice(5).trim()).join('\n');
+        if (tailString) {
+          try {
+            const payload = JSON.parse(tailString);
+            safeEmit(payload);
+            if (payload?.type === 'final') {
+              finalPayload = payload.payload ?? null;
+              return 'final';
+            }
+            if (payload?.type === 'error') {
+              const message =
+                typeof payload.message === 'string' && payload.message.trim()
+                  ? payload.message.trim()
+                  : '流式响应出错';
+              throw new Error(message);
+            }
+          } catch (error) {
+            console.warn('无法解析尾部流式事件：', error);
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        buffer += decoder.decode(new Uint8Array(), { stream: false });
+        processBuffer(true);
+        break;
+      }
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+        const state = processBuffer(false);
+        if (state === 'final') {
+          await reader.cancel().catch(() => {});
+          break;
+        }
+      }
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch (error) {
+      // ignore release errors
+    }
+  }
+
+  if (finalPayload === null) {
+    throw new Error('未接收到完整的模型回复');
+  }
+
+  return finalPayload;
 }

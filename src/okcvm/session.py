@@ -7,6 +7,8 @@ from json import JSONDecodeError
 from typing import Dict, List, Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
+from langchain_core.callbacks.base import BaseCallbackHandler
+
 from . import constants, spec
 from .config import WorkspaceConfig, get_config
 from .logging_utils import get_logger
@@ -135,14 +137,23 @@ class SessionState:
             "summary": summary,
         }
 
-    def respond(self, message: str, *, replace_last: bool = False) -> Dict[str, object]:
+    def respond(
+        self,
+        message: str,
+        *,
+        replace_last: bool = False,
+        stream_handler: BaseCallbackHandler | None = None,
+    ) -> Dict[str, object]:
 
         # 调用 VM 来获取真实的 LLM 响应
         logger.info("Session respond invoked with: %s", message[:120])
         if replace_last:
             removed = self.vm.discard_last_exchange()
             logger.debug("Discarded last exchange before regeneration: %s", removed)
-        vm_result = self.vm.execute(message)
+        if stream_handler is not None:
+            vm_result = self.vm.execute(message, callbacks=[stream_handler])
+        else:
+            vm_result = self.vm.execute(message)
 
         # 从 VM 的结果中提取信息
         reply = vm_result.get("reply", "An error occurred.")

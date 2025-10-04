@@ -30,7 +30,7 @@ def create_llm_chain(registry: ToolRegistry):
         api_key=chat_config.api_key,
         base_url=chat_config.base_url,
         temperature=0.7,
-        streaming=False,  # 对于工具调用，非流式更简单
+        streaming=True,
     )
 
     # 3. 将我们的工具绑定到模型上

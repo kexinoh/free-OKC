@@ -88,7 +88,7 @@ def test_create_llm_chain_uses_config(monkeypatch):
         "api_key": "sk-sim",
         "base_url": "https://chat.sim",
         "temperature": 0.7,
-        "streaming": False,
+        "streaming": True,
     }
     assert len(captured["bound_tools"][1]) == 2
     assert captured["executor_verbose"] is True

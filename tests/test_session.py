@@ -14,7 +14,7 @@ class DummyVM:
         self.history: list[Dict[str, Any]] = []
         self._response: Dict[str, Any] = {"reply": "", "tool_calls": []}
 
-    def execute(self, message: str) -> Dict[str, Any]:
+    def execute(self, message: str, **kwargs: Any) -> Dict[str, Any]:
         self.history.append({"role": "user", "content": message})
         reply = self._response.get("reply", "")
         self.history.append({"role": "assistant", "content": reply})
@@ -110,7 +110,7 @@ def test_session_collects_preview_without_intermediate_steps(tmp_path, monkeypat
         def __init__(self, registry):
             self.registry = registry
 
-        def invoke(self, inputs):
+        def invoke(self, inputs, config=None):  # noqa: ANN001
             workspace = self.registry.workspace
             site_root = workspace.resolve("site")
             site_root.mkdir(parents=True, exist_ok=True)
