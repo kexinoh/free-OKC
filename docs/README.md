@@ -18,12 +18,12 @@ together. If you are onboarding, start here before diving into the source tree.
 
 - **Keep docs and code in sync.** Whenever you modify core runtime logic, update
 the corresponding section. The tables above should always reflect the actual
-responsibilities of each module.【F:docs/backend.md†L1-L124】
-- **Link to source.** Inline citations (e.g. `【F:src/...】`) reference canonical
+responsibilities of each module. [docs/backend.md#L1-L124](backend.md#L1-L124)
+- **Link to source.** Inline citations (e.g. `[src/...#L..]`) reference canonical
 implementations so future contributors can audit behaviour quickly.
 - **Prefer English.** All technical documentation is maintained in English to
 serve the global engineering team. Localised product copy belongs in the
-frontend assets or runtime constants.【F:src/okcvm/constants.py†L1-L120】
+frontend assets or runtime constants. [src/okcvm/constants.py#L1-L120](../src/okcvm/constants.py#L1-L120)
 
 ## Editing checklist
 
@@ -33,7 +33,7 @@ frontend assets or runtime constants.【F:src/okcvm/constants.py†L1-L120】
 3. Extend the workspace and session tree guides whenever tools rely on new
    directory layouts or metadata conventions.
 4. Run `pytest` after major changes and record additional learnings in the
-docs if a regression revealed missing context.【F:tests/test_api_app.py†L1-L145】
+docs if a regression revealed missing context. [tests/test_api_app.py#L1-L145](../tests/test_api_app.py#L1-L145)
 
 Treat this directory as part of the codebase—pull requests without matching
 documentation updates should be rare exceptions.
