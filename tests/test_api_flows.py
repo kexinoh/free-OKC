@@ -10,6 +10,7 @@ the application.
 from __future__ import annotations
 
 import copy
+import json
 from types import SimpleNamespace
 from typing import Dict, Iterable, Optional
 
@@ -97,6 +98,40 @@ class _StubVirtualMachine:
         return None
 
 
+class _ToolCallStubVirtualMachine(_StubVirtualMachine):
+    """Stub VM that records a deterministic tool invocation for testing."""
+
+    def execute(self, message: str) -> Dict[str, object]:  # noqa: D401 - test stub
+        result = super().execute(message)
+
+        tool_output = {
+            "output": "Preview ready",
+            "html": "<div>Generated content</div>",
+            "preview_url": "preview/index.html",
+            "deployment": {
+                "id": "deploy-001",
+                "name": "Landing Page",
+                "preview_url": "preview/index.html",
+            },
+            "slides": [
+                {"title": "Slide A", "bullets": ["Point 1", "Point 2"]},
+            ],
+            "artifacts": [
+                {"type": "file", "name": "index.html", "url": "output/index.html"},
+            ],
+        }
+
+        result["tool_calls"] = [
+            {
+                "id": self._next_id(),
+                "tool_name": "workspace.generate_web",
+                "tool_input": {"prompt": message},
+                "tool_output": json.dumps(tool_output),
+            }
+        ]
+        return result
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     """Create a FastAPI test client backed by the stub virtual machine."""
@@ -104,6 +139,30 @@ def client(tmp_path, monkeypatch):
     from okcvm import session as session_module
 
     monkeypatch.setattr(session_module, "VirtualMachine", _StubVirtualMachine)
+
+    config_mod.configure(workspace=WorkspaceConfig(path=str(tmp_path)))
+    api_main.session_store = api_main.SessionStore()
+    dummy_state = SimpleNamespace(
+        set=lambda session: None,
+        clear=lambda: None,
+        reset=lambda: None,
+    )
+    monkeypatch.setattr(api_main, "state", dummy_state, raising=False)
+    api_main.session_store.reset()
+    api_main.session_store.get(TEST_CLIENT_ID)
+    return TestClient(
+        api_main.create_app(),
+        headers={"x-okc-client-id": TEST_CLIENT_ID},
+    )
+
+
+@pytest.fixture
+def tool_call_client(tmp_path, monkeypatch):
+    """FastAPI client backed by the tool call stub VM."""
+
+    from okcvm import session as session_module
+
+    monkeypatch.setattr(session_module, "VirtualMachine", _ToolCallStubVirtualMachine)
 
     config_mod.configure(workspace=WorkspaceConfig(path=str(tmp_path)))
     api_main.session_store = api_main.SessionStore()
@@ -188,3 +247,55 @@ def test_session_flow_supports_replace_last_via_api(client):
         "重新生成第二次",
         "Stub response: 重新生成第二次",
     ]
+
+
+def test_session_flow_with_tool_call_generates_preview(tool_call_client):
+    """End-to-end verification that tool payloads shape the API response."""
+
+    boot = tool_call_client.get("/api/session/boot")
+    assert boot.status_code == 200
+
+    response = tool_call_client.post(
+        "/api/chat",
+        json={"message": "生成产品介绍网页", "replace_last": False},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["reply"] == "Stub response: 生成产品介绍网页"
+    assert payload["meta"]["summary"] == "Preview ready"
+
+    tool_calls = payload["tool_calls"]
+    assert len(tool_calls) == 1
+    tool_call = tool_calls[0]
+    assert tool_call["tool_name"] == "workspace.generate_web"
+
+    parsed_output = json.loads(tool_call["tool_output"])
+    assert parsed_output["html"] == "<div>Generated content</div>"
+
+    preview = payload["web_preview"]
+    assert preview["html"] == "<div>Generated content</div>"
+    assert preview["url"].startswith("preview/index.html")
+    assert preview["url"].endswith(f"client_id={TEST_CLIENT_ID}")
+
+    slides = payload["ppt_slides"]
+    assert slides == [{"title": "Slide A", "bullets": ["Point 1", "Point 2"]}]
+
+    artifacts = payload["artifacts"]
+    assert len(artifacts) == 2
+    assert artifacts[0] == {
+        "type": "web",
+        "name": "Landing Page",
+        "url": f"preview/index.html?client_id={TEST_CLIENT_ID}",
+    }
+
+    file_artifact = artifacts[1]
+    assert file_artifact == {
+        "type": "file",
+        "name": "index.html",
+        "url": f"output/index.html?client_id={TEST_CLIENT_ID}",
+    }
+
+    history_roles = [entry["role"] for entry in payload["vm_history"]]
+    assert history_roles[-2:] == ["user", "assistant"]
