@@ -1,10 +1,10 @@
 import { cloneMessageActionIcon } from './messageActionIcons.js';
-import { renderMarkdown } from './markdown.js';
-import { initializeMessageEditor, openMessageEditor, isMessageEditorOpen } from './editor.js';
 import {
   chatMessages,
   chatForm,
   userInput,
+  cancelEditButton,
+  chatEditingHint,
   chatPanel,
   statusPill,
   configForm,
@@ -59,6 +59,20 @@ const messageActionFeedbackTimers = new WeakMap();
 let historyLayoutRafId = null;
 let historyLayoutObserver = null;
 
+const sendButton = chatForm?.querySelector('.send-button') ?? null;
+const defaultSendButtonLabel = sendButton?.textContent?.trim() || '发送';
+const defaultInputPlaceholder = userInput?.getAttribute('placeholder') ?? '';
+const editingHintFallback = '正在编辑历史消息，点击“保存”完成修改。';
+const editingHintInitial = chatEditingHint?.textContent?.trim();
+const defaultEditingHintText =
+  editingHintInitial && editingHintInitial.length > 0 ? editingHintInitial : editingHintFallback;
+
+if (chatEditingHint && (!editingHintInitial || editingHintInitial.length === 0)) {
+  chatEditingHint.textContent = defaultEditingHintText;
+}
+
+let activeEditState = null;
+
 function applyHistoryLayoutMeasurements() {
   if (!(historySidebar instanceof HTMLElement)) {
     return;
@@ -105,10 +119,176 @@ function setInteractionDisabled(disabled) {
   if (userInput) {
     userInput.disabled = disabled;
   }
-  const submitButton = chatForm?.querySelector('button');
-  if (submitButton) {
-    submitButton.disabled = disabled;
+  if (sendButton) {
+    sendButton.disabled = disabled;
   }
+  if (cancelEditButton) {
+    cancelEditButton.disabled = disabled;
+  }
+}
+
+function isEditingMessage() {
+  return activeEditState !== null;
+}
+
+function findMessageElementById(messageId) {
+  if (!chatMessages || !messageId) {
+    return null;
+  }
+  const candidates = chatMessages.querySelectorAll('[data-message-id]');
+  for (const element of candidates) {
+    if (element instanceof HTMLElement && element.dataset.messageId === messageId) {
+      return element;
+    }
+  }
+  return null;
+}
+
+function cancelActiveEdit({ focusInput = false, clearInput = true } = {}) {
+  activeEditState = null;
+  if (chatForm) {
+    chatForm.classList.remove('editing');
+    delete chatForm.dataset.editing;
+  }
+  if (sendButton) {
+    sendButton.textContent = defaultSendButtonLabel;
+  }
+  if (cancelEditButton) {
+    cancelEditButton.hidden = true;
+    cancelEditButton.disabled = false;
+  }
+  if (chatEditingHint) {
+    chatEditingHint.hidden = true;
+    if (defaultEditingHintText) {
+      chatEditingHint.textContent = defaultEditingHintText;
+    }
+  }
+  if (userInput) {
+    if (clearInput) {
+      userInput.value = '';
+    }
+    userInput.placeholder = defaultInputPlaceholder;
+    if (focusInput) {
+      try {
+        const length = userInput.value.length;
+        userInput.focus();
+        userInput.setSelectionRange(length, length);
+      } catch (error) {
+        userInput.focus();
+      }
+    }
+  }
+}
+
+function enterEditModeForMessage({ conversation, message, initialValue, previousMessages, previousSelections }) {
+  if (!conversation || !message || !chatForm || !userInput) {
+    return;
+  }
+
+  activeEditState = {
+    conversationId: conversation.id,
+    messageId: message.id,
+    previousMessages,
+    previousSelections,
+  };
+
+  chatForm.dataset.editing = 'true';
+  chatForm.classList.add('editing');
+
+  if (sendButton) {
+    sendButton.textContent = '保存';
+  }
+
+  if (cancelEditButton) {
+    cancelEditButton.hidden = false;
+    cancelEditButton.disabled = false;
+  }
+
+  if (chatEditingHint) {
+    if (defaultEditingHintText) {
+      chatEditingHint.textContent = defaultEditingHintText;
+    }
+    chatEditingHint.hidden = false;
+  }
+
+  const value = typeof initialValue === 'string' ? initialValue : '';
+  userInput.value = value;
+  userInput.placeholder = '编辑消息后点击保存';
+
+  try {
+    const length = userInput.value.length;
+    userInput.focus();
+    userInput.setSelectionRange(length, length);
+  } catch (error) {
+    userInput.focus();
+  }
+}
+
+function applyActiveEdit(nextContentRaw) {
+  if (!isEditingMessage()) {
+    return;
+  }
+
+  const { conversationId, messageId, previousMessages, previousSelections } = activeEditState;
+  const conversation = getConversations().find((entry) => entry.id === conversationId);
+  if (!conversation) {
+    cancelActiveEdit({ focusInput: false });
+    return;
+  }
+
+  const messageIndex = conversation.messages.findIndex((entry) => entry.id === messageId);
+  if (messageIndex === -1) {
+    cancelActiveEdit({ focusInput: false });
+    return;
+  }
+
+  const message = conversation.messages[messageIndex];
+  const normalizedCurrent = typeof message.content === 'string' ? message.content.replace(/\r\n/g, '\n') : '';
+  const normalizedNext = typeof nextContentRaw === 'string' ? nextContentRaw.replace(/\r\n/g, '\n') : '';
+
+  if (normalizedCurrent === normalizedNext) {
+    cancelActiveEdit({ focusInput: true });
+    return;
+  }
+
+  message.content = normalizedNext;
+  const timestamp = new Date().toISOString();
+  message.timestamp = timestamp;
+  conversation.updatedAt = timestamp;
+  bumpConversation(conversation.id);
+
+  const messageElement = findMessageElementById(messageId);
+  if (messageElement instanceof HTMLElement) {
+    const body = messageElement.querySelector('.message-content');
+    if (body) {
+      body.textContent = normalizedNext;
+      body.classList.remove('pending');
+    }
+    if (messageElement.dataset) {
+      messageElement.dataset.contentRaw = normalizedNext;
+    }
+    const timeElement = messageElement.querySelector('time');
+    if (timeElement) {
+      timeElement.dateTime = timestamp;
+      timeElement.textContent = new Date(timestamp).toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+  }
+
+  const title = generateConversationTitle(normalizedNext);
+  if (title) {
+    conversation.title = title;
+  }
+
+  commitBranchTransition(conversation, messageId, previousMessages, previousSelections);
+  syncActiveBranchSnapshots(conversation);
+  saveConversationsToStorage();
+  renderConversationList();
+  refreshConversationBranchNavigation(conversation);
+
+  cancelActiveEdit({ focusInput: true });
 }
 
 function setStatus(text, busy = false) {
@@ -401,7 +581,7 @@ function createMessageElement(role, text, options = {}) {
   const body = document.createElement('div');
   body.className = 'message-content';
   const initialText = typeof text === 'string' ? text : '';
-  body.innerHTML = renderMarkdown(initialText);
+  body.textContent = initialText;
   if (message.dataset) {
     message.dataset.contentRaw = initialText;
   }
@@ -500,7 +680,7 @@ function finalizePendingMessage(message, text, messageId) {
 
   const body = message.querySelector('.message-content');
   if (body) {
-    body.innerHTML = renderMarkdown(finalText);
+    body.textContent = finalText;
     body.classList.remove('pending');
   }
 
@@ -560,7 +740,7 @@ async function handleCopyMessageAction(messageId, button, messageElement) {
   }
 }
 
-async function handleEditMessageAction(messageElement, messageId) {
+function handleEditMessageAction(messageElement, messageId) {
   if (!messageElement) return;
   const match = findConversationByMessageId(messageId);
   if (!match) return;
@@ -575,49 +755,13 @@ async function handleEditMessageAction(messageElement, messageId) {
   const currentContent = typeof message.content === 'string' ? message.content : body?.textContent ?? '';
   const currentNormalized = (currentContent ?? '').replace(/\r\n/g, '\n');
 
-  const nextContent = await openMessageEditor({
-    title: '编辑用户消息',
+  enterEditModeForMessage({
+    conversation,
+    message,
     initialValue: currentNormalized,
+    previousMessages,
+    previousSelections,
   });
-  if (nextContent === null) return;
-
-  const normalized = nextContent.replace(/\r\n/g, '\n');
-  if (normalized === currentNormalized) {
-    return;
-  }
-  message.content = normalized;
-  const timestamp = new Date().toISOString();
-  message.timestamp = timestamp;
-  conversation.updatedAt = timestamp;
-  bumpConversation(conversation.id);
-
-  if (body) {
-    body.innerHTML = renderMarkdown(normalized);
-  }
-
-  if (messageElement.dataset) {
-    messageElement.dataset.contentRaw = normalized;
-  }
-
-  const timeElement = messageElement.querySelector('time');
-  if (timeElement) {
-    timeElement.dateTime = timestamp;
-    timeElement.textContent = new Date(timestamp).toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
-  const title = generateConversationTitle(normalized);
-  if (title) {
-    conversation.title = title;
-  }
-
-  commitBranchTransition(conversation, message.id, previousMessages, previousSelections);
-  syncActiveBranchSnapshots(conversation);
-  saveConversationsToStorage();
-  renderConversationList();
-  refreshConversationBranchNavigation(conversation);
 }
 
 async function regenerateAssistantMessage(messageElement, messageId, button) {
@@ -768,6 +912,11 @@ function resetSessionOutputs() {
 function renderConversation(conversation) {
   if (!chatMessages) return;
   const target = conversation ?? getCurrentConversation();
+
+  if (isEditingMessage()) {
+    cancelActiveEdit({ focusInput: false });
+  }
+
   if (!target) {
     chatMessages.innerHTML = '';
     lastRenderedConversationId = null;
@@ -794,9 +943,8 @@ function renderConversation(conversation) {
     userInput.value = '';
     userInput.disabled = false;
   }
-  const submitButton = chatForm?.querySelector('button');
-  if (submitButton) {
-    submitButton.disabled = false;
+  if (sendButton) {
+    sendButton.disabled = false;
   }
 }
 
@@ -1030,7 +1178,14 @@ function handleUserSubmit(event) {
   const form = event.currentTarget instanceof HTMLFormElement ? event.currentTarget : chatForm;
   const input = resolveUserInputField(form);
   if (!input) return;
-  const value = typeof input.value === 'string' ? input.value.trim() : '';
+  const rawValue = typeof input.value === 'string' ? input.value : '';
+
+  if (isEditingMessage()) {
+    applyActiveEdit(rawValue);
+    return;
+  }
+
+  const value = rawValue.trim();
   if (!value) return;
   addAndRenderMessage('user', value);
   sendChat(value);
@@ -1039,6 +1194,12 @@ function handleUserSubmit(event) {
 function initializeEventListeners() {
   if (chatForm) {
     chatForm.addEventListener('submit', handleUserSubmit);
+  }
+
+  if (cancelEditButton) {
+    cancelEditButton.addEventListener('click', () => {
+      cancelActiveEdit({ focusInput: true });
+    });
   }
 
   if (chatMessages) {
@@ -1078,7 +1239,7 @@ function initializeEventListeners() {
           await handleCopyMessageAction(messageId, target, messageElement);
           break;
         case 'edit':
-          await handleEditMessageAction(messageElement, messageId);
+          handleEditMessageAction(messageElement, messageId);
           break;
         case 'refresh':
           await regenerateAssistantMessage(messageElement, messageId, target);
@@ -1151,10 +1312,12 @@ function initializeEventListeners() {
   }
 
   document.addEventListener('keydown', (event) => {
-    if (isMessageEditorOpen()) {
+    if (event.key !== 'Escape') return;
+    if (isEditingMessage()) {
+      event.preventDefault();
+      cancelActiveEdit({ focusInput: true });
       return;
     }
-    if (event.key !== 'Escape') return;
     if (!settingsOverlay?.hidden) {
       event.preventDefault();
       closeSettingsPanel();
@@ -1169,7 +1332,6 @@ function initializeEventListeners() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  initializeMessageEditor();
   initializePreviewControls();
   initializeConfigForm();
   initializeEventListeners();
