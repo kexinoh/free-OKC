@@ -29,7 +29,7 @@ from .logging_utils import get_logger
 
 logger = get_logger(__name__)
 
-def _parse_bool(value: object, *, default: bool = False) -> bool:
+def _parse_bool(value: object, *, default: bool = True) -> bool:
     """Parse ``value`` into a boolean flag."""
 
     if isinstance(value, bool):
