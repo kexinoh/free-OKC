@@ -188,7 +188,6 @@ export function createConversationPanel({
       conversations.splice(index, 0, removed);
       setCurrentSessionId(removed.id);
       saveConversationsToStorage();
-      renderConversationList();
       selectConversation(removed.id);
       addAndRenderMessage('assistant', `清理会话失败：${error.message || '未知错误'}`);
       return;
