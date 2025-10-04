@@ -179,7 +179,7 @@ def test_session_endpoints_use_session_state(monkeypatch, client):
     session = main.session_store.get(TEST_CLIENT_ID)
     monkeypatch.setattr(session, "respond", fake_respond)
 
-    chat = client.post("/api/chat", json={"message": "ping"})
+    chat = client.post("/api/chat", json={"message": "ping", "stream": False})
     assert chat.status_code == 200
     assert chat.json()["reply"] == "pong"
     assert captured["message"] == "ping"
@@ -194,7 +194,7 @@ def test_chat_endpoint_allows_replacing_last_exchange(monkeypatch, client):
 
     vm = main.state.vm
 
-    def fake_execute(message):  # noqa: ANN001
+    def fake_execute(message, **kwargs):  # noqa: ANN001
         vm.record_history_entry({"role": "user", "content": message})
         reply = f"echo:{message}"
         vm.record_history_entry({"role": "assistant", "content": reply})
@@ -202,13 +202,16 @@ def test_chat_endpoint_allows_replacing_last_exchange(monkeypatch, client):
 
     monkeypatch.setattr(vm, "execute", fake_execute)
 
-    first = client.post("/api/chat", json={"message": "hello"})
+    first = client.post("/api/chat", json={"message": "hello", "stream": False})
     assert first.status_code == 200
     history_after_first = first.json()["vm_history"]
     assert isinstance(history_after_first, list)
     assert len(history_after_first) >= 2
 
-    second = client.post("/api/chat", json={"message": "hello", "replace_last": True})
+    second = client.post(
+        "/api/chat",
+        json={"message": "hello", "replace_last": True, "stream": False},
+    )
     assert second.status_code == 200
     history_after_second = second.json()["vm_history"]
 

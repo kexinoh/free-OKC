@@ -517,6 +517,71 @@ body.no-scroll { overflow: hidden; }
 .message .message-content.pending {
   color: var(--text-secondary);
 }
+
+.message .streaming-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.message .streaming-text {
+  white-space: pre-wrap;
+  line-height: 1.65;
+}
+
+.message .tool-status-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.message .tool-status-container:empty {
+  display: none;
+}
+
+.message .tool-status-card {
+  border: 1px solid var(--border-color);
+  border-radius: 0.9rem;
+  padding: 0.75rem 0.9rem;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.message.assistant .tool-status-card {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.message .tool-status-card.completed {
+  border-color: var(--accent-color);
+}
+
+.message .tool-status-card.error {
+  border-color: #d94848;
+  background: rgba(217, 72, 72, 0.08);
+}
+
+.message .tool-status-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.35rem;
+}
+
+.message .tool-status-card pre.tool-status-details {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message .tool-status-summary {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
 .message-footer {
   display: flex;
   align-items: center;

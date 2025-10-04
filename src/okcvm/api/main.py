@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 from threading import Lock
@@ -8,7 +9,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
@@ -16,6 +17,7 @@ from starlette.responses import Response
 from ..config import MediaConfig, ModelEndpointConfig, configure, get_config
 from ..logging_utils import get_logger, setup_logging
 from ..session import SessionState
+from ..streaming import EventStreamPublisher, LangChainStreamingHandler
 from ..workspace import WorkspaceStateError
 
 if TYPE_CHECKING:  # pragma: no cover - import used for type checking only
@@ -483,7 +485,7 @@ def create_app() -> FastAPI:
         request: Request,
         payload: ChatRequest,
         client_id: Optional[str] = Query(default=None),
-    ) -> Dict[str, object]:
+    ) -> Response:
         session = _get_session(request, client_id)
         logger.info(
             "Chat request received client=%s replace_last=%s: %s",
@@ -491,14 +493,46 @@ def create_app() -> FastAPI:
             payload.replace_last,
             payload.message[:120],
         )
-        response = session.respond(payload.message, replace_last=payload.replace_last)
+        if payload.stream:
+            loop = asyncio.get_running_loop()
+            publisher = EventStreamPublisher(loop)
+
+            async def _run_stream() -> None:
+                handler = LangChainStreamingHandler(publisher.publish)
+                try:
+                    result = await asyncio.to_thread(
+                        session.respond,
+                        payload.message,
+                        replace_last=payload.replace_last,
+                        stream_handler=handler,
+                    )
+                    publisher.publish({"type": "final", "payload": result})
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    logger.exception("Streaming chat failed for client=%s", session.client_id)
+                    publisher.publish({"type": "error", "message": str(exc)})
+                finally:
+                    publisher.close()
+
+            asyncio.create_task(_run_stream())
+            headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+            return StreamingResponse(
+                publisher.iter_sse(),
+                media_type="text/event-stream",
+                headers=headers,
+            )
+
+        response = await asyncio.to_thread(
+            session.respond,
+            payload.message,
+            replace_last=payload.replace_last,
+        )
         logger.debug(
             "Chat response generated (preview=%s, history=%s, summary=%s)",
             bool(response.get("web_preview")),
             len(response.get("vm_history", [])),
             response.get("meta", {}).get("summary"),
         )
-        return response
+        return JSONResponse(response)
 
     @app.delete("/api/session/history")
     async def delete_session_history(

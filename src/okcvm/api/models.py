@@ -45,6 +45,13 @@ class ChatRequest(BaseModel):
             "conversation turns."
         ),
     )
+    stream: bool = Field(
+        default=True,
+        description=(
+            "When true the response is delivered as a server-sent event stream with "
+            "incremental updates."
+        ),
+    )
 
 
 class SnapshotCreatePayload(BaseModel):

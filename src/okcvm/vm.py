@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import copy
 from itertools import count
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 from uuid import uuid4
 
+from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage
 
 from . import spec
@@ -55,7 +56,12 @@ class VirtualMachine:
         self._history_id_counter = count(1)
         logger.debug("VM history has been reset")
 
-    def execute(self, utterance: str) -> Dict[str, Any]:
+    def execute(
+        self,
+        utterance: str,
+        *,
+        callbacks: Sequence[BaseCallbackHandler] | None = None,
+    ) -> Dict[str, Any]:
         """
         Processes a user utterance using the LangChain agent.
         Handles LLM calls and tool executions.
@@ -75,11 +81,16 @@ class VirtualMachine:
                 langchain_history.append(AIMessage(content=content))
 
         # 调用 LangChain Agent Executor
+        invoke_payload = {"input": utterance, "history": langchain_history}
+
         try:
-            response = self.chain.invoke({
-                "input": utterance,
-                "history": langchain_history
-            })
+            if callbacks:
+                response = self.chain.invoke(
+                    invoke_payload,
+                    config={"callbacks": list(callbacks)},
+                )
+            else:
+                response = self.chain.invoke(invoke_payload)
         except Exception as e:
             # 捕获并返回错误信息，防止服务崩溃
             logger.exception("Error invoking LangChain agent")

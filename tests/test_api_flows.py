@@ -56,7 +56,7 @@ class _StubVirtualMachine:
         self._counter += 1
         return f"stub-{self._counter:04d}"
 
-    def execute(self, message: str) -> Dict[str, object]:
+    def execute(self, message: str, **kwargs) -> Dict[str, object]:  # noqa: ANN001
         user_entry = {"role": "user", "content": message, "id": self._next_id()}
         reply_text = f"Stub response: {message}"
         assistant_entry = {
@@ -132,7 +132,7 @@ def test_session_flow_boot_chat_history_and_cleanup(client):
 
     chat_response = client.post(
         "/api/chat",
-        json={"message": "生成一个静态网页", "replace_last": False},
+        json={"message": "生成一个静态网页", "replace_last": False, "stream": False},
     )
     assert chat_response.status_code == 200
     chat_payload = chat_response.json()
@@ -169,7 +169,7 @@ def test_session_flow_supports_replace_last_via_api(client):
 
     first = client.post(
         "/api/chat",
-        json={"message": "第一次回复", "replace_last": False},
+        json={"message": "第一次回复", "replace_last": False, "stream": False},
     )
     assert first.status_code == 200
     first_history = first.json()["vm_history"]
@@ -177,7 +177,7 @@ def test_session_flow_supports_replace_last_via_api(client):
 
     regen = client.post(
         "/api/chat",
-        json={"message": "重新生成第二次", "replace_last": True},
+        json={"message": "重新生成第二次", "replace_last": True, "stream": False},
     )
     assert regen.status_code == 200
     regen_payload = regen.json()

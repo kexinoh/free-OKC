@@ -40,7 +40,7 @@ import {
   bumpConversation,
   generateConversationTitle,
 } from './conversationState.js';
-import { formatConversationTime, fetchJson } from './utils.js';
+import { formatConversationTime, fetchJson, streamJson } from './utils.js';
 import {
   logModelInvocation,
   updateWebPreview,
@@ -217,6 +217,178 @@ function markMessagePending(messageElement, placeholderText) {
     body.textContent = placeholderText ?? '正在生成回复…';
   }
   setMessageActionsDisabled(messageElement, true);
+}
+
+function setupStreamingUI(messageElement) {
+  if (!(messageElement instanceof HTMLElement)) {
+    return { textElement: null, toolContainer: null };
+  }
+
+  const body = messageElement.querySelector('.message-content');
+  if (!(body instanceof HTMLElement)) {
+    return { textElement: null, toolContainer: null };
+  }
+
+  body.innerHTML = '';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'streaming-content';
+
+  const textElement = document.createElement('div');
+  textElement.className = 'streaming-text';
+  wrapper.appendChild(textElement);
+
+  const toolContainer = document.createElement('div');
+  toolContainer.className = 'tool-status-container';
+  wrapper.appendChild(toolContainer);
+
+  body.appendChild(wrapper);
+  return { textElement, toolContainer };
+}
+
+function formatToolDuration(durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return '';
+  }
+  if (durationMs >= 1000) {
+    return `${(durationMs / 1000).toFixed(1)}s`;
+  }
+  return `${Math.round(durationMs)}ms`;
+}
+
+function renderToolEvent(toolContainer, registry, event) {
+  if (!(toolContainer instanceof HTMLElement) || !event) return;
+
+  const invocationId = typeof event.invocation_id === 'string' && event.invocation_id.trim()
+    ? event.invocation_id.trim()
+    : null;
+  if (!invocationId) return;
+
+  let card = registry.get(invocationId);
+  if (!card || event.type === 'tool_started') {
+    card = document.createElement('div');
+    card.className = 'tool-status-card';
+    card.dataset.invocationId = invocationId;
+
+    const title = document.createElement('div');
+    title.className = 'tool-status-title';
+    const name = typeof event.tool_name === 'string' && event.tool_name.trim()
+      ? event.tool_name.trim()
+      : '工具';
+    title.textContent = `正在调用 ${name}…`;
+    card.appendChild(title);
+
+    if (typeof event.input === 'string' && event.input.trim()) {
+      const pre = document.createElement('pre');
+      pre.className = 'tool-status-details';
+      pre.textContent = event.input.trim();
+      card.appendChild(pre);
+    }
+
+    registry.set(invocationId, card);
+    toolContainer.appendChild(card);
+  }
+
+  if (event.type === 'tool_completed' && card) {
+    const title = card.querySelector('.tool-status-title');
+    const name = typeof event.tool_name === 'string' && event.tool_name.trim()
+      ? event.tool_name.trim()
+      : null;
+    if (title) {
+      if (event.status === 'error') {
+        title.textContent = name ? `${name} 调用失败` : '工具调用失败';
+      } else {
+        title.textContent = name ? `${name} 调用完成` : '工具调用完成';
+      }
+    }
+
+    card.classList.remove('completed', 'error');
+    if (event.status === 'error') {
+      card.classList.add('error');
+    } else {
+      card.classList.add('completed');
+    }
+
+    const existingSummary = card.querySelector('.tool-status-summary');
+    if (existingSummary) {
+      existingSummary.remove();
+    }
+
+    const summary = document.createElement('div');
+    summary.className = 'tool-status-summary';
+    let text = '';
+    if (event.status === 'error') {
+      text = typeof event.error === 'string' && event.error.trim()
+        ? event.error.trim()
+        : '工具执行失败';
+    } else if (typeof event.output === 'string' && event.output.trim()) {
+      text = event.output.trim();
+    } else {
+      text = '工具执行完成';
+    }
+    if (typeof event.duration_ms === 'number') {
+      const durationText = formatToolDuration(event.duration_ms);
+      if (durationText) {
+        text = `${text} · ${durationText}`;
+      }
+    }
+    summary.textContent = text;
+    card.appendChild(summary);
+    registry.delete(invocationId);
+  }
+}
+
+async function runAssistantStream(messageElement, messageId, requestBody, { onSuccess } = {}) {
+  let textElement = null;
+  let toolContainer = null;
+
+  if (messageElement instanceof HTMLElement) {
+    const setup = setupStreamingUI(messageElement);
+    textElement = setup.textElement;
+    toolContainer = setup.toolContainer;
+  }
+
+  const toolRegistry = new Map();
+  let currentText = '';
+
+  const handleEvent = (event) => {
+    if (!event || typeof event !== 'object') return;
+    if (event.type === 'token') {
+      const delta = typeof event.delta === 'string' ? event.delta : '';
+      if (!delta) return;
+      currentText += delta;
+      if (textElement instanceof HTMLElement) {
+        textElement.textContent = currentText;
+      }
+      if (messageElement?.dataset) {
+        messageElement.dataset.contentRaw = currentText;
+      }
+      return;
+    }
+
+    if (event.type === 'tool_started' || event.type === 'tool_completed') {
+      renderToolEvent(toolContainer, toolRegistry, event);
+    }
+  };
+
+  const payload = await streamJson(
+    '/api/chat',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stream: true, ...requestBody }),
+    },
+    handleEvent,
+  );
+
+  if (!payload || typeof payload.reply !== 'string') {
+    throw new Error('模型返回为空');
+  }
+
+  finalizePendingMessage(messageElement, payload.reply, messageId);
+  if (typeof onSuccess === 'function') {
+    onSuccess(payload);
+  }
+  return payload;
 }
 
 async function writeToClipboard(text) {
@@ -668,25 +840,20 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
   };
 
   try {
-    const data = await fetchJson('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: precedingUserMessage.content,
-        replace_last: true,
-      }),
+    const payload = await runAssistantStream(messageElement, messageId, {
+      message: precedingUserMessage.content,
+      replace_last: true,
     });
-    finalizePendingMessage(messageElement, data.reply, messageId);
-    if (data.meta) {
-      logModelInvocation(data.meta);
+    if (payload.meta) {
+      logModelInvocation(payload.meta);
     }
-    updateWebPreview(data.web_preview);
-    updatePptPreview(data.ppt_slides);
+    updateWebPreview(payload.web_preview);
+    updatePptPreview(payload.ppt_slides);
     setMessageActionFeedback(button, { status: 'success', message: '已刷新', duration: 1500 });
     finalizeBranchTransition();
   } catch (error) {
     console.error(error);
-    finalizePendingMessage(messageElement, `重新生成失败：${error.message}`, messageId);
+    finalizePendingMessage(messageElement, `重新生成失败：${error?.message || '未知错误'}`, messageId);
     setMessageActionFeedback(button, { status: 'error', message: '刷新失败', duration: 1500 });
     finalizeBranchTransition();
   } finally {
@@ -986,20 +1153,15 @@ async function sendChat(message) {
     { pending: true },
   );
   try {
-    const data = await fetchJson('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
-    });
-    finalizePendingMessage(pendingMessage, data.reply, pendingMessageId);
-    logModelInvocation(data.meta);
-    updateWebPreview(data.web_preview);
-    updatePptPreview(data.ppt_slides);
+    const payload = await runAssistantStream(pendingMessage, pendingMessageId, { message });
+    logModelInvocation(payload.meta);
+    updateWebPreview(payload.web_preview);
+    updatePptPreview(payload.ppt_slides);
   } catch (error) {
     console.error(error);
     finalizePendingMessage(
       pendingMessage,
-      `抱歉，发生错误：${error.message}`,
+      `抱歉，发生错误：${error?.message || '未知错误'}`,
       pendingMessageId,
     );
   } finally {
