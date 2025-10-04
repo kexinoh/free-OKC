@@ -1,53 +1,94 @@
 import { CLIENT_ID_HEADER, STORAGE_KEYS } from './constants.js';
 
-function getSessionStorage() {
-  if (typeof window === 'undefined' || !window.sessionStorage) {
+const CLIENT_ID_COOKIE = 'okc_client_id';
+
+function getBrowserStorage() {
+  if (typeof window === 'undefined') {
     return null;
   }
-  try {
-    const storage = window.sessionStorage;
-    const testKey = '__okc_session_test__';
-    storage.setItem(testKey, testKey);
-    storage.removeItem(testKey);
-    return storage;
-  } catch (error) {
-    return null;
+  const candidates = [
+    () => window.localStorage,
+    () => window.sessionStorage,
+  ];
+  for (const factory of candidates) {
+    try {
+      const storage = factory();
+      if (!storage) continue;
+      const testKey = '__okc_storage_test__';
+      storage.setItem(testKey, testKey);
+      storage.removeItem(testKey);
+      return storage;
+    } catch (error) {
+      // ignore and try next storage option
+    }
   }
+  return null;
 }
 
-const sessionStorageHandle = getSessionStorage();
+const storageHandle = getBrowserStorage();
 let cachedClientId = null;
 
-function readSessionValue(key) {
-  if (!sessionStorageHandle) return null;
+function readStoredValue(key) {
+  if (!storageHandle) return null;
   try {
-    return sessionStorageHandle.getItem(key);
+    return storageHandle.getItem(key);
   } catch (error) {
     return null;
   }
 }
 
-function writeSessionValue(key, value) {
-  if (!sessionStorageHandle) return;
+function writeStoredValue(key, value) {
+  if (!storageHandle) return;
   try {
-    sessionStorageHandle.setItem(key, value);
+    storageHandle.setItem(key, value);
   } catch (error) {
     // ignore storage errors
   }
+}
+
+function readClientIdCookie() {
+  if (typeof document === 'undefined') return null;
+  const pattern = new RegExp(`(?:^|;\s*)${CLIENT_ID_COOKIE}=([^;]+)`);
+  const match = document.cookie.match(pattern);
+  if (!match) return null;
+  try {
+    const decoded = decodeURIComponent(match[1]);
+    return decoded && decoded.trim() ? decoded : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeClientIdCookie(value) {
+  if (typeof document === 'undefined' || !value) return;
+  const encoded = encodeURIComponent(value);
+  const maxAge = 60 * 60 * 24 * 365; // 1 year
+  document.cookie = `${CLIENT_ID_COOKIE}=${encoded}; path=/; max-age=${maxAge}; SameSite=Lax`;
 }
 
 function ensureClientId() {
   if (cachedClientId) {
     return cachedClientId;
   }
-  const existing = readSessionValue(STORAGE_KEYS.clientId);
-  if (existing && typeof existing === 'string' && existing.trim()) {
-    cachedClientId = existing;
+
+  const cookieValue = readClientIdCookie();
+  if (cookieValue) {
+    cachedClientId = cookieValue;
+    writeStoredValue(STORAGE_KEYS.clientId, cookieValue);
     return cachedClientId;
   }
+
+  const storedValue = readStoredValue(STORAGE_KEYS.clientId);
+  if (storedValue && typeof storedValue === 'string' && storedValue.trim()) {
+    cachedClientId = storedValue.trim();
+    writeClientIdCookie(cachedClientId);
+    return cachedClientId;
+  }
+
   const fresh = generateId();
   cachedClientId = fresh;
-  writeSessionValue(STORAGE_KEYS.clientId, fresh);
+  writeStoredValue(STORAGE_KEYS.clientId, fresh);
+  writeClientIdCookie(fresh);
   return cachedClientId;
 }
 

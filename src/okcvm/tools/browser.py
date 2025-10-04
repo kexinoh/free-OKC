@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import atexit
+import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from urllib.parse import urljoin
@@ -37,6 +38,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 from .base import Tool, ToolError, ToolResult
 
 USER_AGENT = "OKCVM/1.0 (+https://github.com/free-agent-challenge/free-OKC)"
+
+_SELENIUM_MAX_RETRIES = 3
+_STATIC_MAX_RETRIES = 3
+_RETRY_BASE_DELAY = 0.5
 
 # --- 数据类保持不变，以确保 API 兼容性 ---
 
@@ -162,11 +167,25 @@ class BrowserSessionManager:
 
     def navigate_static(self, url: str) -> BrowserSession:
         self._mode = "static"
-        response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=15)
-        response.raise_for_status()
-        session = _build_session_from_html(response.text, url, driver=None)
-        self._session = session
-        return session
+        last_error: Optional[Exception] = None
+        for attempt in range(_STATIC_MAX_RETRIES):
+            try:
+                response = requests.get(
+                    url,
+                    headers={"User-Agent": USER_AGENT},
+                    timeout=(5, 30),
+                )
+                response.raise_for_status()
+                session = _build_session_from_html(response.text, url, driver=None)
+                self._session = session
+                return session
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt < _STATIC_MAX_RETRIES - 1:
+                    time.sleep(_RETRY_BASE_DELAY * (attempt + 1))
+        if last_error is not None:
+            raise last_error
+        raise ToolError(f"无法加载 {url}")
 
 
 _manager = BrowserSessionManager()
@@ -313,15 +332,18 @@ def _navigate(url: str) -> BrowserSession:
     last_exception: Optional[Exception] = None
 
     if not _manager.use_static_mode():
-        try:
-            driver = _manager.driver
-            driver.get(url)
-            driver.implicitly_wait(5)
-            session = _parse_page()
-            _manager.session = session
-            return session
-        except Exception as exc:  # noqa: BLE001 - we need to attempt fallback
-            last_exception = exc
+        for attempt in range(_SELENIUM_MAX_RETRIES):
+            try:
+                driver = _manager.driver
+                driver.get(url)
+                driver.implicitly_wait(5)
+                session = _parse_page()
+                _manager.session = session
+                return session
+            except Exception as exc:  # noqa: BLE001 - we need to attempt fallback
+                last_exception = exc
+                if attempt < _SELENIUM_MAX_RETRIES - 1:
+                    time.sleep(_RETRY_BASE_DELAY * (attempt + 1))
 
     try:
         return _manager.navigate_static(url)
