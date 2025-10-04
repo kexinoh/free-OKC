@@ -884,8 +884,6 @@ async function bootSession() {
     const data = await fetchJson('/api/session/boot');
     addAndRenderMessage('assistant', data.reply);
     logModelInvocation(data.meta);
-    updateWebPreview(data.web_preview);
-    updatePptPreview(data.ppt_slides);
   } catch (error) {
     console.error(error);
     addAndRenderMessage('assistant', '无法连接到后端服务，请确认已启动。');
