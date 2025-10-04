@@ -17,6 +17,7 @@ const modelLogs = [];
 let currentWebPreview = null;
 let currentPptSlides = [];
 let isCarouselMode = false;
+const defaultWebPreviewEmptyMessage = webPreviewEmpty?.textContent ?? '';
 
 export function logModelInvocation(meta) {
   if (!meta || !modelLogList) return;
@@ -86,23 +87,54 @@ function normalizeWebPreview(preview) {
 }
 
 export function updateWebPreview(preview) {
-  currentWebPreview = preview;
-  const hasContent = Boolean(preview?.html);
+  const normalizedPreview = normalizeWebPreview(preview);
+  currentWebPreview = normalizedPreview;
+
+  const hasHtml = Boolean(normalizedPreview?.html);
+  const hasUrl = Boolean(normalizedPreview?.url);
+  const hasContent = hasHtml || hasUrl;
 
   if (webPreviewCard) {
     webPreviewCard.hidden = !hasContent;
   }
 
-  if (hasContent) {
-    webPreviewFrame.srcdoc = preview.html;
-    webPreviewFrame.hidden = false;
-    webPreviewEmpty.hidden = true;
-    openWebPreviewButton.disabled = false;
+  if (!hasContent) {
+    if (webPreviewFrame) {
+      webPreviewFrame.srcdoc = '';
+      webPreviewFrame.hidden = true;
+    }
+    if (webPreviewEmpty) {
+      webPreviewEmpty.hidden = true;
+      webPreviewEmpty.textContent = defaultWebPreviewEmptyMessage;
+    }
+    if (openWebPreviewButton) {
+      openWebPreviewButton.disabled = true;
+    }
+    return;
+  }
+
+  if (hasHtml) {
+    if (webPreviewFrame) {
+      webPreviewFrame.srcdoc = normalizedPreview.html;
+      webPreviewFrame.hidden = false;
+    }
+    if (webPreviewEmpty) {
+      webPreviewEmpty.hidden = true;
+      webPreviewEmpty.textContent = defaultWebPreviewEmptyMessage;
+    }
   } else {
-    webPreviewFrame.srcdoc = '';
-    webPreviewFrame.hidden = true;
-    webPreviewEmpty.hidden = true;
-    openWebPreviewButton.disabled = true;
+    if (webPreviewFrame) {
+      webPreviewFrame.srcdoc = '';
+      webPreviewFrame.hidden = true;
+    }
+    if (webPreviewEmpty) {
+      webPreviewEmpty.hidden = false;
+      webPreviewEmpty.textContent = '点击“新窗口打开”在新标签页查看网页。';
+    }
+  }
+
+  if (openWebPreviewButton) {
+    openWebPreviewButton.disabled = false;
   }
 }
 

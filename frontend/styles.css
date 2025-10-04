@@ -21,6 +21,16 @@
 
   --transition-fast: 160ms ease;
   --transition-medium: 260ms ease;
+
+  --viewport-height: 100vh;
+  --workspace-padding-block: clamp(0.75rem, 2vw, 1.5rem);
+  --workspace-padding-inline: clamp(0.75rem, 2vw, 1.5rem);
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --viewport-height: 100dvh;
+  }
 }
 
 * {
@@ -38,21 +48,26 @@ body {
   background-color: var(--bg-app);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  min-height: 100vh;
+  min-height: var(--viewport-height);
+  height: var(--viewport-height);
   display: flex;
   align-items: stretch;
   justify-content: center;
-  padding: clamp(0.75rem, 2vw, 1.5rem);
+  padding: var(--workspace-padding-block) var(--workspace-padding-inline);
+  overflow: hidden;
 }
 
 body.no-scroll { overflow: hidden; }
 
 .app-workspace {
+  position: relative;
   width: min(1600px, 100%);
   display: flex;
   align-items: stretch;
   gap: 1rem;
   flex-wrap: wrap;
+  min-height: calc(var(--viewport-height) - (var(--workspace-padding-block) * 2));
+  height: calc(var(--viewport-height) - (var(--workspace-padding-block) * 2));
 }
 
 .app-shell {
@@ -62,16 +77,9 @@ body.no-scroll { overflow: hidden; }
   flex-direction: column;
   gap: 1.25rem;
   padding: clamp(1.5rem, 4vh, 2.25rem) clamp(1rem, 4vw, 2rem);
-  min-height: 100vh;
-  max-height: 100vh;
+  min-height: calc(var(--viewport-height) - (var(--workspace-padding-block) * 2));
+  max-height: calc(var(--viewport-height) - (var(--workspace-padding-block) * 2));
   overflow: hidden;
-}
-
-@supports (height: 100dvh) {
-  .app-shell {
-    min-height: 100dvh;
-    max-height: 100dvh;
-  }
 }
 
 /* --- Shared Panel Style --- */
@@ -164,6 +172,7 @@ body.no-scroll { overflow: hidden; }
 
 /* --- Conversation History Sidebar --- */
 .history-sidebar {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 0.75rem;
@@ -172,18 +181,23 @@ body.no-scroll { overflow: hidden; }
 }
 
 .history-toggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.5rem;
+  height: 2.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.6rem 0.8rem;
-  border-radius: 999px;
+  border-radius: 0.85rem;
   border: 1px solid var(--border-color);
   background: var(--bg-panel);
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: 1rem;
   cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast), transform var(--transition-fast);
+  box-shadow: var(--shadow-soft);
+  transition: left var(--transition-medium), color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast), transform var(--transition-fast);
+  z-index: 20;
 }
 
 .history-toggle:hover,
@@ -195,13 +209,24 @@ body.no-scroll { overflow: hidden; }
   transform: translateY(-1px);
 }
 
+.history-sidebar.open .history-toggle {
+  left: calc(280px + 1.25rem);
+}
+
 .history-toggle-icon {
   font-size: 1rem;
 }
 
 .history-toggle-label {
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .history-panel {
@@ -210,14 +235,14 @@ body.no-scroll { overflow: hidden; }
   opacity: 0;
   padding: 0;
   border-radius: var(--radius-large);
-  border: 1px solid var(--border-color);
+  border: none;
   background: var(--bg-panel);
-  box-shadow: var(--shadow-soft);
+  box-shadow: none;
   pointer-events: none;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  max-height: calc(100vh - clamp(1.5rem, 4vh, 2.25rem) * 2);
+  height: calc(var(--viewport-height) - (var(--workspace-padding-block) * 2));
   overflow: hidden;
   transform: translateX(-1rem);
   will-change: transform, opacity;
@@ -235,6 +260,7 @@ body.no-scroll { overflow: hidden; }
   opacity: 1;
   padding: 1.25rem;
   pointer-events: auto;
+  box-shadow: var(--shadow-soft);
   transform: translateX(0);
 }
 
@@ -791,28 +817,86 @@ body.no-scroll { overflow: hidden; }
 
 /* --- Responsive Adjustments --- */
 @media (max-width: 1080px) {
-  .app-workspace { flex-direction: column; }
-  .history-sidebar { width: 100%; min-height: auto; }
-  .history-panel { max-height: none; }
-  .history-sidebar.open .history-panel { flex-basis: 100%; width: 100%; }
-  .app-shell { max-height: none; overflow: visible; min-height: auto; }
-  .app-main { grid-template-columns: 1fr; min-height: auto; }
+  body {
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+  .app-workspace {
+    flex-direction: column;
+    min-height: auto;
+    height: auto;
+  }
+  .history-sidebar {
+    width: 100%;
+    min-height: auto;
+  }
+  .history-panel {
+    height: auto;
+    max-height: none;
+  }
+  .history-sidebar.open .history-toggle {
+    left: 0;
+  }
+  .history-sidebar.open .history-panel {
+    flex-basis: 100%;
+    width: 100%;
+  }
+  .app-shell {
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+  .app-main {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
   .chat-panel,
-  .insight-panel { height: auto; overflow: visible; }
-  .insight-panel .insight-card:first-of-type { flex: unset; }
+  .insight-panel {
+    height: auto;
+    overflow: visible;
+  }
+  .insight-panel .insight-card:first-of-type {
+    flex: unset;
+  }
 }
 
 @media (max-width: 720px) {
-  .history-sidebar { flex-direction: column; gap: 0.5rem; }
-  .history-toggle { flex-direction: row; width: auto; padding: 0.65rem 1rem; }
-  .history-toggle-label { letter-spacing: 0.06em; font-size: 0.85rem; }
-  .history-sidebar.open .history-panel { padding: 1rem !important; }
-  .app-shell { padding: 1.5rem 1rem 2.5rem; }
-  .app-header { flex-direction: column; gap: 1rem; align-items: flex-start; }
-  .chat-input { flex-direction: column; align-items: stretch; }
-  .send-button { width: 100%; }
-  .settings-overlay { justify-content: center; }
-  .settings-drawer { width: min(520px, 100%); }
+  .history-sidebar {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .history-toggle {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+  .history-sidebar.open .history-toggle {
+    left: 0;
+  }
+  .history-sidebar.open .history-panel {
+    padding: 1rem !important;
+  }
+  .app-shell {
+    padding: 1.5rem 1rem 2.5rem;
+  }
+  .app-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  .chat-input {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .send-button {
+    width: 100%;
+  }
+  .settings-overlay {
+    justify-content: center;
+  }
+  .settings-drawer {
+    width: min(520px, 100%);
+  }
 }
 
 /* Scrollbar styling */
