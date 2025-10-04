@@ -9,42 +9,42 @@ living document—update it whenever major capabilities land or priorities shift
 ### Production-ready runtime and observability
 - FastAPI now powers the public surface, complete with CORS support, structured
   request logging, and static hosting for the operator console so deployments are
-  inspectable with minimal configuration.【F:src/okcvm/api/main.py†L30-L209】
+  inspectable with minimal configuration. [src/okcvm/api/main.py#L30-L209](src/okcvm/api/main.py#L30-L209)
 - The logging stack wires Rich console handlers and rotating file output, making
-  API and agent traces actionable during incident response.【F:src/okcvm/logging_utils.py†L1-L115】
+  API and agent traces actionable during incident response. [src/okcvm/logging_utils.py#L1-L115](src/okcvm/logging_utils.py#L1-L115)
 
 ### Virtual machine orchestration and tooling
 - The LangChain-backed `VirtualMachine` streams conversation history into a tool
-  aware agent executor and records the trace required by the UI’s model log.【F:src/okcvm/vm.py†L26-L178】
+  aware agent executor and records the trace required by the UI’s model log. [src/okcvm/vm.py#L26-L178](src/okcvm/vm.py#L26-L178)
 - `ToolRegistry` loads the canonical tool manifest, injects workspace-aware
   helpers, and exposes LangChain-compatible wrappers, closing the loop between
-  packaged specifications and runtime behaviour.【F:src/okcvm/registry.py†L1-L200】
+  packaged specifications and runtime behaviour. [src/okcvm/registry.py#L1-L200](src/okcvm/registry.py#L1-L200)
 
 ### Session isolation and workspace lifecycle
 - Every client receives an isolated `WorkspaceManager` that rewrites prompt
   mounts, restricts filesystem access, and snapshots state through Git-backed
-  commits for time-travel debugging.【F:src/okcvm/session.py†L22-L207】【F:src/okcvm/workspace.py†L32-L281】
+  commits for time-travel debugging. [src/okcvm/session.py#L22-L207](src/okcvm/session.py#L22-L207) [src/okcvm/workspace.py#L32-L281](src/okcvm/workspace.py#L32-L281)
 - Snapshot creation, listing, and restoration are exposed as first-class API
   endpoints so the frontend can drive the session tree UI without bespoke glue
-  code.【F:src/okcvm/api/main.py†L210-L309】
+  code. [src/okcvm/api/main.py#L210-L309](src/okcvm/api/main.py#L210-L309)
 
 ### Operator experience and automation
 - A Typer CLI now launches the FastAPI server, validates configuration, and
   resolves workspace directories before Uvicorn starts, smoothing local and
-  production workflows.【F:src/okcvm/server.py†L1-L88】
+  production workflows. [src/okcvm/server.py#L1-L88](src/okcvm/server.py#L1-L88)
 - Configuration dataclasses centralise chat and media credentials, providing
-  atomic updates from YAML, environment variables, or API requests.【F:src/okcvm/config.py†L25-L227】
+  atomic updates from YAML, environment variables, or API requests. [src/okcvm/config.py#L25-L227](src/okcvm/config.py#L25-L227)
 
 ### Control panel and presentation layer
 - The static frontend introduces persistent conversations, configuration
   management, live previews for HTML/PPT assets, and a model telemetry timeline
-  that mirrors the VM trace.【F:frontend/index.html†L16-L220】【F:frontend/app.js†L1-L851】
+  that mirrors the VM trace. [frontend/index.html#L16-L220](frontend/index.html#L16-L220) [frontend/app.js#L1-L851](frontend/app.js#L1-L851)
 - Deployment assets are now served directly from per-session directories, giving
-  the preview UI predictable URLs for websites and other artefacts.【F:src/okcvm/api/main.py†L146-L209】
+  the preview UI predictable URLs for websites and other artefacts. [src/okcvm/api/main.py#L146-L209](src/okcvm/api/main.py#L146-L209)
 
 ### Quality and safety net
 - The pytest suite exercises API routes, workspace guarantees, and LangChain
-  integration so regressions surface quickly during CI.【F:tests/test_api_app.py†L1-L145】【F:tests/test_workspace.py†L1-L24】
+  integration so regressions surface quickly during CI. [tests/test_api_app.py#L1-L145](tests/test_api_app.py#L1-L145) [tests/test_workspace.py#L1-L24](tests/test_workspace.py#L1-L24)
 
 ## Active Initiatives
 
@@ -64,7 +64,7 @@ agnostic of tool specifics.
 The API already accepts caller-provided client IDs. We plan to extend this with
 persistent storage and eviction policies so teams can resume workspaces across
 restarts, expire dormant sessions, and safely share deployments between
-operators.【F:src/okcvm/api/main.py†L58-L145】
+operators. [src/okcvm/api/main.py#L58-L145](src/okcvm/api/main.py#L58-L145)
 
 ## Future Exploration
 

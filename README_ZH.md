@@ -145,7 +145,7 @@ okcvm-server
 
 #### 5. 并发与多用户访问 (Concurrency & Multi-User Access)
 
-当前的 FastAPI 服务在 `src/okcvm/api/main.py` 中维护了一个全局的 `SessionState` 单例，用于演示目的。也就是说，所有浏览器客户端都会共享同一个对话会话和工作空间，并不会为每位访客自动创建隔离上下文。【F:src/okcvm/api/main.py†L63-L69】
+当前的 FastAPI 服务在 `src/okcvm/api/main.py` 中维护了一个全局的 `SessionState` 单例，用于演示目的。也就是说，所有浏览器客户端都会共享同一个对话会话和工作空间，并不会为每位访客自动创建隔离上下文。 [src/okcvm/api/main.py#L63-L69](src/okcvm/api/main.py#L63-L69)
 
 如果需要支持真正的多用户或多会话并发，你需要在应用层为每位用户分配独立的 `SessionState` 实例（例如基于登录态或显式的会话 ID），并将它们注入到对应的 API 路由中。
 

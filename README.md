@@ -153,7 +153,7 @@ Once configured, you're ready to interact with the agent in the chat interface! 
 
 #### 5. Concurrency & Multi-User Access
 
-The demo FastAPI service keeps a single global `SessionState` instance in [`src/okcvm/api/main.py`](src/okcvm/api/main.py), so every browser tab shares the same conversation and workspace context. There is no automatic per-visitor isolation in this mode.【F:src/okcvm/api/main.py†L63-L69】
+The demo FastAPI service keeps a single global `SessionState` instance in [`src/okcvm/api/main.py`](src/okcvm/api/main.py), so every browser tab shares the same conversation and workspace context. There is no automatic per-visitor isolation in this mode. [src/okcvm/api/main.py#L63-L69](src/okcvm/api/main.py#L63-L69)
 
 To run multi-user or multi-session deployments, allocate a dedicated `SessionState` per user (for example by binding it to an authenticated account or an explicit session ID) and pass that instance into the relevant API routes.
 
