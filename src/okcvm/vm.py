@@ -26,7 +26,8 @@ class VirtualMachine:
         system_prompt: str,
         registry: ToolRegistry,
     ) -> None:
-        self.system_prompt = system_prompt
+        normalized_prompt = system_prompt.strip() if isinstance(system_prompt, str) else ""
+        self.system_prompt = normalized_prompt or "You are a helpful assistant."
         self.registry = registry
         # 注意：history现在需要遵循LangChain的BaseMessage格式
         self.history: List[Dict[str, Any]] = []
@@ -45,9 +46,22 @@ class VirtualMachine:
         """Lazy-loads the LangChain agent executor."""
         if self._chain is None:
             logger.info("Creating LangChain agent executor")
-            self._chain = create_llm_chain(self.registry)
+            self._chain = create_llm_chain(self.registry, self.system_prompt)
             logger.info("LangChain agent executor created successfully")
         return self._chain
+
+    def update_system_prompt(self, prompt: str) -> None:
+        """Update the system prompt and rebuild the LangChain executor on demand."""
+
+        normalized = prompt.strip() if isinstance(prompt, str) else ""
+        if not normalized:
+            normalized = "You are a helpful assistant."
+
+        if normalized == self.system_prompt:
+            return
+
+        self.system_prompt = normalized
+        self._chain = None
 
     def reset_history(self) -> None:
         """Clears the conversation history."""

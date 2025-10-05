@@ -20,6 +20,9 @@ class DummyVM:
         self.history.append({"role": "assistant", "content": reply})
         return self._response
 
+    def update_system_prompt(self, prompt: str) -> None:
+        self.system_prompt = prompt
+
     def describe_history(self, limit: int = 25):
         return self.history[-limit:]
 
@@ -135,7 +138,8 @@ def test_session_collects_preview_without_intermediate_steps(tmp_path, monkeypat
                 "intermediate_steps": [],
             }
 
-    factory = lambda registry: FakeChain(registry)
+    def factory(registry, system_prompt=None):  # noqa: ARG001
+        return FakeChain(registry)
     monkeypatch.setattr(llm_module, "create_llm_chain", factory)
     monkeypatch.setattr(vm_module, "create_llm_chain", factory)
 
@@ -147,3 +151,34 @@ def test_session_collects_preview_without_intermediate_steps(tmp_path, monkeypat
     assert preview["url"].startswith("http://127.0.0.1:9000")
     assert preview["deployment_id"]
     assert any(artifact["url"] == preview["url"] for artifact in result["artifacts"])
+
+
+def test_register_uploaded_files_updates_prompt(tmp_path, monkeypatch):
+    from okcvm import llm as llm_module
+    from okcvm import vm as vm_module
+
+    class TrivialChain:
+        def __init__(self, registry):
+            self.registry = registry
+
+        def invoke(self, inputs, config=None):  # noqa: ANN001
+            return {"output": "ok", "intermediate_steps": []}
+
+    def factory(registry, system_prompt=None):  # noqa: ARG001
+        return TrivialChain(registry)
+
+    monkeypatch.setattr(llm_module, "create_llm_chain", factory)
+    monkeypatch.setattr(vm_module, "create_llm_chain", factory)
+
+    configure(workspace=WorkspaceConfig(path=str(tmp_path)))
+    state = session_module.SessionState()
+
+    manifest = state.register_uploaded_files(
+        [{"name": "sample.csv", "size_bytes": 2 * 1024, "relative_path": "sample.csv"}]
+    )
+
+    assert any(entry["name"] == "sample.csv" for entry in manifest["files"])
+    assert manifest["summaries"], "expected upload summaries"
+    assert "sample.csv" in state.vm.system_prompt
+    size_display = state.list_uploaded_files()[0]["size_display"]
+    assert size_display.endswith("KB")

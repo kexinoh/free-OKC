@@ -4,10 +4,10 @@ import asyncio
 import time
 from pathlib import Path
 from threading import Lock
-from typing import Dict, Iterable, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,8 +33,71 @@ from .models import (
 FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
 
 
+MAX_UPLOAD_FILES = 100
+MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
+MAX_UPLOAD_SIZE_MB = MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)
+UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024
+
+
 setup_logging()
 logger = get_logger(__name__)
+
+
+def _inject_upload_constraints(payload: Dict[str, object]) -> Dict[str, object]:
+    payload["upload_limit"] = MAX_UPLOAD_FILES
+    payload["max_upload_size_mb"] = MAX_UPLOAD_SIZE_MB
+    payload["max_upload_size_bytes"] = MAX_UPLOAD_SIZE_BYTES
+    return payload
+
+
+def _sanitize_upload_filename(filename: str) -> str:
+    candidate = Path(filename or "").name
+    cleaned = candidate.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    return cleaned
+
+
+def _ensure_path_within_base(base: Path, candidate: Path) -> Path:
+    """Ensure *candidate* resolves within *base* and return the resolved path."""
+
+    base_resolved = base.resolve()
+    candidate_resolved = candidate.resolve()
+    try:
+        candidate_resolved.relative_to(base_resolved)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="非法的文件路径")
+    return candidate_resolved
+
+
+async def _persist_upload_file(upload: UploadFile, destination: Path) -> int:
+    size = 0
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with destination.open("wb") as buffer:
+            while True:
+                chunk = await upload.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_UPLOAD_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"单个文件大小不能超过 {MAX_UPLOAD_SIZE_MB} MB",
+                    )
+                buffer.write(chunk)
+    except HTTPException:
+        if destination.exists():
+            destination.unlink(missing_ok=True)
+        raise
+    except Exception as exc:  # pragma: no cover - defensive guard
+        if destination.exists():
+            destination.unlink(missing_ok=True)
+        logger.exception("Failed to store uploaded file %s", destination.name)
+        raise HTTPException(status_code=500, detail=f"保存文件 {destination.name} 失败：{exc}") from exc
+    finally:
+        await upload.close()
+    return size
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -489,7 +552,96 @@ def create_app() -> FastAPI:
     ) -> Dict[str, object]:
         session = _get_session(request, client_id)
         logger.info("Session boot requested client=%s", session.client_id)
-        return session.boot()
+        return _inject_upload_constraints(session.boot())
+
+    @app.get("/api/session/files")
+    async def list_session_files(
+        request: Request, client_id: Optional[str] = Query(default=None)
+    ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
+        files = session.list_uploaded_files()
+        logger.debug(
+            "Listing uploaded files client=%s count=%s",
+            session.client_id,
+            len(files),
+        )
+        return {
+            "files": files,
+            "limit": MAX_UPLOAD_FILES,
+            "max_file_size_mb": MAX_UPLOAD_SIZE_MB,
+            "max_file_size_bytes": MAX_UPLOAD_SIZE_BYTES,
+        }
+
+    @app.post("/api/session/files")
+    async def upload_session_files(
+        request: Request,
+        files: List[UploadFile] = File(..., description="要上传的文件列表"),
+        client_id: Optional[str] = Query(default=None),
+    ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
+        if not files:
+            raise HTTPException(status_code=400, detail="请选择要上传的文件")
+
+        sanitized: List[Tuple[UploadFile, str]] = []
+        seen_names: set[str] = set()
+        for upload in files:
+            filename = _sanitize_upload_filename(getattr(upload, "filename", ""))
+            if filename in seen_names:
+                raise HTTPException(status_code=400, detail=f"同一批次中存在重复文件名：{filename}")
+            seen_names.add(filename)
+            sanitized.append((upload, filename))
+
+        existing_files = session.list_uploaded_files()
+        existing_names = {
+            entry.get("name")
+            for entry in existing_files
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+        }
+        projected_count = len(existing_names)
+        for _, name in sanitized:
+            if name not in existing_names:
+                projected_count += 1
+        if projected_count > MAX_UPLOAD_FILES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"上传后文件总数将超过 {MAX_UPLOAD_FILES} 个上限",
+            )
+
+        internal_mount = session.workspace.paths.internal_mount
+        internal_mount_resolved = internal_mount.resolve()
+        saved_payloads: List[Dict[str, object]] = []
+        saved_paths: List[Path] = []
+        try:
+            for upload, name in sanitized:
+                destination = _ensure_path_within_base(internal_mount_resolved, internal_mount / name)
+                size = await _persist_upload_file(upload, destination)
+                saved_paths.append(destination)
+                saved_payloads.append(
+                    {"name": name, "relative_path": name, "size_bytes": size}
+                )
+        except HTTPException:
+            for path in saved_paths:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    logger.debug("Failed to remove partial upload %s", path)
+            raise
+
+        manifest = session.register_uploaded_files(saved_payloads)
+        logger.info(
+            "Uploaded files client=%s names=%s",
+            session.client_id,
+            [payload["name"] for payload in saved_payloads],
+        )
+
+        return {
+            "files": manifest["files"],
+            "summaries": manifest["summaries"],
+            "system_prompt": manifest["system_prompt"],
+            "limit": MAX_UPLOAD_FILES,
+            "max_file_size_mb": MAX_UPLOAD_SIZE_MB,
+            "max_file_size_bytes": MAX_UPLOAD_SIZE_BYTES,
+        }
 
     @app.post("/api/chat")
     async def chat(
@@ -534,7 +686,12 @@ def create_app() -> FastAPI:
                         replace_last=payload.replace_last,
                         stream_handler=handler,
                     )
-                    publisher.publish({"type": "final", "payload": result})
+                    publisher.publish(
+                        {
+                            "type": "final",
+                            "payload": _inject_upload_constraints(result),
+                        }
+                    )
                 except Exception as exc:  # pragma: no cover - defensive guard
                     logger.exception("Streaming chat failed for client=%s", session.client_id)
                     publisher.publish({"type": "error", "message": str(exc)})
@@ -555,6 +712,7 @@ def create_app() -> FastAPI:
             payload.message,
             replace_last=payload.replace_last,
         )
+        _inject_upload_constraints(response)
         logger.debug(
             "Chat response generated (preview=%s, history=%s, summary=%s)",
             bool(response.get("web_preview")),
@@ -570,6 +728,7 @@ def create_app() -> FastAPI:
         session = _get_session(request, client_id)
         logger.info("Session history deletion endpoint called client=%s", session.client_id)
         result = session.delete_history()
+        _inject_upload_constraints(result)
         logger.debug(
             "Session history cleared (workspace_removed=%s)",
             result.get("workspace", {}).get("removed"),
