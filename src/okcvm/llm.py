@@ -12,7 +12,7 @@ from .config import get_config
 from .registry import ToolRegistry
 
 
-def create_llm_chain(registry: ToolRegistry):
+def create_llm_chain(registry: ToolRegistry, system_prompt: str) -> "AgentExecutor":
     """
     Creates a LangChain chain with system prompt, history, and tools.
     """
@@ -51,9 +51,13 @@ def create_llm_chain(registry: ToolRegistry):
 
     # 4. 创建提示词模板 (Prompt Template)
     # 这定义了我们如何向LLM构建输入
+    prompt_text = system_prompt.strip() if isinstance(system_prompt, str) else ""
+    if not prompt_text:
+        prompt_text = "You are a helpful assistant."
+
     prompt = ChatPromptTemplate.from_messages(
         [
-            SystemMessage(content="You are a helpful assistant."), # 这里的 System Prompt 可以从 spec.py 加载
+            SystemMessage(content=prompt_text),
             MessagesPlaceholder(variable_name="history"), # 对话历史
             ("human", "{input}"), # 用户的当前输入
             MessagesPlaceholder(variable_name="agent_scratchpad"), # LangChain Agent 用于存放工具调用中间步骤的地方

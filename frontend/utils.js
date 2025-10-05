@@ -150,6 +150,24 @@ export async function fetchJson(url, options = {}) {
   return response.json();
 }
 
+export async function postFormData(url, formData, options = {}) {
+  const init = { ...options, method: options.method ?? 'POST', body: formData };
+  const { targetUrl, requestInit } = prepareRequest(url, init);
+
+  const response = await fetch(targetUrl.toString(), requestInit);
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const body = await response.json();
+      detail = body?.detail || body?.message || '';
+    } catch (error) {
+      // ignore json parse errors
+    }
+    throw new Error(detail || `请求失败：${response.status}`);
+  }
+  return response.json();
+}
+
 export async function streamJson(url, options = {}, onEvent) {
   const { targetUrl, requestInit } = prepareRequest(url, options, {
     Accept: 'text/event-stream',
