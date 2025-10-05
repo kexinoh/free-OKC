@@ -49,7 +49,7 @@ and audit multi-turn projects without losing context.
   paths, and Git metadata before inserting or updating a record. Editing a
   conversation in the UI (renaming, reordering nodes, or updating titles) maps
   to the same upsert path, which refreshes `updated_at`, rewrites the stored
-  tree, and records the latest Git head/dirty flag reported by the workspace. [src/okcvm/storage/conversations.py#L137-L214](../src/okcvm/storage/conversations.py#L137-L214) [src/okcvm/api/main.py#L525-L562](../src/okcvm/api/main.py#L525-L562)
+  conversation tree, and records the latest Git head/dirty flag reported by the workspace. [src/okcvm/storage/conversations.py#L137-L214](../src/okcvm/storage/conversations.py#L137-L214) [src/okcvm/api/main.py#L525-L562](../src/okcvm/api/main.py#L525-L562)
 - When conversations are listed or fetched, `_record_to_payload()` backfills
   any missing workspace or Git fields so downstream components always receive a
   consistent view of the repository state associated with each branch. [src/okcvm/storage/conversations.py#L229-L275](../src/okcvm/storage/conversations.py#L229-L275)
