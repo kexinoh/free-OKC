@@ -273,7 +273,7 @@ export function createMessageRenderer({
 
     const summary = document.createElement('summary');
     const stepCount = steps.length;
-    summary.textContent = stepCount > 0 ? `推理完成（共${stepCount}步，点击展开）` : '推理完成（点击展开）';
+    summary.textContent = `推理完成（共${stepCount}步，点击展开）`;
     details.appendChild(summary);
 
     const body = document.createElement('div');
