@@ -14,6 +14,7 @@
   --text-tertiary: #8c8c8c;
   --accent-color: #262626;
   --accent-strong: #111111;
+  --accent-color-shadow: rgba(38, 38, 38, 0.12);
   --radius-large: 16px;
   --shadow-soft: 0 6px 24px rgba(15, 15, 15, 0.08);
 
@@ -59,7 +60,6 @@ body {
   justify-content: flex-start;
   padding: var(--workspace-padding-block) var(--workspace-padding-inline);
   padding-left: 0;
-  padding-right: var(--workspace-padding-inline);
   overflow: hidden;
 }
 
@@ -237,7 +237,7 @@ body.no-scroll { overflow: hidden; }
   background: var(--bg-muted);
   color: var(--accent-strong);
   transform: translateY(-1px);
-  box-shadow: 0 0 0 2px rgba(38, 38, 38, 0.12);
+  box-shadow: 0 0 0 2px var(--accent-color-shadow);
 }
 
 .history-sidebar.open .history-toggle {
@@ -248,7 +248,7 @@ body.no-scroll { overflow: hidden; }
   width: 1.75rem;
   height: 1.75rem;
   display: block;
-  color: var(--accent-color);
+  color: inherit;
   transition: transform var(--transition-medium), color var(--transition-fast);
 }
 
@@ -258,7 +258,6 @@ body.no-scroll { overflow: hidden; }
 
 .history-sidebar.open .history-toggle-icon {
   transform: scaleX(-1);
-  color: var(--accent-strong);
 }
 
 .history-toggle-label {
