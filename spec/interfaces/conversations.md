@@ -17,7 +17,7 @@
     - `git.commit`、`git.is_dirty`：Git 快照状态。
 - 后端会原样存储 `messages`、`branches`、`outputs` 等字段，仅对 `id`、`title`、时间戳及 `workspace` 的关键字段做归一化处理。
 
-所有写操作 (`POST`/`PUT`) 接口都会返回经过归一化后的完整 `conversation` 对象；读取接口返回 `conversations` 数组。
+所有写操作 (`POST`/`PUT`) 接口都会返回经过归一化后的完整 `conversation` 对象；读取接口则返回一个包含 `conversations` 数组的对象。
 
 ## GET `/api/conversations`
 
