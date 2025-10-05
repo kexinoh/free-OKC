@@ -100,10 +100,7 @@ function renderToolEvent(toolContainer, registry, event) {
     }
 
     if (isError) {
-      const errorMessage =
-        typeof event.error === 'string' && event.error.trim()
-          ? event.error.trim()
-          : '工具执行失败';
+      const errorMessage = (typeof event.error === 'string' && event.error.trim()) || '工具执行失败';
       const errorParagraph = document.createElement('p');
       errorParagraph.className = 'tool-status-error';
       errorParagraph.textContent = errorMessage;
