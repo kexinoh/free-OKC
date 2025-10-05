@@ -18,46 +18,100 @@ const HTML_PREVIEW_SANDBOX =
 const EMPTY_PREVIEW_SANDBOX = 'allow-popups';
 let previewSandboxMode = null;
 
+const MODEL_LOG_LIMIT = 6;
 const modelLogs = [];
 let currentWebPreview = null;
 let currentPptSlides = [];
 let isCarouselMode = false;
 const defaultWebPreviewEmptyMessage = webPreviewEmpty?.textContent ?? '';
 
-export function logModelInvocation(meta) {
-  if (!meta || !modelLogList) return;
-  modelLogs.push(meta);
-  const limit = 6;
-  if (modelLogs.length > limit) {
-    modelLogs.splice(0, modelLogs.length - limit);
+function normalizeModelLog(meta) {
+  if (!meta || typeof meta !== 'object') return null;
+  const toString = (value) => {
+    if (typeof value === 'string') return value;
+    if (value === null || value === undefined) return '';
+    try {
+      return String(value);
+    } catch (error) {
+      return '';
+    }
+  };
+
+  const normalized = {
+    model: toString(meta.model).trim(),
+    timestamp: toString(meta.timestamp).trim(),
+    summary: toString(meta.summary).trim(),
+    tokensIn: toString(meta.tokensIn).trim(),
+    tokensOut: toString(meta.tokensOut).trim(),
+    latency: toString(meta.latency).trim(),
+  };
+
+  const hasContent = normalized.model || normalized.summary || normalized.timestamp;
+  return hasContent ? normalized : null;
+}
+
+function renderModelLogs() {
+  if (modelLogList) {
+    modelLogList.innerHTML = '';
+    modelLogs.forEach((log) => {
+      if (modelLogTemplate instanceof HTMLTemplateElement) {
+        const clone = modelLogTemplate.content.cloneNode(true);
+        const name = clone.querySelector?.('.model-name');
+        const time = clone.querySelector?.('.model-time');
+        const summary = clone.querySelector?.('.model-summary');
+        const tokensIn = clone.querySelector?.('.meta-input');
+        const tokensOut = clone.querySelector?.('.meta-output');
+        const latency = clone.querySelector?.('.meta-latency');
+        if (name) name.textContent = log.model;
+        if (time) time.textContent = log.timestamp;
+        if (summary) summary.textContent = log.summary;
+        if (tokensIn) tokensIn.textContent = log.tokensIn;
+        if (tokensOut) tokensOut.textContent = log.tokensOut;
+        if (latency) latency.textContent = log.latency;
+        modelLogList.appendChild(clone);
+      } else if (modelLogList instanceof HTMLElement) {
+        const item = document.createElement('li');
+        item.textContent = [log.timestamp, log.model, log.summary].filter(Boolean).join(' · ');
+        modelLogList.appendChild(item);
+      }
+    });
+    if (modelLogs.length > 0) {
+      modelLogList.scrollTop = modelLogList.scrollHeight;
+    }
   }
-
-  modelLogList.innerHTML = '';
-  modelLogs.forEach((log) => {
-    const clone = modelLogTemplate.content.cloneNode(true);
-    clone.querySelector('.model-name').textContent = log.model;
-    clone.querySelector('.model-time').textContent = log.timestamp;
-    clone.querySelector('.model-summary').textContent = log.summary;
-    clone.querySelector('.meta-input').textContent = log.tokensIn;
-    clone.querySelector('.meta-output').textContent = log.tokensOut;
-    clone.querySelector('.meta-latency').textContent = log.latency;
-    modelLogList.appendChild(clone);
-  });
-
-  modelLogEmpty.hidden = modelLogs.length > 0;
-  if (modelLogs.length > 0) {
-    modelLogList.scrollTop = modelLogList.scrollHeight;
+  if (modelLogEmpty) {
+    modelLogEmpty.hidden = modelLogs.length > 0;
   }
 }
 
-export function resetModelLogs() {
+export function logModelInvocation(meta) {
+  const normalized = normalizeModelLog(meta);
+  if (!normalized) return;
+  modelLogs.push(normalized);
+  if (modelLogs.length > MODEL_LOG_LIMIT) {
+    modelLogs.splice(0, modelLogs.length - MODEL_LOG_LIMIT);
+  }
+  renderModelLogs();
+}
+
+export function restoreModelLogs(logs) {
   modelLogs.length = 0;
-  if (modelLogList) {
-    modelLogList.innerHTML = '';
+  if (Array.isArray(logs)) {
+    logs.forEach((entry) => {
+      const normalized = normalizeModelLog(entry);
+      if (normalized) {
+        modelLogs.push(normalized);
+      }
+    });
   }
-  if (modelLogEmpty) {
-    modelLogEmpty.hidden = false;
+  if (modelLogs.length > MODEL_LOG_LIMIT) {
+    modelLogs.splice(0, modelLogs.length - MODEL_LOG_LIMIT);
   }
+  renderModelLogs();
+}
+
+export function resetModelLogs() {
+  restoreModelLogs([]);
 }
 
 function applyPreviewSandbox(mode) {

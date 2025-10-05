@@ -4,7 +4,7 @@ import {
   resolvePendingConversationMessage,
   getCurrentConversation,
 } from '../conversationState.js';
-import { resetModelLogs, resetPreviews } from '../previews.js';
+import { restoreModelLogs, updateWebPreview, updatePptPreview } from '../previews.js';
 
 function createMessageActionButton(label, action, iconName) {
   const button = document.createElement('button');
@@ -269,9 +269,23 @@ export function createMessageRenderer({
     }
   };
 
-  const resetSessionOutputs = () => {
-    resetModelLogs();
-    resetPreviews();
+  const applyConversationOutputs = (conversation) => {
+    if (!conversation || typeof conversation !== 'object') {
+      restoreModelLogs([]);
+      updateWebPreview(null);
+      updatePptPreview([]);
+      return;
+    }
+
+    const outputs =
+      conversation && typeof conversation.outputs === 'object' ? conversation.outputs : null;
+    const logs = Array.isArray(outputs?.modelLogs) ? outputs.modelLogs : [];
+    const webPreview = outputs?.webPreview ?? null;
+    const slides = Array.isArray(outputs?.pptSlides) ? outputs.pptSlides : [];
+
+    restoreModelLogs(logs);
+    updateWebPreview(webPreview);
+    updatePptPreview(slides);
   };
 
   const renderConversation = (conversation) => {
@@ -285,12 +299,13 @@ export function createMessageRenderer({
     if (!target) {
       chatMessages.innerHTML = '';
       lastRenderedConversationId = null;
+      applyConversationOutputs(null);
       return;
     }
 
     const isDifferentConversation = target.id !== lastRenderedConversationId;
     if (isDifferentConversation) {
-      resetSessionOutputs();
+      applyConversationOutputs(target);
     }
 
     chatMessages.innerHTML = '';
