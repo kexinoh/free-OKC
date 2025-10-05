@@ -7,7 +7,7 @@
 
 - **查询参数**：
   - `limit` *(int, default=20)*：返回的快照上限。
-- **响应体**：`workspace_state` 对象（详见 [session 文档](session.md#工作区状态结构)）。
+- **响应体**：`workspace_state` 对象（详见 [session 文档](session.md#工作区状态结构)）。若启用了 Git 工作区，`workspace_state.paths` 会补充挂载目录、内部输出、部署目录等路径；`workspace_state.git` 会描述当前 HEAD 与脏状态。
 
 ## POST `/api/session/workspace/snapshots`
 手动创建一个快照。
@@ -26,7 +26,7 @@
   - `limit` *(int, default=20)*。
 - **请求体**：`SnapshotRestorePayload` 对象：
   - `snapshot_id` *(string, required)*：目标快照的 Git 提交哈希。
-- **响应体**：`workspace_state`，`latest_snapshot` 指向被恢复的提交。
+- **响应体**：`workspace_state`，`latest_snapshot` 指向被恢复的提交。必要时会更新 `paths`/`git` 字段以反映最新状态。
 - **错误码**：
   - `400 Bad Request`：工作区未启用快照或提供的 `snapshot_id` 无效。
 

@@ -27,3 +27,4 @@
 1. 优先使用 `web_preview.url` 字段提供的完整 URL，它已经包含 `client_id` 查询参数，可直接在浏览器新窗口或 `<iframe>` 中加载。
 2. 若需要自定义资源访问路径，建议保留 `client_id` 并确保按上述规则构建 URL，以避免命中其它会话的部署。
 3. 当调用 `DELETE /api/session/history` 清理历史时，服务器会尝试删除同会话的部署目录并返回摘要，请在前端同步刷新页面列表。
+4. 通过 [`DELETE /api/conversations/{id}`](conversations.md#delete-apiconversationsconversation_id) 删除会话时，同样会尝试移除绑定的部署目录，返回值中的 `workspace.deployments_removed` 可用于刷新界面。
