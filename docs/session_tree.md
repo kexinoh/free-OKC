@@ -59,7 +59,7 @@ and audit multi-turn projects without losing context.
 1. **Conversation edits.** The frontend issues `POST /api/conversations` for new
    trees and `PUT /api/conversations/{id}` when an existing tree is modified.
    Both routes call `save_conversation`, ensuring the SQL record and Git status
-   stay in sync with the latest branch structure. [src/okcvm/api/main.py#L536-L562](../src/okcvm/api/main.py#L536-L562)
+   stay in sync with the latest conversation tree structure. [src/okcvm/api/main.py#L536-L562](../src/okcvm/api/main.py#L536-L562)
 2. **Conversation deletion.** `DELETE /api/conversations/{id}` removes the SQL
    row and then invokes `_cleanup_workspace()` to prune the saved workspace
    directory and deployment artefacts tied to that session, preventing orphaned
