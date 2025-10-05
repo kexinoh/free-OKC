@@ -7,7 +7,8 @@ import {
   ensureCurrentConversation,
   createConversation,
   loadConversationsFromStorage,
-  saveConversationsToStorage,
+  discardConversation,
+  restoreConversation,
 } from '../conversationState.js';
 import { formatConversationTime, fetchJson } from '../utils.js';
 
@@ -134,7 +135,6 @@ export function createConversationPanel({
     if (!conversation) return;
 
     setCurrentSessionId(conversation.id);
-    saveConversationsToStorage();
     renderConversationList();
     renderConversation(conversation);
 
@@ -169,19 +169,17 @@ export function createConversationPanel({
 
   const deleteConversation = async (conversationId) => {
     if (!conversationId) return;
-    const conversations = getConversations();
-    const index = conversations.findIndex((conversation) => conversation.id === conversationId);
-    if (index === -1) return;
+    const removal = discardConversation(conversationId);
+    if (!removal) return;
 
-    const [removed] = conversations.splice(index, 1);
-    const wasCurrent = removed.id === getCurrentSessionId();
+    const { conversation: removed, index } = removal;
+    const wasCurrent = removed?.id === getCurrentSessionId();
 
     if (wasCurrent) {
       setCurrentSessionId(null);
       setStatus('清理会话…', true);
     }
 
-    saveConversationsToStorage();
     renderConversationList();
 
     if (!wasCurrent) {
@@ -194,11 +192,13 @@ export function createConversationPanel({
       await deleteSessionHistory();
     } catch (error) {
       console.error(error);
-      conversations.splice(index, 0, removed);
-      setCurrentSessionId(removed.id);
-      saveConversationsToStorage();
-      selectConversation(removed.id);
-      addAndRenderMessage('assistant', `清理会话失败：${error.message || '未知错误'}`);
+      restoreConversation(removed, index ?? 0);
+      if (removed?.id) {
+        setCurrentSessionId(removed.id);
+        renderConversationList();
+        selectConversation(removed.id);
+      }
+      addAndRenderMessage('assistant', `清理会话失败：${error?.message || '未知错误'}`);
       return;
     }
 
@@ -212,8 +212,8 @@ export function createConversationPanel({
     }
   };
 
-  const initializeConversationState = () => {
-    loadConversationsFromStorage();
+  const initializeConversationState = async () => {
+    await loadConversationsFromStorage();
     ensureCurrentConversation();
     renderConversationList();
     renderConversation();

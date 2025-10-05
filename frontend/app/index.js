@@ -39,6 +39,7 @@ import {
   appendModelLogForConversation,
   setConversationWebPreview,
   setConversationPptSlides,
+  setConversationWorkspaceState,
 } from '../conversationState.js';
 import { fetchJson, postFormData } from '../utils.js';
 import {
@@ -581,6 +582,7 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
     setConversationWebPreview(payload.web_preview);
     updatePptPreview(payload.ppt_slides);
     setConversationPptSlides(payload.ppt_slides);
+    setConversationWorkspaceState(payload.workspace_state);
     setMessageActionFeedback(button, { status: 'success', message: '已刷新', duration: 1500 });
     finalizeBranchTransition();
   } catch (error) {
@@ -633,6 +635,8 @@ async function bootSession() {
         updatePptPreview(data.ppt_slides);
         setConversationPptSlides(data.ppt_slides);
       }
+      if ('workspace_state' in data) {
+        setConversationWorkspaceState(data.workspace_state);
       if (Array.isArray(data.uploads)) {
         setUploadedFiles(data.uploads);
       }
@@ -662,6 +666,7 @@ async function sendChat(message) {
     setConversationWebPreview(payload.web_preview);
     updatePptPreview(payload.ppt_slides);
     setConversationPptSlides(payload.ppt_slides);
+    setConversationWorkspaceState(payload.workspace_state);
     if (Array.isArray(payload?.uploads)) {
       setUploadedFiles(payload.uploads);
     }
@@ -909,7 +914,7 @@ function initializeEventListeners() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initializePreviewControls();
   initializeConfigForm();
   initializeEventListeners();
@@ -927,7 +932,7 @@ document.addEventListener('DOMContentLoaded', () => {
   historyLayout.observe(observedLayoutTarget);
   historyLayout.requestLayoutSync();
 
-  const conversation = conversationPanelApi.initializeConversationState();
+  const conversation = await conversationPanelApi.initializeConversationState();
   loadConfig();
 
   if (!conversation || conversation.messages.length === 0) {

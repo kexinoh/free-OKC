@@ -19,12 +19,14 @@ from ..logging_utils import get_logger, setup_logging
 from ..session import SessionState
 from ..streaming import EventStreamPublisher, LangChainStreamingHandler
 from ..workspace import WorkspaceStateError
+from ..storage import get_conversation_store
 
 if TYPE_CHECKING:  # pragma: no cover - import used for type checking only
     from ..vm import VirtualMachine
 from .models import (
     ChatRequest,
     ConfigUpdatePayload,
+    ConversationPayload,
     SnapshotCreatePayload,
     SnapshotRestorePayload,
 )
@@ -519,6 +521,63 @@ def create_app() -> FastAPI:
             logger.exception("Configuration update failed")
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return await read_config()
+
+    @app.get("/api/conversations")
+    async def list_conversations(
+        request: Request,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Dict[str, object]:
+        resolved = _resolve_client_id(request, client_id)
+        logger.debug("Listing conversations for client=%s", resolved)
+        store = get_conversation_store()
+        conversations = await asyncio.to_thread(store.list_conversations, resolved)
+        return {"conversations": conversations}
+
+    @app.post("/api/conversations")
+    async def create_conversation_entry(
+        request: Request,
+        payload: ConversationPayload,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Dict[str, object]:
+        resolved = _resolve_client_id(request, client_id)
+        data = payload.model_dump(mode="json")
+        store = get_conversation_store()
+        logger.info("Creating conversation entry client=%s id=%s", resolved, data.get("id"))
+        conversation = await asyncio.to_thread(store.save_conversation, resolved, data)
+        return {"conversation": conversation}
+
+    @app.put("/api/conversations/{conversation_id}")
+    async def upsert_conversation_entry(
+        request: Request,
+        conversation_id: str,
+        payload: ConversationPayload,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Dict[str, object]:
+        resolved = _resolve_client_id(request, client_id)
+        data = payload.model_dump(mode="json")
+        data["id"] = conversation_id
+        store = get_conversation_store()
+        logger.debug("Persisting conversation client=%s id=%s", resolved, conversation_id)
+        conversation = await asyncio.to_thread(store.save_conversation, resolved, data)
+        return {"conversation": conversation}
+
+    @app.delete("/api/conversations/{conversation_id}")
+    async def delete_conversation_entry(
+        request: Request,
+        conversation_id: str,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Dict[str, object]:
+        resolved = _resolve_client_id(request, client_id)
+        store = get_conversation_store()
+        logger.info("Deleting conversation client=%s id=%s", resolved, conversation_id)
+        success, summary = await asyncio.to_thread(
+            store.delete_conversation,
+            resolved,
+            conversation_id,
+        )
+        if not success:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return {"deleted": True, "workspace": summary}
 
     @app.get("/api/session/info")
     async def session_info(
