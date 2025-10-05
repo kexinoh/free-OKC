@@ -15,7 +15,12 @@ from .logging_utils import get_logger
 from .registry import ToolRegistry
 from .vm import VirtualMachine
 from .tools.deployment import cleanup_deployments_for_session
-from .workspace import WorkspaceError, WorkspaceManager, WorkspaceStateError
+from .workspace import (
+    GitWorkspaceState,
+    WorkspaceError,
+    WorkspaceManager,
+    WorkspaceStateError,
+)
 
 
 logger = get_logger(__name__)
@@ -54,6 +59,33 @@ class SessionState:
 
         snapshots = state.list_snapshots(limit=limit) if state else []
         summary: Dict[str, object] = {"enabled": True, "snapshots": snapshots}
+
+        workspace = getattr(self, "workspace", None)
+        if workspace is not None:
+            paths = getattr(workspace, "paths", None)
+            if paths is not None:
+                path_summary: Dict[str, object] = {
+                    "mount": str(paths.mount),
+                    "output": str(paths.output),
+                    "internal_root": str(paths.internal_root),
+                    "internal_output": str(paths.internal_output),
+                    "internal_mount": str(getattr(paths, "internal_mount", paths.internal_root / "mnt")),
+                    "internal_tmp": str(getattr(paths, "internal_tmp", paths.internal_root / "tmp")),
+                    "session_id": getattr(paths, "session_id", None),
+                }
+                storage_root = getattr(workspace, "storage_root", None)
+                if storage_root is not None:
+                    path_summary["storage_root"] = str(storage_root)
+                deployments_root = getattr(workspace, "deployments_root", None)
+                if deployments_root is not None:
+                    path_summary["deployments_root"] = str(deployments_root)
+                summary["paths"] = path_summary
+
+            if isinstance(state, GitWorkspaceState):
+                git_summary = state.describe_head()
+                if git_summary:
+                    summary["git"] = git_summary
+
         if latest:
             summary["latest_snapshot"] = latest
         elif snapshots:

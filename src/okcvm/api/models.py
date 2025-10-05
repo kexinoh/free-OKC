@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..config import ModelEndpointConfig
 
@@ -79,3 +79,18 @@ class SnapshotRestorePayload(BaseModel):
     """Payload to restore the workspace to an earlier snapshot."""
 
     snapshot_id: str = Field(..., description="Git commit identifier to restore")
+
+
+class ConversationPayload(BaseModel):
+    """Conversation tree payload exchanged with the frontend."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(..., description="Conversation identifier")
+    title: Optional[str] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+    messages: Any = Field(default_factory=list)
+    branches: Dict[str, Any] = Field(default_factory=dict)
+    outputs: Dict[str, Any] = Field(default_factory=dict)
+    workspace: Optional[Dict[str, Any]] = None

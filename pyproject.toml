@@ -23,6 +23,8 @@ dependencies = [
   "webdriver-manager>=4.0.2",
   "pytest>=8.4.2",
   "psutil>=7.1.0",
+  "sqlalchemy>=2.0",
+  "pymysql>=1.1",
 ]
 
 [project.optional-dependencies]

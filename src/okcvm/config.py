@@ -173,6 +173,7 @@ class Config:
     chat: Optional[ModelEndpointConfig] = None
     media: MediaConfig = field(default_factory=MediaConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
+    conversation_store: "ConversationStoreConfig" = field(default_factory=lambda: ConversationStoreConfig())
 
     def copy(self) -> "Config":
         """Return a deep copy of the configuration instance."""
@@ -186,6 +187,7 @@ class Config:
                 asr=copy.deepcopy(self.media.asr),
             ),
             workspace=self.workspace.copy(),
+            conversation_store=self.conversation_store.copy(),
         )
 
 
@@ -208,10 +210,50 @@ def _load_chat_from_env(env: Mapping[str, str] | None = None) -> ModelEndpointCo
     return ModelEndpointConfig.from_env("OKCVM_CHAT", env_mapping)
 
 
+@dataclass(slots=True)
+class ConversationStoreConfig:
+    """Configuration for persisting conversation data."""
+
+    url: Optional[str] = None
+    echo: bool = False
+    pool_size: Optional[int] = None
+    _config_dir: Optional[Path] = None
+
+    def copy(self) -> "ConversationStoreConfig":
+        return ConversationStoreConfig(
+            url=self.url,
+            echo=self.echo,
+            pool_size=self.pool_size,
+            _config_dir=self._config_dir,
+        )
+
+    def effective_url(self) -> str:
+        if self.url and self.url.strip():
+            return self.url.strip()
+        base_dir = self._config_dir or Path.cwd()
+        default_path = (base_dir / "okcvm_conversations.db").resolve()
+        return f"sqlite:///{default_path}"
+
+
+def _load_conversation_store_from_env(env: Mapping[str, str] | None = None) -> ConversationStoreConfig:
+    env_mapping = env or os.environ
+    url = env_mapping.get("OKCVM_DB_URL") or env_mapping.get("OKCVM_CONVERSATION_URL")
+    echo = _parse_bool(env_mapping.get("OKCVM_DB_ECHO"), default=False)
+    pool_size_raw = env_mapping.get("OKCVM_DB_POOL_SIZE")
+    pool_size: Optional[int] = None
+    if pool_size_raw is not None:
+        try:
+            pool_size = int(pool_size_raw)
+        except ValueError:
+            pool_size = None
+    return ConversationStoreConfig(url=url, echo=echo, pool_size=pool_size)
+
+
 _config_lock = threading.Lock()
 _config: Config = Config(
     chat=_load_chat_from_env(),
     media=_load_media_from_env(),
+    conversation_store=_load_conversation_store_from_env(),
 )
 
 
@@ -220,6 +262,7 @@ def configure(
     chat: Optional[ModelEndpointConfig] = None,
     media: Optional[MediaConfig] = None,
     workspace: Optional[WorkspaceConfig] = None,
+    conversation_store: Optional[ConversationStoreConfig] = None,
 ) -> None:
     """Update the process-wide configuration."""
 
@@ -235,6 +278,8 @@ def configure(
             )
         if workspace is not None:
             _config.workspace = workspace.copy()
+        if conversation_store is not None:
+            _config.conversation_store = conversation_store.copy()
     logger.info(
         "Configuration updated (chat=%s media=%s workspace=%s)",
         chat is not None,
@@ -259,6 +304,7 @@ def reset_config(env: Mapping[str, str] | None = None) -> None:
             chat=_load_chat_from_env(env),
             media=_load_media_from_env(env),
             workspace=WorkspaceConfig(),
+            conversation_store=_load_conversation_store_from_env(env),
         )
 
 
@@ -283,6 +329,7 @@ def load_config_from_yaml(path: Path) -> None:
     chat_config = data.get("chat")
     media_data = data.get("media")
     workspace_data = data.get("workspace")
+    conversation_store_data = data.get("conversation_store")
 
     with _config_lock:
         current = _config.copy()
@@ -318,6 +365,10 @@ def load_config_from_yaml(path: Path) -> None:
         )
 
         _config.workspace = _parse_workspace(workspace_data, config_dir=path.parent)
+        _config.conversation_store = _parse_conversation_store(
+            conversation_store_data,
+            config_dir=path.parent,
+        )
 
     logger.info("Configuration loaded successfully from YAML: %s", path)
 
@@ -395,6 +446,54 @@ def _merge_endpoint_config(
         )
 
     return None
+
+
+def _parse_conversation_store(
+    data: Mapping[str, object] | None,
+    *,
+    config_dir: Path,
+) -> ConversationStoreConfig:
+    """Parse conversation persistence configuration from YAML."""
+
+    env_defaults = _load_conversation_store_from_env()
+    url = env_defaults.url
+    echo = env_defaults.echo
+    pool_size = env_defaults.pool_size
+
+    if isinstance(data, Mapping):
+        raw_url = data.get("url")
+        if isinstance(raw_url, str) and raw_url.strip():
+            url = raw_url.strip()
+        elif raw_url not in (None, ""):
+            logger.warning("Ignoring invalid conversation store URL: %s", raw_url)
+
+        if "echo" in data:
+            echo = _parse_bool(data.get("echo"), default=echo)
+
+        raw_pool = data.get("pool_size")
+        if isinstance(raw_pool, (int, float)):
+            pool_size = int(raw_pool)
+        elif isinstance(raw_pool, str) and raw_pool.strip():
+            try:
+                pool_size = int(raw_pool)
+            except ValueError:
+                logger.warning("Invalid pool_size for conversation store: %s", raw_pool)
+
+    config = ConversationStoreConfig(
+        url=url,
+        echo=echo,
+        pool_size=pool_size,
+        _config_dir=config_dir,
+    )
+
+    logger.info(
+        "Conversation store configuration resolved (url=%s echo=%s pool=%s)",
+        config.url or config.effective_url(),
+        config.echo,
+        config.pool_size,
+    )
+
+    return config
 
 
 def _parse_workspace(data: Mapping[str, object] | None, *, config_dir: Path) -> WorkspaceConfig:

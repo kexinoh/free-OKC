@@ -39,3 +39,9 @@ workspace:
   path: "workspace"
   # Require a confirmation prompt before the server starts using the workspace.
   confirm_on_start: true
+
+conversation_store:
+  # Configure a SQLAlchemy database URL. MySQL is recommended for production:
+  # url: "mysql+pymysql://username:password@localhost:3306/okcvm"
+  url: "sqlite:///./okcvm_conversations.db"
+  echo: false

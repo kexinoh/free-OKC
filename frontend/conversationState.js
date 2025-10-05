@@ -1,15 +1,108 @@
 import {
   DEFAULT_CONVERSATION_TITLE,
   CONVERSATION_TITLE_MAX_LENGTH,
-  STORAGE_KEYS,
 } from './constants.js';
-import { storage } from './storage.js';
 import { generateId } from './utils.js';
+import {
+  fetchConversations,
+  updateConversationOnServer,
+  deleteConversationOnServer,
+} from './conversationApi.js';
 
 let conversations = [];
 let currentSessionId = null;
 
 const MODEL_LOG_LIMIT = 6;
+
+function cloneConversation(conversation) {
+  if (!conversation || typeof conversation !== 'object') {
+    return null;
+  }
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(conversation);
+    } catch (error) {
+      // Fallback to JSON cloning
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(conversation));
+  } catch (error) {
+    return null;
+  }
+}
+
+function createPersistenceController() {
+  const pendingSaves = new Map();
+  const pendingDeletes = new Set();
+  let flushing = false;
+
+  const dequeueDelete = () => {
+    const iterator = pendingDeletes.values().next();
+    if (iterator.done) return null;
+    const value = iterator.value;
+    pendingDeletes.delete(value);
+    return value;
+  };
+
+  const dequeueSave = () => {
+    const iterator = pendingSaves.entries().next();
+    if (iterator.done) return null;
+    const [conversationId, payload] = iterator.value;
+    pendingSaves.delete(conversationId);
+    return payload;
+  };
+
+  const flush = async () => {
+    if (flushing) return;
+    flushing = true;
+    try {
+      while (pendingDeletes.size > 0 || pendingSaves.size > 0) {
+        const deleteId = dequeueDelete();
+        if (deleteId) {
+          try {
+            await deleteConversationOnServer(deleteId);
+          } catch (error) {
+            console.error('删除会话失败', deleteId, error);
+          }
+          continue;
+        }
+
+        const payload = dequeueSave();
+        if (payload) {
+          try {
+            await updateConversationOnServer(payload);
+          } catch (error) {
+            console.error('保存会话失败', payload?.id, error);
+          }
+        }
+      }
+    } finally {
+      flushing = false;
+      if (pendingDeletes.size > 0 || pendingSaves.size > 0) {
+        void flush();
+      }
+    }
+  };
+
+  return {
+    scheduleSave(conversation) {
+      const payload = cloneConversation(conversation);
+      if (!payload?.id) return;
+      pendingSaves.set(payload.id, payload);
+      pendingDeletes.delete(payload.id);
+      void flush();
+    },
+    scheduleDelete(conversationId) {
+      if (!conversationId) return;
+      pendingSaves.delete(conversationId);
+      pendingDeletes.add(conversationId);
+      void flush();
+    },
+  };
+}
+
+const persistenceController = createPersistenceController();
 
 function normalizeModelLogEntry(entry) {
   if (!entry || typeof entry !== 'object') return null;
@@ -125,6 +218,86 @@ function normalizeConversationOutputs(outputs) {
   }
 
   return normalized;
+}
+
+function normalizeWorkspaceState(state) {
+  if (!state || typeof state !== 'object') {
+    return null;
+  }
+
+  const normalized = {};
+
+  if (typeof state.enabled === 'boolean') {
+    normalized.enabled = state.enabled;
+  }
+
+  if (Array.isArray(state.snapshots)) {
+    normalized.snapshots = state.snapshots
+      .filter((entry) => entry && typeof entry === 'object')
+      .map((entry) => ({
+        id: typeof entry.id === 'string' ? entry.id : null,
+        label: typeof entry.label === 'string' ? entry.label : null,
+        timestamp: typeof entry.timestamp === 'string' ? entry.timestamp : null,
+      }))
+      .filter((entry) => entry.id || entry.label || entry.timestamp);
+  } else {
+    normalized.snapshots = [];
+  }
+
+  const latestSnapshot =
+    typeof state.latest_snapshot === 'string'
+      ? state.latest_snapshot
+      : typeof state.latestSnapshot === 'string'
+        ? state.latestSnapshot
+        : null;
+  if (latestSnapshot) {
+    normalized.latest_snapshot = latestSnapshot;
+  }
+
+  const pathsSource = state.paths && typeof state.paths === 'object' ? state.paths : null;
+  if (pathsSource) {
+    const paths = {};
+    const copyIfString = (key, sourceKey = key) => {
+      const value = pathsSource[sourceKey];
+      if (typeof value === 'string' && value.trim()) {
+        paths[key] = value.trim();
+      }
+    };
+    copyIfString('mount');
+    copyIfString('output');
+    copyIfString('internal_root');
+    copyIfString('internal_output');
+    copyIfString('internal_mount');
+    copyIfString('internal_tmp');
+    copyIfString('storage_root');
+    copyIfString('deployments_root');
+    copyIfString('session_id');
+    copyIfString('session_id', 'sessionId');
+    if (Object.keys(paths).length > 0) {
+      normalized.paths = paths;
+    }
+  }
+
+  const gitSource = state.git && typeof state.git === 'object' ? state.git : null;
+  if (gitSource) {
+    const git = {};
+    if (typeof gitSource.commit === 'string' && gitSource.commit.trim()) {
+      git.commit = gitSource.commit.trim();
+    }
+    if (typeof gitSource.branch === 'string' && gitSource.branch.trim()) {
+      git.branch = gitSource.branch.trim();
+    }
+    if (typeof gitSource.is_dirty === 'boolean') {
+      git.is_dirty = gitSource.is_dirty;
+    } else if (typeof gitSource.isDirty === 'boolean') {
+      git.is_dirty = gitSource.isDirty;
+    }
+    if (Object.keys(git).length > 0) {
+      normalized.git = git;
+    }
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
 function ensureConversationOutputs(conversation) {
@@ -380,6 +553,7 @@ function normalizeConversation(entry) {
       : [],
     branches: {},
     outputs: normalizeConversationOutputs(entry.outputs),
+    workspace: normalizeWorkspaceState(entry.workspace),
   };
 
   if (entry.branches && typeof entry.branches === 'object') {
@@ -435,42 +609,33 @@ function normalizeConversation(entry) {
   return normalized;
 }
 
-export function loadConversationsFromStorage() {
-  const raw = storage.getItem(STORAGE_KEYS.conversations);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        conversations = parsed
-          .map((entry) => normalizeConversation(entry))
-          .filter((entry) => entry !== null);
-        conversations.forEach((conversation) => {
-          syncActiveBranchSnapshots(conversation);
-          ensureConversationOutputs(conversation);
-        });
-      }
-    } catch (error) {
-      conversations = [];
-    }
+export async function loadConversationsFromStorage() {
+  try {
+    const payload = await fetchConversations();
+    const entries = Array.isArray(payload?.conversations) ? payload.conversations : [];
+    conversations = entries
+      .map((entry) => normalizeConversation(entry))
+      .filter((entry) => entry !== null);
+  } catch (error) {
+    console.error('加载会话失败', error);
+    conversations = [];
   }
 
-  const storedCurrent = storage.getItem(STORAGE_KEYS.current);
-  if (typeof storedCurrent === 'string' && storedCurrent) {
-    currentSessionId = storedCurrent;
-  }
+  conversations.forEach((conversation) => {
+    syncActiveBranchSnapshots(conversation);
+    ensureConversationOutputs(conversation);
+  });
 
   if (!getCurrentConversation() && conversations.length > 0) {
     currentSessionId = conversations[0].id;
   }
+
+  return conversations;
 }
 
-export function saveConversationsToStorage() {
-  storage.setItem(STORAGE_KEYS.conversations, JSON.stringify(conversations));
-  if (currentSessionId) {
-    storage.setItem(STORAGE_KEYS.current, currentSessionId);
-  } else {
-    storage.removeItem(STORAGE_KEYS.current);
-  }
+export function saveConversationsToStorage(conversation = getCurrentConversation()) {
+  if (!conversation) return;
+  persistenceController.scheduleSave(conversation);
 }
 
 export function getCurrentConversation() {
@@ -480,6 +645,31 @@ export function getCurrentConversation() {
 function findConversationById(conversationId) {
   if (!conversationId) return null;
   return conversations.find((conversation) => conversation.id === conversationId) ?? null;
+}
+
+export function discardConversation(conversationId) {
+  if (!conversationId) return null;
+  const index = conversations.findIndex((conversation) => conversation.id === conversationId);
+  if (index === -1) return null;
+  const [removed] = conversations.splice(index, 1);
+  if (removed?.id === currentSessionId) {
+    currentSessionId = null;
+  }
+  if (removed?.id) {
+    persistenceController.scheduleDelete(removed.id);
+  }
+  return { conversation: removed, index };
+}
+
+export function restoreConversation(conversation, index = 0) {
+  const normalized = normalizeConversation(conversation);
+  if (!normalized) return null;
+  const targetIndex = Math.max(0, Math.min(index, conversations.length));
+  conversations.splice(targetIndex, 0, normalized);
+  syncActiveBranchSnapshots(normalized);
+  ensureConversationOutputs(normalized);
+  saveConversationsToStorage(normalized);
+  return normalized;
 }
 
 function resolveConversationForOutputs(conversationId) {
@@ -496,7 +686,6 @@ export function ensureCurrentConversation() {
     return;
   }
   currentSessionId = conversations[0].id;
-  saveConversationsToStorage();
 }
 
 export function createConversation(options = {}) {
@@ -512,7 +701,7 @@ export function createConversation(options = {}) {
   };
   conversations.unshift(conversation);
   currentSessionId = conversation.id;
-  saveConversationsToStorage();
+  saveConversationsToStorage(conversation);
   return conversation;
 }
 
@@ -550,7 +739,7 @@ export function appendMessageToConversation(role, content, options = {}) {
 
   bumpConversation(conversation.id);
   syncActiveBranchSnapshots(conversation);
-  saveConversationsToStorage();
+  saveConversationsToStorage(conversation);
   return message.id;
 }
 
@@ -575,7 +764,7 @@ export function resolvePendingConversationMessage(messageId, content) {
 
   bumpConversation(conversation.id);
   syncActiveBranchSnapshots(conversation);
-  saveConversationsToStorage();
+  saveConversationsToStorage(conversation);
   return conversation;
 }
 
@@ -589,7 +778,7 @@ export function appendModelLogForConversation(log, conversationId = currentSessi
   if (outputs.modelLogs.length > MODEL_LOG_LIMIT) {
     outputs.modelLogs.splice(0, outputs.modelLogs.length - MODEL_LOG_LIMIT);
   }
-  saveConversationsToStorage();
+  saveConversationsToStorage(conversation);
 }
 
 export function setConversationWebPreview(preview, conversationId = currentSessionId) {
@@ -597,7 +786,7 @@ export function setConversationWebPreview(preview, conversationId = currentSessi
   if (!conversation) return;
   const outputs = ensureConversationOutputs(conversation);
   outputs.webPreview = normalizeWebPreview(preview);
-  saveConversationsToStorage();
+  saveConversationsToStorage(conversation);
 }
 
 export function setConversationPptSlides(slides, conversationId = currentSessionId) {
@@ -605,5 +794,17 @@ export function setConversationPptSlides(slides, conversationId = currentSession
   if (!conversation) return;
   const outputs = ensureConversationOutputs(conversation);
   outputs.pptSlides = normalizePptSlides(slides);
-  saveConversationsToStorage();
+  saveConversationsToStorage(conversation);
+}
+
+export function setConversationWorkspaceState(state, conversationId = currentSessionId) {
+  const conversation = resolveConversationForOutputs(conversationId);
+  if (!conversation) return;
+  const normalized = normalizeWorkspaceState(state);
+  if (normalized) {
+    conversation.workspace = normalized;
+  } else {
+    delete conversation.workspace;
+  }
+  saveConversationsToStorage(conversation);
 }

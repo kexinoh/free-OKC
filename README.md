@@ -27,6 +27,7 @@ Imagine seamlessly embedding a powerful, multi-modal agent brain into your own a
 - **🧩 Highly Extensible**: Designed for extension. Easily register your own custom tools or swap out media generation endpoints.
 - **✅ Tested & Reliable**: Features a comprehensive automated test suite to ensure the VM and tools behave as expected.
 - **🔌 Effortless Integration**: Provides a clean Python API, making it simple to integrate OKCVM into your existing systems.
+- **💾 Persistent Conversations**: Conversation trees and workspace metadata are stored in a MySQL-compatible database, enabling token-based multi-account access across browsers.
 
 ## 📂 Repository Structure
 

@@ -171,6 +171,43 @@ class GitWorkspaceState:
         self._run_git("clean", "-fd")
         return True
 
+    def describe_head(self) -> Dict[str, object]:
+        """Return metadata about the current HEAD commit."""
+
+        if not self.enabled:
+            return {}
+
+        summary: Dict[str, object] = {}
+        try:
+            head = self._run_git("rev-parse", "HEAD", capture_output=True)
+            commit = head.stdout.strip()
+            if commit:
+                summary["commit"] = commit
+        except (WorkspaceStateError, subprocess.CalledProcessError):  # pragma: no cover - defensive
+            pass
+
+        try:
+            branch_proc = self._run_git(
+                "rev-parse",
+                "--abbrev-ref",
+                "HEAD",
+                capture_output=True,
+            )
+            branch = branch_proc.stdout.strip()
+            if branch:
+                summary["branch"] = branch
+        except (WorkspaceStateError, subprocess.CalledProcessError):  # pragma: no cover - defensive
+            pass
+
+        try:
+            status_proc = self._run_git("status", "--short", capture_output=True)
+            is_dirty = bool(status_proc.stdout.strip())
+            summary["is_dirty"] = is_dirty
+        except (WorkspaceStateError, subprocess.CalledProcessError):  # pragma: no cover - defensive
+            pass
+
+        return summary
+
 
 @dataclass(frozen=True)
 class WorkspacePaths:
