@@ -2,91 +2,71 @@
 
 ## 已实现的能力
 
-### 系统提示词与工具规范打包
-项目仍然随包提供 OK Computer 的系统提示词和工具清单，方便集成方开箱即用。
-- `okcvm.spec` 提供数据类与加载辅助函数，读取内置的 `system_prompt.md` 和
-  `tools.json` 并返回结构化规范供下游消费。([`src/okcvm/spec.py`](./src/okcvm/spec.py))
+### 流式运行时与操作反馈
+- `/api/chat` 现已支持服务端推送流式输出，实时传递增量文本、工具执行状态和最终结果。
+  这一链路由 `LangChainStreamingHandler`、事件发布器和前端流式控制器共同驱动。
+  [src/okcvm/api/main.py#L705-L781](./src/okcvm/api/main.py#L705-L781)
+  [src/okcvm/streaming.py#L33-L165](./src/okcvm/streaming.py#L33-L165)
+  [frontend/app/streamingController.js#L1-L183](./frontend/app/streamingController.js#L1-L183)
+- `SessionState.respond` 会将模型摘要、工具日志和预览元数据一并返回，
+  前端的 `previews.js` 负责把这些信息渲染成时间线和可视化卡片。
+  [src/okcvm/session.py#L277-L519](./src/okcvm/session.py#L277-L519)
+  [frontend/previews.js#L1-L200](./frontend/previews.js#L1-L200)
 
-### 基于 LangChain 的虚拟机运行时
-我们用真实的 LangChain 工具调用代理替换了早期的桩实现，让会话可以路由到
-可配置的聊天模型并驱动所有工具。
-- `okcvm.llm.create_llm_chain` 将 LangChain 的 `ChatOpenAI` 客户端与注册表中的
-  工具绑定，构建遵循历史上下文的工具调用模板。([`src/okcvm/llm.py`](./src/okcvm/llm.py))
-- `okcvm.vm.VirtualMachine` 负责把内部历史转成 LangChain 消息、执行代理、记录
-  中间工具调用并维护可追踪的执行日志。([`src/okcvm/vm.py`](./src/okcvm/vm.py))
+### 会话持久化
+- 基于 SQLAlchemy 的 `ConversationStore` 保存完整对话、工作区信息以及部署产物，
+  浏览器刷新后可直接恢复上下文，同时在删除时清理对应的沙箱目录。
+  [src/okcvm/storage/conversations.py#L81-L318](./src/okcvm/storage/conversations.py#L81-L318)
+- REST 接口和前端的持久化调度器负责异步更新、删除对话条目，保证交互顺畅。
+  [src/okcvm/api/main.py#L525-L580](./src/okcvm/api/main.py#L525-L580)
+  [frontend/conversationState.js#L612-L810](./frontend/conversationState.js#L612-L810)
 
-### 运行时配置与 CLI 体验
-我们新增了线程安全的配置层、YAML/环境变量加载能力以及 Typer CLI，运维人员
-无需改代码即可管理各类推理端点。
-- `okcvm.config` 提供聊天与多媒体端点的数据类、环境变量/YAML 加载器以及
-  原子更新方法，为 API 与运行时提供统一来源。([`src/okcvm/config.py`](./src/okcvm/config.py))
-- 顶层 `main.py` 暴露启动服务、校验配置、列出工具的命令，同时完成依赖检查
-  与环境加载。([`main.py`](./main.py))
+### 工作区上传与系统提示优化
+- 控制台支持直接上传参考文件，后端限制文件数量与大小并写入沙箱，
+  同时将摘要拼接进系统提示，帮助模型理解上下文。
+  [src/okcvm/api/main.py#L616-L703](./src/okcvm/api/main.py#L616-L703)
+  [src/okcvm/session.py#L96-L157](./src/okcvm/session.py#L96-L157)
+  [frontend/app/index.js#L171-L302](./frontend/app/index.js#L171-L302)
 
-### 可观测性与 HTTP 接入层
-编排服务现在默认输出结构化日志与请求链路，便于排查线上问题。
-- `okcvm.logging_utils` 配置 Rich 控制台输出与滚动文件日志，`okcvm.api.main`
-  则在 FastAPI 之上增加请求日志中间件并挂载前端资源。([`src/okcvm/logging_utils.py`](./src/okcvm/logging_utils.py)、
-  [`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
+### 前端模块化
+- `app/index.js` 现在串联布局、流式、上传、配置、对话持久化等模块，
+  `conversationState.js` 则承担分支管理和后端同步，结构更加清晰易扩展。
+  [frontend/app/index.js#L1-L947](./frontend/app/index.js#L1-L947)
+  [frontend/conversationState.js#L1-L810](./frontend/conversationState.js#L1-L810)
+- `utils.js` 统一管理 `client_id`、流式解析与错误处理，新功能可以直接复用。
+  [frontend/utils.js#L136-L288](./frontend/utils.js#L136-L288)
 
-### 会话管理与对话工作流
-Session 层不再使用静态示例，所有请求都会通过 VM，返回的工具元数据驱动 UI
-生成更丰富的预览。
-- `okcvm.session.SessionState` 负责串联注册表、VM 与配置，向前端回传工具摘要、
-  模型指标和预览内容。([`src/okcvm/session.py`](./src/okcvm/session.py))
-- `/api/session/*` 与 `/api/chat` 路由提供启动、查询与聊天接口，对输入做裁剪
-  并在失败时返回明确的校验信息。([`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
-- `SessionState.respond` 会统一解析工具输出的 HTML、URL、Slides 以及其他附件，
-  自动补全 `client_id` 并去重，确保前端拿到结构化的预览元数据。([`src/okcvm/session.py`](./src/okcvm/session.py))
+### 测试保障
+- 新增的 `test_streaming.py`、`test_storage_conversations.py` 与工作区用例
+  让流式回调、会话持久化和沙箱逻辑都具备回归测试覆盖。
+  [tests/test_streaming.py#L1-L110](./tests/test_streaming.py#L1-L110)
+  [tests/test_storage_conversations.py#L1-L132](./tests/test_storage_conversations.py#L1-L132)
+  [tests/test_workspace.py#L1-L74](./tests/test_workspace.py#L1-L74)
 
-### 客户端隔离与多会话编排
-- `okcvm.api.main.SessionStore` 按 `client_id` 懒加载会话，`AppState` 在测试与调试
-  场景下暴露当前 VM，同时保持线程安全。([`src/okcvm/api/main.py`](./src/okcvm/api/main.py))
-- 前端在请求和部署资源访问时会自动写入并携带 `client_id`，无需手动拼接参数
-  即可获得隔离的工作区。([`frontend/utils.js`](./frontend/utils.js))
+## 进行中的工作
 
-### 控制台前端升级
-随包 UI 现已发展为集历史记录、配置面板与多模态预览于一体的工作台。
-- `frontend/index.html` 负责布局与可访问语义结构，配合 `styles.css` 保持桌面与
-  小屏体验一致。
-- `frontend/app.js`、`conversationState.js`、`previews.js`、`utils.js` 等模块分别
-  负责事件绑定、状态持久化、预览渲染和网络请求，结构更加清晰易扩展。
+### 富媒体预览
+继续扩展工具返回的元数据，包括缩略图、幻灯片清单、音频描述等，
+让前端无需解析 HTML 即可渲染更丰富的预览。
+[src/okcvm/session.py#L277-L519](./src/okcvm/session.py#L277-L519)
+[frontend/previews.js#L200-L328](./frontend/previews.js#L200-L328)
 
-### 完整的回归测试
-单元测试覆盖 API、配置助手、LangChain 链路与工具注册表，保障后续改动安全。
-- `tests/` 目录验证 FastAPI 应用、配置加载逻辑、LangChain 集成以及各工具实现。
+### 协作与留存策略
+在持久化能力基础上，设计跨会话协作与分享：支持留存策略、显式分享流程、
+以及导入导出，方便团队协同。
+[src/okcvm/storage/conversations.py#L81-L318](./src/okcvm/storage/conversations.py#L81-L318)
+[frontend/conversationState.js#L612-L810](./frontend/conversationState.js#L612-L810)
 
-## 规划与进行中的工作
-
-### 更丰富的工具输出渲染
-工具返回的数据仍需统一适配，以便前端无需手动解析即可展示网页与 PPT 资源。【短期计划✅】
-- 设计网页/幻灯素材的标准 schema，并扩展 `SessionState.respond` 自动生成预览。【短期计划✅】
-
-### 流式与多轮体验
-当前代理同步执行，只返回最终回答。
-- 评估 LangChain 的流式回调，把增量回复与工具进度推送给前端。【短期计划✅】
-- 引入服务端持久化与淘汰策略，让会话在重启后可恢复。【短期计划✅】
-
-### 扩展媒体与部署集成
-目前仅有部分 OK Computer 媒体端点具备参考实现。
-- 持续补充语音、音效、部署、深度搜索等参考集成，并统一凭据与限流管理。【中期计划✅】
-
-### 聊天记录的分享
-支持聊天记录和对应的工作空间打包。【中期计划✅】
-  
 ### 发布与分发
-希望让运维无需克隆仓库即可体验。【中期计划✅】
-- 打包包含 CLI、API 与前端资源的容器镜像与 PyPI 发行版，并提供默认配置。
+打包 CLI、FastAPI 服务与前端静态资源，提供容器镜像与 Python Wheel，
+让运维无需克隆仓库即可部署。
+[src/okcvm/server.py#L1-L88](./src/okcvm/server.py#L1-L88)
+[pyproject.toml#L1-L40](./pyproject.toml#L1-L40)
 
-### 引入MCP
-引入MCP机制，提高工具的使用能力。【中期计划✅】
+## 后续探索
 
-### 高阶浏览器自动化
-HTTP 抓取器仍然是轻量实现。【长期计划❌】
-- 在保留用于测试和离线模式的确定性爬虫的前提下探索 Playwright/Selenium 后端，并提供资源限制选项。
-  
-### 账户机制
-实现账户机制，真正意义的实现多用户管理。【长期计划❌】
-
-### 更高级的安全性
-实现更好的安全性，包括路径和命令阻止，更强的虚拟能力等。【长期计划❌】
+- **高级浏览器自动化**：在保留轻量抓取器的同时探索 Playwright/Selenium 后端，
+  并提供资源隔离策略。
+- **媒体集成**：持续补充语音、音效、ASR 等参考工具，统一凭据与限流管理。
+- **可观测性导出**：将结构化日志、工作区事件推送到 OpenTelemetry，
+  便于与外部系统关联分析。
