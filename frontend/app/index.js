@@ -555,7 +555,7 @@ function initializeEventListeners() {
 
   if (conversationList) {
     conversationList.addEventListener('click', (event) => {
-      const target = event.target instanceof Element ? event.target : null;
+      const target = event.target instanceof Element ? event.target : event.target.parentElement;
       if (!target) return;
 
       const deleteButton = target.closest('button[data-action="delete"]');
