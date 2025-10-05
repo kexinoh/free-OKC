@@ -40,6 +40,8 @@ import {
   setConversationWebPreview,
   setConversationPptSlides,
   setConversationWorkspaceState,
+  cloneWorkspaceCheckpoint,
+  composeWorkspaceBranchName,
 } from '../conversationState.js';
 import { fetchJson, postFormData } from '../utils.js';
 import {
@@ -55,6 +57,7 @@ import { createHistoryLayoutManager } from './historyLayout.js';
 import { createMessageRenderer } from './messageRenderer.js';
 import { createStreamingController } from './streamingController.js';
 import { createConversationPanel } from './conversationPanel.js';
+import { assignWorkspaceBranch, restoreWorkspace } from '../workspaceApi.js';
 
 let previousFocusedElement = null;
 
@@ -129,6 +132,135 @@ function updateUploadConstraints(source) {
   if (Number.isFinite(sizeBytesCandidate) && sizeBytesCandidate > 0) {
     maxFileSizeBytes = sizeBytesCandidate;
   }
+}
+
+function workspaceSnapshotsEnabled(conversation) {
+  if (!conversation || typeof conversation !== 'object') {
+    return false;
+  }
+  const state = conversation.workspace;
+  if (!state || typeof state !== 'object') {
+    return false;
+  }
+  if (typeof state.enabled === 'boolean' && !state.enabled) {
+    return false;
+  }
+  return true;
+}
+
+function resolveSnapshotId(version, conversation) {
+  const candidates = [
+    version?.workspace?.latest_snapshot,
+    version?.workspace?.commit,
+    conversation?.workspace?.latest_snapshot,
+    conversation?.workspace?.git?.commit,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  const snapshots = conversation?.workspace?.snapshots;
+  if (Array.isArray(snapshots) && snapshots.length > 0) {
+    const latest = snapshots[0]?.id;
+    if (typeof latest === 'string' && latest.trim()) {
+      return latest.trim();
+    }
+  }
+  return null;
+}
+
+function resolveBranchName(conversation, messageId, version) {
+  const branch = version?.workspace?.branch;
+  if (typeof branch === 'string' && branch.trim()) {
+    return branch.trim();
+  }
+  return composeWorkspaceBranchName(conversation?.id, messageId, version?.id);
+}
+
+async function handleWorkspaceBranchTransition({ conversation, messageId, version }) {
+  if (!conversation || !version || !messageId) {
+    return;
+  }
+  if (!workspaceSnapshotsEnabled(conversation)) {
+    return;
+  }
+
+  const snapshotId = resolveSnapshotId(version, conversation);
+  if (!snapshotId) {
+    return;
+  }
+
+  const branchName = resolveBranchName(conversation, messageId, version);
+  if (!branchName) {
+    return;
+  }
+
+  try {
+    const response = await assignWorkspaceBranch({ branch: branchName, snapshotId, checkout: true });
+    const summary = response?.workspace_state;
+    if (summary) {
+      setConversationWorkspaceState(summary, conversation.id);
+      const checkpoint = cloneWorkspaceCheckpoint(summary);
+      if (checkpoint) {
+        version.workspace = {
+          ...(version.workspace ?? {}),
+          ...checkpoint,
+        };
+      }
+      saveConversationsToStorage(conversation);
+    }
+  } catch (error) {
+    console.error('Failed to assign workspace branch', error);
+  }
+}
+
+async function restoreWorkspaceForVersion(conversation, messageId, version) {
+  if (!conversation || !version || !messageId) {
+    return null;
+  }
+  if (!workspaceSnapshotsEnabled(conversation)) {
+    return null;
+  }
+
+  const snapshotId = resolveSnapshotId(version, conversation);
+  const branchName = resolveBranchName(conversation, messageId, version);
+  if (!snapshotId && !branchName) {
+    return null;
+  }
+
+  const payload = {};
+  if (snapshotId) {
+    payload.snapshotId = snapshotId;
+  }
+  if (branchName) {
+    payload.branch = branchName;
+  }
+
+  try {
+    const response = await restoreWorkspace({
+      branch: payload.branch,
+      snapshotId: payload.snapshotId,
+      checkout: true,
+    });
+    const summary = response?.workspace_state;
+    if (summary) {
+      setConversationWorkspaceState(summary, conversation.id);
+      const checkpoint = cloneWorkspaceCheckpoint(summary);
+      if (checkpoint) {
+        version.workspace = {
+          ...(version.workspace ?? {}),
+          ...checkpoint,
+        };
+      }
+      saveConversationsToStorage(conversation);
+      return checkpoint;
+    }
+  } catch (error) {
+    console.error('Failed to restore workspace state', error);
+  }
+
+  return null;
 }
 
 function getMaxFileSizeLimitMb() {
@@ -323,6 +455,7 @@ const editingController = createEditingController({
   syncActiveBranchSnapshots,
   saveConversationsToStorage,
   setMessageActionsDisabled,
+  afterBranchTransition: handleWorkspaceBranchTransition,
 });
 
 messageRendererApi = createMessageRenderer({
@@ -413,7 +546,7 @@ async function writeToClipboard(text) {
   }
 }
 
-function handleBranchNavigation(messageId, delta) {
+async function handleBranchNavigation(messageId, delta) {
   if (!messageId || !Number.isInteger(delta)) return;
   const conversation = getCurrentConversation();
   if (!conversation) return;
@@ -450,6 +583,7 @@ function handleBranchNavigation(messageId, delta) {
 
   conversation.updatedAt = new Date().toISOString();
   bumpConversation(conversation.id);
+  await restoreWorkspaceForVersion(conversation, messageId, snapshot);
   syncActiveBranchSnapshots(conversation);
   saveConversationsToStorage();
   conversationPanelApi.renderConversationList();
@@ -505,6 +639,7 @@ function handleEditMessageAction(messageElement, messageId, triggerButton) {
 
   const previousMessages = conversation.messages.map((entry) => ({ ...entry }));
   const previousSelections = captureBranchSelections(conversation.branches);
+  const previousWorkspace = cloneWorkspaceCheckpoint(conversation.workspace);
 
   const body = messageElement.querySelector('.message-content');
   const currentContent = typeof message.content === 'string' ? message.content : body?.textContent ?? '';
@@ -516,6 +651,7 @@ function handleEditMessageAction(messageElement, messageId, triggerButton) {
     initialValue: currentNormalized,
     previousMessages,
     previousSelections,
+    previousWorkspace,
     messageElement,
     triggerButton,
   });
@@ -537,6 +673,7 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
 
   const previousMessages = conversation.messages.map((entry) => ({ ...entry }));
   const previousSelections = captureBranchSelections(conversation.branches);
+  const previousWorkspace = cloneWorkspaceCheckpoint(conversation.workspace);
   ensureBranchBaseline(conversation, precedingUserMessage.id);
 
   button.dataset.loading = 'true';
@@ -559,13 +696,20 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
 
   let branchTransitionCommitted = false;
   const finalizeBranchTransition = () => {
-    if (branchTransitionCommitted) return;
+    if (branchTransitionCommitted) return null;
     branchTransitionCommitted = true;
-    commitBranchTransition(conversation, precedingUserMessage.id, previousMessages, previousSelections);
+    const activeVersion = commitBranchTransition(
+      conversation,
+      precedingUserMessage.id,
+      previousMessages,
+      previousSelections,
+      previousWorkspace,
+    );
     syncActiveBranchSnapshots(conversation);
     saveConversationsToStorage();
     conversationPanelApi.renderConversationList();
     messageRendererApi.refreshConversationBranchNavigation(conversation);
+    return activeVersion ?? null;
   };
 
   try {
@@ -584,7 +728,14 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
     setConversationPptSlides(payload.ppt_slides);
     setConversationWorkspaceState(payload.workspace_state);
     setMessageActionFeedback(button, { status: 'success', message: '已刷新', duration: 1500 });
-    finalizeBranchTransition();
+    const activeVersion = finalizeBranchTransition();
+    if (activeVersion) {
+      void handleWorkspaceBranchTransition({
+        conversation,
+        messageId: precedingUserMessage.id,
+        version: activeVersion,
+      });
+    }
   } catch (error) {
     console.error(error);
     messageRendererApi.finalizePendingMessage(
@@ -593,7 +744,14 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
       messageId,
     );
     setMessageActionFeedback(button, { status: 'error', message: '刷新失败', duration: 1500 });
-    finalizeBranchTransition();
+    const activeVersion = finalizeBranchTransition();
+    if (activeVersion) {
+      void handleWorkspaceBranchTransition({
+        conversation,
+        messageId: precedingUserMessage.id,
+        version: activeVersion,
+      });
+    }
   } finally {
     setStatus('待命中…');
     setInteractionDisabled(false);
@@ -797,7 +955,7 @@ function initializeEventListeners() {
         const messageId = messageElement?.dataset?.messageId;
         if (messageId && (direction === 'prev' || direction === 'next')) {
           const delta = direction === 'prev' ? -1 : 1;
-          handleBranchNavigation(messageId, delta);
+          await handleBranchNavigation(messageId, delta);
         }
         return;
       }

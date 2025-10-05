@@ -358,4 +358,69 @@ def test_workspace_snapshot_endpoints(client):
         json={"snapshot_id": latest},
     )
     assert restored.status_code == 200
+    restored_payload = restored.json()
+    workspace_state = restored_payload.get("workspace_state", restored_payload)
+    assert workspace_state.get("latest_snapshot")
     assert workspace_path.read_text(encoding="utf-8") == "draft v1"
+
+
+def test_workspace_branch_assignment_and_restore(client):
+    boot = client.get("/api/session/boot")
+    assert boot.status_code == 200
+
+    snapshot_meta = client.get("/api/session/workspace/snapshots")
+    assert snapshot_meta.status_code == 200
+    payload = snapshot_meta.json()
+
+    if not payload["enabled"]:
+        pytest.skip("Git snapshots are disabled in this environment")
+
+    session = main.session_store.get(TEST_CLIENT_ID)
+    workspace_path = session.workspace.resolve("branch.txt")
+
+    workspace_path.write_text("base", encoding="utf-8")
+    base_snapshot = client.post("/api/session/workspace/snapshots", json={"label": "base"})
+    assert base_snapshot.status_code == 200
+    base_commit = base_snapshot.json().get("latest_snapshot")
+    assert base_commit
+
+    base_branch_resp = client.post(
+        "/api/session/workspace/branch",
+        json={"branch": "feature/base", "snapshot_id": base_commit},
+    )
+    assert base_branch_resp.status_code == 200
+    base_branch = base_branch_resp.json()["workspace_state"].get("git", {}).get("branch")
+    assert base_branch
+
+    workspace_path.write_text("alt", encoding="utf-8")
+    restore_to_base = client.post("/api/session/workspace/restore", json={"branch": base_branch})
+    assert restore_to_base.status_code == 200
+
+    alt_branch_init = client.post(
+        "/api/session/workspace/branch",
+        json={"branch": "feature/alt", "snapshot_id": base_commit},
+    )
+    assert alt_branch_init.status_code == 200
+    alt_branch = alt_branch_init.json()["workspace_state"].get("git", {}).get("branch")
+    assert alt_branch and alt_branch != base_branch
+
+    workspace_path.write_text("alt", encoding="utf-8")
+    alt_snapshot = client.post("/api/session/workspace/snapshots", json={"label": "alt"})
+    assert alt_snapshot.status_code == 200
+    alt_commit = alt_snapshot.json().get("latest_snapshot")
+    assert alt_commit
+
+    client.post(
+        "/api/session/workspace/branch",
+        json={"branch": alt_branch, "snapshot_id": alt_commit},
+    )
+
+    workspace_path.write_text("mutated", encoding="utf-8")
+
+    restore_base = client.post("/api/session/workspace/restore", json={"branch": base_branch})
+    assert restore_base.status_code == 200
+    assert workspace_path.read_text(encoding="utf-8") == "base"
+
+    restore_alt = client.post("/api/session/workspace/restore", json={"branch": alt_branch})
+    assert restore_alt.status_code == 200
+    assert workspace_path.read_text(encoding="utf-8") == "alt"

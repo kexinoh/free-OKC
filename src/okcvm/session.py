@@ -579,12 +579,44 @@ class SessionState:
     def list_workspace_snapshots(self, *, limit: int = 20) -> Dict[str, object]:
         return self._workspace_state_summary(limit=limit)
 
-    def restore_workspace(self, snapshot_id: str, *, limit: int = 20) -> Dict[str, object]:
+    def restore_workspace(
+        self,
+        snapshot_id: Optional[str] = None,
+        *,
+        branch: Optional[str] = None,
+        checkout: bool = True,
+        limit: int = 20,
+    ) -> Dict[str, object]:
         state = getattr(self.workspace, "state", None)
         if not getattr(state, "enabled", False):
             raise WorkspaceStateError("Workspace snapshots are disabled")
 
-        state.restore(snapshot_id)
-        return self._workspace_state_summary(latest=snapshot_id, limit=limit)
+        state.restore(snapshot_id, branch=branch, checkout=checkout)
+        latest = None
+        if isinstance(state, GitWorkspaceState):
+            head_meta = state.describe_head()
+            latest = head_meta.get("commit")
+        latest = latest or snapshot_id or branch
+        return self._workspace_state_summary(latest=latest, limit=limit)
+
+    def assign_workspace_branch(
+        self,
+        branch: str,
+        snapshot_id: Optional[str] = None,
+        *,
+        checkout: bool = True,
+        limit: int = 20,
+    ) -> Dict[str, object]:
+        state = getattr(self.workspace, "state", None)
+        if not getattr(state, "enabled", False):
+            raise WorkspaceStateError("Workspace snapshots are disabled")
+
+        state.ensure_branch(branch, snapshot_id, checkout=checkout)
+        latest = None
+        if isinstance(state, GitWorkspaceState):
+            head_meta = state.describe_head()
+            latest = head_meta.get("commit")
+        latest = latest or snapshot_id or branch
+        return self._workspace_state_summary(latest=latest, limit=limit)
 
     # _demo_response 方法现在可以移除了，因为它不再被 respond 方法调用

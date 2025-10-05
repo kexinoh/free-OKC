@@ -29,6 +29,7 @@ from .models import (
     ConversationPayload,
     SnapshotCreatePayload,
     SnapshotRestorePayload,
+    WorkspaceBranchPayload,
 )
 
 # --- Frontend Setup ---
@@ -835,14 +836,48 @@ def create_app() -> FastAPI:
     ) -> Dict[str, object]:
         session = _get_session(request, client_id)
         logger.info(
-            "Workspace restore requested snapshot=%s, limit=%s",
+            "Workspace restore requested branch=%s snapshot=%s checkout=%s limit=%s",
+            payload.branch,
             payload.snapshot_id,
+            payload.checkout,
             limit,
         )
         try:
-            return session.restore_workspace(payload.snapshot_id, limit=limit)
+            summary = session.restore_workspace(
+                payload.snapshot_id,
+                branch=payload.branch,
+                checkout=payload.checkout,
+                limit=limit,
+            )
         except WorkspaceStateError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"workspace_state": summary}
+
+    @app.post("/api/session/workspace/branch")
+    async def assign_workspace_branch(
+        request: Request,
+        payload: WorkspaceBranchPayload,
+        limit: int = 20,
+        client_id: Optional[str] = Query(default=None),
+    ) -> Dict[str, object]:
+        session = _get_session(request, client_id)
+        logger.info(
+            "Workspace branch assignment requested branch=%s snapshot=%s checkout=%s limit=%s",
+            payload.branch,
+            payload.snapshot_id,
+            payload.checkout,
+            limit,
+        )
+        try:
+            summary = session.assign_workspace_branch(
+                payload.branch,
+                payload.snapshot_id,
+                checkout=payload.checkout,
+                limit=limit,
+            )
+        except WorkspaceStateError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"workspace_state": summary}
 
     return app
 
