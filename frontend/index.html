@@ -21,9 +21,21 @@
           id="history-toggle"
           aria-expanded="false"
           aria-controls="history-panel"
-          aria-label="切换历史会话侧栏"
+          aria-label="展开历史会话侧栏"
         >
-          <span class="history-toggle-icon" aria-hidden="true">💾</span>
+          <svg
+            class="history-toggle-icon"
+            aria-hidden="true"
+            viewBox="0 0 1024 1024"
+            role="img"
+            focusable="false"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M64 101.3C64 80.7 80.7 64 101.3 64h821.3c20.6 0 37.3 16.7 37.3 37.3 0 20.6-16.7 37.3-37.3 37.3H101.3c-20.6 0.1-37.3-16.5-37.3-37.3zM64 512c0-20.6 16.8-37.3 37.6-37.3h484.8c20.8 0 37.6 16.6 37.6 37.3 0 20.6-16.8 37.3-37.6 37.3H101.6c-9.9 0.1-19.5-3.9-26.6-10.9-7-6.9-11-16.5-11-26.4zM64 922.7c0-20.6 16.7-37.3 37.3-37.3h821.3c20.6 0 37.3 16.7 37.3 37.3 0 20.6-16.7 37.3-37.3 37.3H101.3C80.7 960 64 943.4 64 922.7zM709.6 351.7c-14.1-14.6-13.9-37.9 0.5-52.3 14.4-14.4 37.7-14.6 52.3-0.5l186.7 186.7c14.6 14.6 14.6 38.2 0 52.8L762.4 725.1c-14.6 14.2-37.9 14-52.3-0.5s-14.6-37.7-0.5-52.3L869.9 512 709.6 351.7z"
+              fill="currentColor"
+            ></path>
+          </svg>
           <span class="history-toggle-label"></span>
         </button>
         <div class="history-panel" id="history-panel" tabindex="-1">
