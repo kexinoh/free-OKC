@@ -54,7 +54,7 @@ const sendButton = chatForm?.querySelector('.send-button') ?? null;
 
 const defaultSendButtonLabel = sendButton?.textContent?.trim() || '发送';
 const defaultInputPlaceholder = userInput?.getAttribute('placeholder') ?? '';
-const editingHintFallback = '正在编辑历史消息，点击“保存”完成修改。';
+const editingHintFallback = '正在编辑历史消息，点击“发送”完成修改。';
 const editingHintInitial = chatEditingHint?.textContent?.trim();
 const defaultEditingHintText =
   editingHintInitial && editingHintInitial.length > 0 ? editingHintInitial : editingHintFallback;

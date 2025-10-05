@@ -281,7 +281,7 @@ export function createEditingController({
     const saveButtonInline = document.createElement('button');
     saveButtonInline.type = 'submit';
     saveButtonInline.className = 'primary-button message-edit-save';
-    saveButtonInline.textContent = '保存';
+    saveButtonInline.textContent = '发送';
 
     actions.append(cancelButtonInline, saveButtonInline);
     editorForm.appendChild(actions);
