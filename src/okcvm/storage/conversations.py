@@ -328,9 +328,11 @@ class ConversationStore:
                 resolved_deployments = deployments_root
             if resolved_deployments.exists():
                 try:
+                    # Security: Ensure the path is within the deployments directory.
+                    resolved_deployments.relative_to(base_dir / "deployments")
                     shutil.rmtree(resolved_deployments)
                     deployments_removed.append(str(resolved_deployments))
-                except OSError as exc:
+                except (ValueError, OSError) as exc:
                     summary.setdefault("deployment_errors", []).append(str(exc))
         if deployments_removed:
             summary["deployments_removed"] = deployments_removed
