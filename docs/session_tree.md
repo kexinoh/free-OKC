@@ -39,6 +39,32 @@ and audit multi-turn projects without losing context.
 - URLs returned to the frontend carry the associated `client_id`, preventing
   cross-session leakage when deployments are opened in new tabs. [src/okcvm/session.py#L94-L240](../src/okcvm/session.py#L94-L240) [src/okcvm/api/main.py#L146-L209](../src/okcvm/api/main.py#L146-L209)
 
+## SQL persistence and Git metadata
+
+- Conversation trees are persisted to the `okc_conversations` table so the UI
+  can reload branches even after the VM restarts. Besides the JSON payload, each
+  row captures the workspace root, mount, session identifier, current commit
+  hash, and a dirty flag that mirrors the Git status at save time. [src/okcvm/storage/conversations.py#L21-L36](../src/okcvm/storage/conversations.py#L21-L36)
+- `ConversationStore.save_conversation()` normalises timestamps, workspace
+  paths, and Git metadata before inserting or updating a record. Editing a
+  conversation in the UI (renaming, reordering nodes, or updating titles) maps
+  to the same upsert path, which refreshes `updated_at`, rewrites the stored
+  tree, and records the latest Git head/dirty flag reported by the workspace. [src/okcvm/storage/conversations.py#L137-L214](../src/okcvm/storage/conversations.py#L137-L214) [src/okcvm/api/main.py#L525-L562](../src/okcvm/api/main.py#L525-L562)
+- When conversations are listed or fetched, `_record_to_payload()` backfills
+  any missing workspace or Git fields so downstream components always receive a
+  consistent view of the repository state associated with each branch. [src/okcvm/storage/conversations.py#L229-L275](../src/okcvm/storage/conversations.py#L229-L275)
+
+## Editing and deletion workflow
+
+1. **Conversation edits.** The frontend issues `POST /api/conversations` for new
+   trees and `PUT /api/conversations/{id}` when an existing tree is modified.
+   Both routes call `save_conversation`, ensuring the SQL record and Git status
+   stay in sync with the latest branch structure. [src/okcvm/api/main.py#L536-L562](../src/okcvm/api/main.py#L536-L562)
+2. **Conversation deletion.** `DELETE /api/conversations/{id}` removes the SQL
+   row and then invokes `_cleanup_workspace()` to prune the saved workspace
+   directory and deployment artefacts tied to that session, preventing orphaned
+   Git sandboxes from lingering on disk. [src/okcvm/api/main.py#L564-L580](../src/okcvm/api/main.py#L564-L580) [src/okcvm/storage/conversations.py#L216-L339](../src/okcvm/storage/conversations.py#L216-L339)
+
 ## Reset and cleanup
 
 1. **Selective rollback.** Calling `/api/session/workspace/restore` rewinds the
