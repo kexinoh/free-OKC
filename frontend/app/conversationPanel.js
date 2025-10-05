@@ -86,6 +86,14 @@ export function createConversationPanel({
 
   const isHistoryOpen = () => historySidebar?.classList.contains('open') ?? false;
 
+  const updateHistoryToggleIcon = (isOpen) => {
+    if (!historyToggle) return;
+    historyToggle.setAttribute(
+      'aria-label',
+      isOpen ? '收起历史会话侧栏' : '展开历史会话侧栏',
+    );
+  };
+
   const setHistoryOpen = (shouldOpen) => {
     if (!historySidebar || !historyToggle) return false;
     if (shouldOpen) {
@@ -94,6 +102,7 @@ export function createConversationPanel({
       historySidebar.classList.remove('open');
     }
     historyToggle.setAttribute('aria-expanded', String(shouldOpen));
+    updateHistoryToggleIcon(shouldOpen);
     if (shouldOpen) {
       historyPanel?.focus();
     }
@@ -210,6 +219,8 @@ export function createConversationPanel({
     renderConversation();
     return getCurrentConversation();
   };
+
+  updateHistoryToggleIcon(isHistoryOpen());
 
   return {
     renderConversationList,
