@@ -220,6 +220,47 @@ function normalizeConversationOutputs(outputs) {
   return normalized;
 }
 
+function normalizeWorkspaceCheckpoint(checkpoint) {
+  if (!checkpoint || typeof checkpoint !== 'object') {
+    return null;
+  }
+
+  const normalized = {};
+
+  if (typeof checkpoint.enabled === 'boolean') {
+    normalized.enabled = checkpoint.enabled;
+  }
+
+  const snapshotCandidate =
+    typeof checkpoint.latest_snapshot === 'string'
+      ? checkpoint.latest_snapshot
+      : typeof checkpoint.snapshot_id === 'string'
+        ? checkpoint.snapshot_id
+        : typeof checkpoint.commit === 'string'
+          ? checkpoint.commit
+          : null;
+  if (snapshotCandidate) {
+    normalized.latest_snapshot = snapshotCandidate;
+  }
+
+  if (typeof checkpoint.commit === 'string' && checkpoint.commit.trim()) {
+    normalized.commit = checkpoint.commit.trim();
+    if (!normalized.latest_snapshot) {
+      normalized.latest_snapshot = normalized.commit;
+    }
+  }
+
+  if (typeof checkpoint.branch === 'string' && checkpoint.branch.trim()) {
+    normalized.branch = checkpoint.branch.trim();
+  }
+
+  if (typeof checkpoint.is_dirty === 'boolean') {
+    normalized.is_dirty = checkpoint.is_dirty;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
 function normalizeWorkspaceState(state) {
   if (!state || typeof state !== 'object') {
     return null;
@@ -298,6 +339,30 @@ function normalizeWorkspaceState(state) {
   }
 
   return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+export function cloneWorkspaceCheckpoint(state) {
+  const normalized = normalizeWorkspaceCheckpoint(state);
+  if (!normalized) {
+    return null;
+  }
+  return {
+    ...(typeof normalized.enabled === 'boolean' ? { enabled: normalized.enabled } : {}),
+    ...(normalized.latest_snapshot ? { latest_snapshot: normalized.latest_snapshot } : {}),
+    ...(normalized.commit ? { commit: normalized.commit } : {}),
+    ...(normalized.branch ? { branch: normalized.branch } : {}),
+    ...(typeof normalized.is_dirty === 'boolean' ? { is_dirty: normalized.is_dirty } : {}),
+  };
+}
+
+export function composeWorkspaceBranchName(conversationId, messageId, versionId) {
+  const parts = [conversationId, messageId, versionId]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value.length > 0);
+  if (parts.length === 0) {
+    return null;
+  }
+  return parts.join('-');
 }
 
 function ensureConversationOutputs(conversation) {
@@ -392,6 +457,7 @@ export function ensureBranchBaseline(conversation, messageId) {
     const snapshot = cloneMessages(conversation.messages);
     const signature = computeMessageSignature(snapshot);
     const selections = captureBranchSelections(conversation.branches, { [messageId]: 0 });
+    const workspace = cloneWorkspaceCheckpoint(conversation.workspace);
     state.versions = [
       {
         id: generateId(),
@@ -399,6 +465,7 @@ export function ensureBranchBaseline(conversation, messageId) {
         messages: snapshot,
         selections,
         createdAt: new Date().toISOString(),
+        ...(workspace ? { workspace } : {}),
       },
     ];
     state.activeIndex = 0;
@@ -411,6 +478,7 @@ export function commitBranchTransition(
   messageId,
   previousMessages,
   previousSelections = {},
+  previousWorkspace = null,
 ) {
   if (!conversation || !messageId) return;
   const state = ensureBranchState(conversation, messageId);
@@ -421,6 +489,8 @@ export function commitBranchTransition(
   const previousSignature = computeMessageSignature(previousSnapshot);
   const nextSnapshot = cloneMessages(conversation.messages);
   const nextSignature = computeMessageSignature(nextSnapshot);
+  const previousWorkspaceCheckpoint = cloneWorkspaceCheckpoint(previousWorkspace);
+  const nextWorkspaceCheckpoint = cloneWorkspaceCheckpoint(conversation.workspace);
 
   let previousIndex = state.versions.findIndex((version) => version.signature === previousSignature);
   const hasDistinctPreviousVersion = state.versions.some(
@@ -435,8 +505,15 @@ export function commitBranchTransition(
       messages: previousSnapshot,
       selections: { ...previousSelections },
       createdAt: timestamp,
+      ...(previousWorkspaceCheckpoint ? { workspace: previousWorkspaceCheckpoint } : {}),
     });
     previousIndex = state.versions.length - 1;
+  } else if (previousIndex !== -1 && previousWorkspaceCheckpoint) {
+    const target = state.versions[previousIndex];
+    target.workspace = {
+      ...(target.workspace ?? {}),
+      ...previousWorkspaceCheckpoint,
+    };
   }
 
   let nextIndex = state.versions.findIndex((version) => version.signature === nextSignature);
@@ -449,8 +526,15 @@ export function commitBranchTransition(
       messages: nextSnapshot,
       selections: nextSelections,
       createdAt: timestamp,
+      ...(nextWorkspaceCheckpoint ? { workspace: nextWorkspaceCheckpoint } : {}),
     });
     nextIndex = state.versions.length - 1;
+  } else if (nextWorkspaceCheckpoint) {
+    const target = state.versions[nextIndex];
+    target.workspace = {
+      ...(target.workspace ?? {}),
+      ...nextWorkspaceCheckpoint,
+    };
   }
 
   if (previousIndex !== -1 && nextIndex !== -1 && previousIndex > nextIndex) {
@@ -469,7 +553,15 @@ export function commitBranchTransition(
     activeVersion.signature = computeMessageSignature(activeVersion.messages);
     activeVersion.selections = activeSelections;
     activeVersion.createdAt = activeVersion.createdAt ?? timestamp;
+    if (nextWorkspaceCheckpoint) {
+      activeVersion.workspace = {
+        ...(activeVersion.workspace ?? {}),
+        ...nextWorkspaceCheckpoint,
+      };
+    }
   }
+
+  return activeVersion ?? null;
 }
 
 export function syncActiveBranchSnapshots(conversation) {
@@ -477,6 +569,7 @@ export function syncActiveBranchSnapshots(conversation) {
   const activeSelections = captureBranchSelections(conversation.branches);
   const snapshot = cloneMessages(conversation.messages);
   const signature = computeMessageSignature(snapshot);
+  const workspaceCheckpoint = cloneWorkspaceCheckpoint(conversation.workspace);
   Object.values(conversation.branches).forEach((state) => {
     if (!state || !Array.isArray(state.versions) || state.versions.length === 0) return;
     const index = Number.isInteger(state.activeIndex) ? state.activeIndex : 0;
@@ -487,6 +580,12 @@ export function syncActiveBranchSnapshots(conversation) {
       version.messages = cloneMessages(snapshot);
       version.signature = signature;
       version.selections = { ...activeSelections };
+      if (workspaceCheckpoint) {
+        version.workspace = {
+          ...(version.workspace ?? {}),
+          ...workspaceCheckpoint,
+        };
+      }
     }
   });
 }
@@ -584,12 +683,14 @@ function normalizeConversation(entry) {
                 typeof version.createdAt === 'string' && !Number.isNaN(Date.parse(version.createdAt))
                   ? version.createdAt
                   : now;
+              const workspace = normalizeWorkspaceCheckpoint(version.workspace);
               return {
                 id: typeof version.id === 'string' && version.id ? version.id : generateId(),
                 messages,
                 signature,
                 selections,
                 createdAt,
+                ...(workspace ? { workspace } : {}),
               };
             })
             .filter(Boolean)

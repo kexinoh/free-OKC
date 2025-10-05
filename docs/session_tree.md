@@ -27,6 +27,9 @@ and audit multi-turn projects without losing context.
 - `SessionState.restore_workspace()` applies `git reset --hard` to a requested
   hash and refreshes the workspace metadata returned to the client. Errors bubble
   up as `WorkspaceStateError`, which the API converts to HTTP 400 responses. [src/okcvm/session.py#L180-L207](../src/okcvm/session.py#L180-L207) [src/okcvm/workspace.py#L156-L167](../src/okcvm/workspace.py#L156-L167) [src/okcvm/api/main.py#L283-L309](../src/okcvm/api/main.py#L283-L309)
+- Each conversation branch stores a dedicated Git branch. When the UI switches
+  branches it calls `/api/session/workspace/restore` with the stored branch
+  name so the sandbox checks out the matching commit automatically. [src/okcvm/workspace.py#L90-L213](../src/okcvm/workspace.py#L90-L213) [src/okcvm/session.py#L548-L586](../src/okcvm/session.py#L548-L586) [frontend/app/index.js#L70-L218](../frontend/app/index.js#L70-L218)
 
 ## Linking workspaces and history
 

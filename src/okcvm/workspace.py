@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import secrets
 import shutil
 import stat
@@ -60,6 +61,8 @@ class GitWorkspaceState:
             logger.warning("Failed to initialise Git repository for workspace: %s", exc)
             self.enabled = False
 
+        self._branch_clean_pattern = re.compile(r"[^A-Za-z0-9._/-]+")
+
     # --- internal helpers -------------------------------------------------
     def _git_env(self) -> Dict[str, str]:
         env = os.environ.copy()
@@ -109,6 +112,48 @@ class GitWorkspaceState:
         self._run_git("commit", "--allow-empty", "-m", "Initial workspace state")
         self._initialised = True
 
+    def _normalise_branch_name(self, branch: str) -> str:
+        candidate = (branch or "").strip()
+        candidate = candidate.replace(" ", "-")
+        candidate = self._branch_clean_pattern.sub("-", candidate)
+        candidate = candidate.strip("-./")
+        if not candidate:
+            candidate = secrets.token_hex(8)
+        if not candidate.startswith("okcvm/"):
+            candidate = f"okcvm/{candidate}"
+        candidate = candidate[:120].rstrip("/")
+        if candidate.endswith(".lock"):
+            candidate = candidate[:-5] + "-lock"
+        try:
+            self._run_git("check-ref-format", "--branch", candidate)
+        except subprocess.CalledProcessError as exc:
+            raise WorkspaceStateError(f"Invalid branch name: {branch}") from exc
+        return candidate
+
+    def ensure_branch(
+        self,
+        branch: str,
+        commit: Optional[str] = None,
+        *,
+        checkout: bool = False,
+    ) -> str:
+        """Create or update ``branch`` to point at ``commit`` and optionally check it out."""
+
+        if not branch:
+            raise WorkspaceStateError("Branch name cannot be empty")
+
+        resolved_branch = self._normalise_branch_name(branch)
+        target = (commit or "").strip() or "HEAD"
+        if target != "HEAD":
+            self._run_git("rev-parse", target)
+
+        if checkout:
+            self._run_git("checkout", "-B", resolved_branch, target)
+            self._run_git("clean", "-fd")
+        else:
+            self._run_git("branch", "--force", resolved_branch, target)
+        return resolved_branch
+
     # --- public API -------------------------------------------------------
     def snapshot(self, label: Optional[str] = None) -> Optional[str]:
         """Create a snapshot of the current workspace state."""
@@ -157,17 +202,45 @@ class GitWorkspaceState:
             )
         return entries
 
-    def restore(self, snapshot_id: str) -> bool:
-        """Restore the workspace to the provided snapshot."""
+    def restore(
+        self,
+        snapshot_id: Optional[str],
+        *,
+        branch: Optional[str] = None,
+        checkout: bool = True,
+    ) -> bool:
+        """Restore the workspace to the provided snapshot or branch."""
 
         if not self.enabled:
             return False
-        try:
-            self._run_git("rev-parse", snapshot_id)
-        except subprocess.CalledProcessError as exc:
-            raise WorkspaceStateError(f"Unknown snapshot: {snapshot_id}") from exc
 
-        self._run_git("reset", "--hard", snapshot_id)
+        target_commit = (snapshot_id or "").strip() or None
+        if target_commit:
+            try:
+                self._run_git("rev-parse", target_commit)
+            except subprocess.CalledProcessError as exc:
+                raise WorkspaceStateError(f"Unknown snapshot: {snapshot_id}") from exc
+
+        target_branch = (branch or "").strip() or None
+        if target_branch:
+            resolved_branch = self._normalise_branch_name(target_branch)
+            if checkout:
+                if target_commit:
+                    self._run_git("checkout", "-B", resolved_branch, target_commit)
+                else:
+                    try:
+                        self._run_git("checkout", "--force", resolved_branch)
+                    except subprocess.CalledProcessError as exc:
+                        raise WorkspaceStateError(f"Unknown branch: {resolved_branch}") from exc
+                self._run_git("clean", "-fd")
+                return True
+            self._run_git("branch", "--force", resolved_branch, target_commit or "HEAD")
+            return True
+
+        if not target_commit:
+            raise WorkspaceStateError("snapshot_id or branch is required to restore the workspace")
+
+        self._run_git("reset", "--hard", target_commit)
         self._run_git("clean", "-fd")
         return True
 

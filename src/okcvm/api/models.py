@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..config import ModelEndpointConfig
 
@@ -78,7 +78,39 @@ class SnapshotCreatePayload(BaseModel):
 class SnapshotRestorePayload(BaseModel):
     """Payload to restore the workspace to an earlier snapshot."""
 
-    snapshot_id: str = Field(..., description="Git commit identifier to restore")
+    snapshot_id: Optional[str] = Field(
+        default=None,
+        description="Git commit identifier to restore",
+    )
+    branch: Optional[str] = Field(
+        default=None,
+        description="Workspace branch to switch to",
+        max_length=200,
+    )
+    checkout: bool = Field(
+        default=True,
+        description="When true, update HEAD to the requested commit or branch.",
+    )
+
+    @model_validator(mode="after")
+    def _ensure_target(cls, values: "SnapshotRestorePayload") -> "SnapshotRestorePayload":
+        if not values.snapshot_id and not values.branch:
+            raise ValueError("snapshot_id or branch must be provided")
+        return values
+
+
+class WorkspaceBranchPayload(BaseModel):
+    """Payload to bind a workspace snapshot to a Git branch."""
+
+    branch: str = Field(..., description="Workspace branch name", min_length=1, max_length=200)
+    snapshot_id: Optional[str] = Field(
+        default=None,
+        description="Commit hash that the branch should reference",
+    )
+    checkout: bool = Field(
+        default=True,
+        description="When true, check out the branch after assignment.",
+    )
 
 
 class ConversationPayload(BaseModel):

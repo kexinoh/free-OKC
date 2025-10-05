@@ -17,6 +17,7 @@ export function createEditingController({
   syncActiveBranchSnapshots,
   saveConversationsToStorage,
   setMessageActionsDisabled,
+  afterBranchTransition,
 }) {
   let activeEditState = null;
 
@@ -136,6 +137,7 @@ export function createEditingController({
       messageId,
       previousMessages,
       previousSelections,
+      previousWorkspace,
       messageElement,
       messageBody,
       textarea,
@@ -214,11 +216,25 @@ export function createEditingController({
       conversation.title = title;
     }
 
-    commitBranchTransition(conversation, messageId, previousMessages, previousSelections);
+    const activeVersion = commitBranchTransition(
+      conversation,
+      messageId,
+      previousMessages,
+      previousSelections,
+      previousWorkspace,
+    );
     syncActiveBranchSnapshots(conversation);
     saveConversationsToStorage();
     renderConversationList();
     refreshConversationBranchNavigation(conversation);
+
+    if (typeof afterBranchTransition === 'function' && activeVersion) {
+      Promise.resolve(
+        afterBranchTransition({ conversation, messageId, version: activeVersion }),
+      ).catch((error) => {
+        console.error('Failed to process branch transition', error);
+      });
+    }
 
     cancelActiveEdit({ focusInput: true });
   }
@@ -325,6 +341,7 @@ export function createEditingController({
       messageId: message.id,
       previousMessages,
       previousSelections,
+      previousWorkspace,
       messageElement: targetMessageElement,
       messageBody: contentNode instanceof HTMLElement ? contentNode : null,
       messageFooter: footerNode instanceof HTMLElement ? footerNode : null,
