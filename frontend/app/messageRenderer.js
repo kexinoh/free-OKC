@@ -262,7 +262,7 @@ export function createMessageRenderer({
       return null;
     }
 
-    const steps = Array.from(toolContainer.children || []).filter((node) => node instanceof HTMLElement);
+    const steps = Array.from(toolContainer.children);
     if (steps.length === 0) {
       return null;
     }
