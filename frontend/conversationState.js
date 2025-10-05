@@ -9,6 +9,135 @@ import { generateId } from './utils.js';
 let conversations = [];
 let currentSessionId = null;
 
+const MODEL_LOG_LIMIT = 6;
+
+function normalizeModelLogEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const toString = (value) => {
+    if (typeof value === 'string') return value;
+    if (value === null || value === undefined) return '';
+    try {
+      return String(value);
+    } catch (error) {
+      return '';
+    }
+  };
+  const normalized = {
+    model: toString(entry.model).trim(),
+    timestamp: toString(entry.timestamp).trim(),
+    summary: toString(entry.summary).trim(),
+    tokensIn: toString(entry.tokensIn).trim(),
+    tokensOut: toString(entry.tokensOut).trim(),
+    latency: toString(entry.latency).trim(),
+  };
+  const hasContent = normalized.model || normalized.summary || normalized.timestamp;
+  return hasContent ? normalized : null;
+}
+
+function normalizeWebPreview(preview) {
+  if (!preview || typeof preview !== 'object') {
+    return null;
+  }
+
+  const normalized = {};
+
+  const htmlCandidate =
+    typeof preview.html === 'string'
+      ? preview.html
+      : typeof preview.content === 'string'
+        ? preview.content
+        : null;
+  if (htmlCandidate && htmlCandidate.trim()) {
+    normalized.html = htmlCandidate;
+  }
+
+  const urlCandidate =
+    typeof preview.url === 'string'
+      ? preview.url
+      : typeof preview.preview_url === 'string'
+        ? preview.preview_url
+        : typeof preview.server_preview_url === 'string'
+          ? preview.server_preview_url
+          : null;
+  if (urlCandidate && urlCandidate.trim()) {
+    normalized.url = urlCandidate;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function normalizePptSlides(slides) {
+  if (!Array.isArray(slides)) {
+    return [];
+  }
+
+  return slides
+    .map((slide) => {
+      if (!slide || typeof slide !== 'object') return null;
+      const title = typeof slide.title === 'string' ? slide.title.trim() : '';
+      const bullets = Array.isArray(slide.bullets)
+        ? slide.bullets
+            .map((bullet) => (typeof bullet === 'string' ? bullet : ''))
+            .filter((bullet) => bullet && bullet.trim().length > 0)
+        : [];
+      if (!title && bullets.length === 0) {
+        return null;
+      }
+      return {
+        title: title || '未命名幻灯片',
+        bullets,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeConversationOutputs(outputs) {
+  const normalized = {
+    modelLogs: [],
+    webPreview: null,
+    pptSlides: [],
+  };
+
+  if (!outputs || typeof outputs !== 'object') {
+    return normalized;
+  }
+
+  if (Array.isArray(outputs.modelLogs)) {
+    outputs.modelLogs.forEach((entry) => {
+      const normalizedEntry = normalizeModelLogEntry(entry);
+      if (normalizedEntry) {
+        normalized.modelLogs.push(normalizedEntry);
+      }
+    });
+    if (normalized.modelLogs.length > MODEL_LOG_LIMIT) {
+      normalized.modelLogs = normalized.modelLogs.slice(-MODEL_LOG_LIMIT);
+    }
+  }
+
+  const preview = normalizeWebPreview(outputs.webPreview ?? outputs.preview ?? outputs);
+  if (preview) {
+    normalized.webPreview = preview;
+  }
+
+  const slides = normalizePptSlides(outputs.pptSlides ?? outputs.slides);
+  if (slides.length > 0) {
+    normalized.pptSlides = slides;
+  }
+
+  return normalized;
+}
+
+function ensureConversationOutputs(conversation) {
+  if (!conversation || typeof conversation !== 'object') return null;
+  if (!conversation.outputs || typeof conversation.outputs !== 'object') {
+    conversation.outputs = normalizeConversationOutputs(null);
+    return conversation.outputs;
+  }
+  const normalized = normalizeConversationOutputs(conversation.outputs);
+  conversation.outputs = normalized;
+  return conversation.outputs;
+}
+
 export function getConversations() {
   return conversations;
 }
@@ -250,6 +379,7 @@ function normalizeConversation(entry) {
       ? entry.messages.map((message) => normalizeMessage(message)).filter(Boolean)
       : [],
     branches: {},
+    outputs: normalizeConversationOutputs(entry.outputs),
   };
 
   if (entry.branches && typeof entry.branches === 'object') {
@@ -316,6 +446,7 @@ export function loadConversationsFromStorage() {
           .filter((entry) => entry !== null);
         conversations.forEach((conversation) => {
           syncActiveBranchSnapshots(conversation);
+          ensureConversationOutputs(conversation);
         });
       }
     } catch (error) {
@@ -346,6 +477,18 @@ export function getCurrentConversation() {
   return conversations.find((conversation) => conversation.id === currentSessionId) ?? null;
 }
 
+function findConversationById(conversationId) {
+  if (!conversationId) return null;
+  return conversations.find((conversation) => conversation.id === conversationId) ?? null;
+}
+
+function resolveConversationForOutputs(conversationId) {
+  if (conversationId) {
+    return findConversationById(conversationId);
+  }
+  return getCurrentConversation();
+}
+
 export function ensureCurrentConversation() {
   if (getCurrentConversation()) return;
   if (conversations.length === 0) {
@@ -365,6 +508,7 @@ export function createConversation(options = {}) {
     updatedAt: now,
     messages: [],
     branches: {},
+    outputs: normalizeConversationOutputs(null),
   };
   conversations.unshift(conversation);
   currentSessionId = conversation.id;
@@ -433,4 +577,33 @@ export function resolvePendingConversationMessage(messageId, content) {
   syncActiveBranchSnapshots(conversation);
   saveConversationsToStorage();
   return conversation;
+}
+
+export function appendModelLogForConversation(log, conversationId = currentSessionId) {
+  const conversation = resolveConversationForOutputs(conversationId);
+  if (!conversation) return;
+  const outputs = ensureConversationOutputs(conversation);
+  const normalized = normalizeModelLogEntry(log);
+  if (!normalized) return;
+  outputs.modelLogs.push(normalized);
+  if (outputs.modelLogs.length > MODEL_LOG_LIMIT) {
+    outputs.modelLogs.splice(0, outputs.modelLogs.length - MODEL_LOG_LIMIT);
+  }
+  saveConversationsToStorage();
+}
+
+export function setConversationWebPreview(preview, conversationId = currentSessionId) {
+  const conversation = resolveConversationForOutputs(conversationId);
+  if (!conversation) return;
+  const outputs = ensureConversationOutputs(conversation);
+  outputs.webPreview = normalizeWebPreview(preview);
+  saveConversationsToStorage();
+}
+
+export function setConversationPptSlides(slides, conversationId = currentSessionId) {
+  const conversation = resolveConversationForOutputs(conversationId);
+  if (!conversation) return;
+  const outputs = ensureConversationOutputs(conversation);
+  outputs.pptSlides = normalizePptSlides(slides);
+  saveConversationsToStorage();
 }

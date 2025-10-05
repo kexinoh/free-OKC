@@ -31,6 +31,9 @@ import {
   saveConversationsToStorage,
   bumpConversation,
   generateConversationTitle,
+  appendModelLogForConversation,
+  setConversationWebPreview,
+  setConversationPptSlides,
 } from '../conversationState.js';
 import { fetchJson } from '../utils.js';
 import {
@@ -335,9 +338,12 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
     });
     if (payload.meta) {
       logModelInvocation(payload.meta);
+      appendModelLogForConversation(payload.meta);
     }
     updateWebPreview(payload.web_preview);
+    setConversationWebPreview(payload.web_preview);
     updatePptPreview(payload.ppt_slides);
+    setConversationPptSlides(payload.ppt_slides);
     setMessageActionFeedback(button, { status: 'success', message: '已刷新', duration: 1500 });
     finalizeBranchTransition();
   } catch (error) {
@@ -376,7 +382,20 @@ async function bootSession() {
   try {
     const data = await fetchJson('/api/session/boot');
     messageRendererApi.addAndRenderMessage('assistant', data.reply);
-    logModelInvocation(data.meta);
+    if (data?.meta) {
+      logModelInvocation(data.meta);
+      appendModelLogForConversation(data.meta);
+    }
+    if (data && typeof data === 'object') {
+      if ('web_preview' in data) {
+        updateWebPreview(data.web_preview);
+        setConversationWebPreview(data.web_preview);
+      }
+      if ('ppt_slides' in data) {
+        updatePptPreview(data.ppt_slides);
+        setConversationPptSlides(data.ppt_slides);
+      }
+    }
   } catch (error) {
     console.error(error);
     messageRendererApi.addAndRenderMessage('assistant', '无法连接到后端服务，请确认已启动。');
@@ -392,9 +411,14 @@ async function sendChat(message) {
     messageRendererApi.addAndRenderMessage('assistant', '正在生成回复…', { pending: true });
   try {
     const payload = await streamingController.runAssistantStream(pendingMessage, pendingMessageId, { message });
-    logModelInvocation(payload.meta);
+    if (payload?.meta) {
+      logModelInvocation(payload.meta);
+      appendModelLogForConversation(payload.meta);
+    }
     updateWebPreview(payload.web_preview);
+    setConversationWebPreview(payload.web_preview);
     updatePptPreview(payload.ppt_slides);
+    setConversationPptSlides(payload.ppt_slides);
   } catch (error) {
     console.error(error);
     messageRendererApi.finalizePendingMessage(
