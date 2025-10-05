@@ -564,7 +564,7 @@ body.no-scroll { overflow: hidden; }
 .message .message-content ul,
 .message .message-content ol,
 .message .message-content pre {
-  margin: 0 0 0.75rem 0;
+  margin: 0;
 }
 
 .message .message-content ul,
@@ -573,11 +573,11 @@ body.no-scroll { overflow: hidden; }
 }
 
 .message .message-content li + li {
-  margin-top: 0.35rem;
+  margin-top: 0.2rem;
 }
 
 .message .message-content blockquote {
-  margin: 0 0 0.75rem 0;
+  margin: 0;
   padding-left: 1rem;
   border-left: 3px solid var(--border-color);
   color: var(--text-secondary);
