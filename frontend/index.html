@@ -90,7 +90,11 @@
                 正在编辑历史消息，点击“发送”完成修改。
               </p>
             </div>
+            <input type="file" id="file-upload-input" class="file-upload-input" hidden multiple />
             <div class="chat-input-actions">
+              <button type="button" class="ghost-button upload-button" id="upload-button">
+                上传文件
+              </button>
               <button
                 type="button"
                 class="ghost-button cancel-edit-button"
@@ -109,6 +113,12 @@
             <h2>当前模型调用</h2>
             <ul class="model-log" id="model-log"></ul>
             <p class="empty-state" id="model-log-empty">暂无调用记录</p>
+          </section>
+
+          <section class="insight-card" id="uploaded-files-card" hidden>
+            <h2>已上传文件</h2>
+            <ul class="uploaded-file-list" id="uploaded-file-list"></ul>
+            <p class="empty-state" id="uploaded-files-empty">尚未上传文件</p>
           </section>
 
           <section class="insight-card" id="web-preview-card" hidden>

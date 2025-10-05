@@ -246,7 +246,51 @@ export function createMessageRenderer({
     return { messageId, messageElement };
   };
 
-  const finalizePendingMessage = (message, text, messageId) => {
+  const createReasoningDetails = (reasoningOptions) => {
+    if (!reasoningOptions || typeof reasoningOptions !== 'object') {
+      return null;
+    }
+
+    const { toolContainer, statusElement } = reasoningOptions;
+
+    if (statusElement instanceof HTMLElement) {
+      statusElement.textContent = '推理完成';
+      statusElement.dataset.status = 'done';
+    }
+
+    if (!(toolContainer instanceof HTMLElement)) {
+      return null;
+    }
+
+    const steps = Array.from(toolContainer.children);
+    if (steps.length === 0) {
+      return null;
+    }
+
+    const details = document.createElement('details');
+    details.className = 'reasoning-details';
+    details.open = false;
+
+    const summary = document.createElement('summary');
+    const stepCount = steps.length;
+    summary.textContent = `推理完成（共${stepCount}步，点击展开）`;
+    details.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'reasoning-details-body';
+
+    const historyContainer = document.createElement('div');
+    historyContainer.className = 'tool-status-container';
+    steps.forEach((node) => {
+      historyContainer.appendChild(node.cloneNode(true));
+    });
+
+    body.appendChild(historyContainer);
+    details.appendChild(body);
+    return details;
+  };
+
+  const finalizePendingMessage = (message, text, messageId, options = {}) => {
     const finalText = typeof text === 'string' ? text : '';
     if (!(message instanceof HTMLElement)) {
       if (messageId) {
@@ -263,6 +307,8 @@ export function createMessageRenderer({
       return;
     }
 
+    const reasoningDetails = createReasoningDetails(options.reasoning ?? null);
+
     setMessageContent(message, finalText);
 
     message.classList.remove('pending');
@@ -272,6 +318,13 @@ export function createMessageRenderer({
     }
     message.removeAttribute('data-pending');
     messageActions.setMessageActionsDisabled(message, false);
+
+    if (reasoningDetails) {
+      const body = message.querySelector('.message-content');
+      if (body instanceof HTMLElement) {
+        body.appendChild(reasoningDetails);
+      }
+    }
 
     if (messageId) {
       const conversation = resolvePendingConversationMessage(messageId, finalText);

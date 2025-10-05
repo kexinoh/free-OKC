@@ -191,6 +191,9 @@ class _StubVirtualMachine:
         self.history.extend([user_entry, assistant_entry])
         return {"reply": reply_text, "tool_calls": []}
 
+    def update_system_prompt(self, prompt: str) -> None:
+        self.system_prompt = prompt
+
     def describe(self) -> Dict[str, object]:
         return {"history_length": len(self.history)}
 
@@ -265,7 +268,7 @@ def full_chain_client(monkeypatch, tmp_path):
         raising=False,
     )
 
-    def fake_create_llm_chain(registry):
+    def fake_create_llm_chain(registry, system_prompt=None):  # noqa: ARG001
         return _TestAgentExecutor(registry)
 
     monkeypatch.setattr(llm_mod, "create_llm_chain", fake_create_llm_chain)
@@ -313,6 +316,9 @@ def test_session_flow_boot_chat_history_and_cleanup(client):
     boot_payload = boot_response.json()
     assert boot_payload["reply"] == WELCOME_MESSAGE
     assert boot_payload["vm"]["history_length"] == 1
+    assert boot_payload["upload_limit"] == api_main.MAX_UPLOAD_FILES
+    assert boot_payload["max_upload_size_mb"] == api_main.MAX_UPLOAD_SIZE_MB
+    assert boot_payload["max_upload_size_bytes"] == api_main.MAX_UPLOAD_SIZE_BYTES
 
     chat_response = client.post(
         "/api/chat",
@@ -321,6 +327,9 @@ def test_session_flow_boot_chat_history_and_cleanup(client):
     assert chat_response.status_code == 200
     chat_payload = chat_response.json()
     assert chat_payload["reply"] == "Stub response: 生成一个静态网页"
+    assert chat_payload["upload_limit"] == api_main.MAX_UPLOAD_FILES
+    assert chat_payload["max_upload_size_mb"] == api_main.MAX_UPLOAD_SIZE_MB
+    assert chat_payload["max_upload_size_bytes"] == api_main.MAX_UPLOAD_SIZE_BYTES
 
     history = chat_payload["vm_history"]
     assert [entry["role"] for entry in history] == ["assistant", "user", "assistant"]
@@ -340,10 +349,45 @@ def test_session_flow_boot_chat_history_and_cleanup(client):
     assert delete_payload["history_cleared"] is True
     assert delete_payload["cleared_messages"] == 3
     assert delete_payload["vm"]["history_length"] == 0
+    assert delete_payload["upload_limit"] == api_main.MAX_UPLOAD_FILES
+    assert delete_payload["max_upload_size_mb"] == api_main.MAX_UPLOAD_SIZE_MB
+    assert delete_payload["max_upload_size_bytes"] == api_main.MAX_UPLOAD_SIZE_BYTES
 
     post_cleanup_info = client.get("/api/session/info")
     assert post_cleanup_info.status_code == 200
     assert post_cleanup_info.json()["history_length"] == 0
+
+
+def test_file_upload_endpoint_enforces_limits(client, monkeypatch):
+    monkeypatch.setattr(api_main, "MAX_UPLOAD_FILES", 1)
+
+    first_response = client.post(
+        "/api/session/files",
+        files={"files": ("first.txt", b"hello world")},
+    )
+    assert first_response.status_code == 200
+    first_payload = first_response.json()
+    assert any(entry["name"] == "first.txt" for entry in first_payload["files"])
+    assert first_payload["limit"] == api_main.MAX_UPLOAD_FILES
+    assert first_payload["max_file_size_mb"] == api_main.MAX_UPLOAD_SIZE_MB
+    assert first_payload["max_file_size_bytes"] == api_main.MAX_UPLOAD_SIZE_BYTES
+
+    limited_response = client.post(
+        "/api/session/files",
+        files={"files": ("second.txt", b"another")},
+    )
+    assert limited_response.status_code == 400
+    assert "上限" in limited_response.json()["detail"]
+
+    monkeypatch.setattr(api_main, "MAX_UPLOAD_FILES", 5)
+    monkeypatch.setattr(api_main, "MAX_UPLOAD_SIZE_BYTES", 1024)
+    monkeypatch.setattr(api_main, "MAX_UPLOAD_SIZE_MB", 1)
+
+    oversized_response = client.post(
+        "/api/session/files",
+        files={"files": ("big.bin", b"x" * 2048)},
+    )
+    assert oversized_response.status_code == 413
 
 
 def test_session_flow_supports_replace_last_via_api(client):

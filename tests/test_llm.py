@@ -81,7 +81,7 @@ def test_create_llm_chain_uses_config(monkeypatch):
     )
 
     registry = ToolRegistry.from_default_spec()
-    chain = create_llm_chain(registry)
+    chain = create_llm_chain(registry, "Test system prompt")
 
     assert captured["chat_kwargs"] == {
         "model": "gpt-sim",
@@ -116,6 +116,6 @@ def test_create_llm_chain_with_live_api(monkeypatch):
     )
 
     registry = ToolRegistry.from_default_spec()
-    chain = create_llm_chain(registry)
+    chain = create_llm_chain(registry, "Live API system prompt")
     response = chain.invoke({"input": "Say 'integration test' and nothing else.", "history": []})
     assert "integration test" in response.get("output", "").lower()

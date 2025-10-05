@@ -4,6 +4,7 @@ import json
 import random
 from datetime import datetime
 from json import JSONDecodeError
+from pathlib import PurePosixPath
 from typing import Dict, List, Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
@@ -44,12 +45,116 @@ class SessionState:
         workspace_root = cfg.workspace.resolve_and_prepare()
         self.workspace = WorkspaceManager(base_dir=workspace_root)
         self.registry = ToolRegistry.from_default_spec(workspace=self.workspace)
-        system_prompt = self.workspace.adapt_prompt(spec.load_system_prompt())
+        self._uploaded_files: List[Dict[str, object]] = []
+        self._base_system_prompt = self.workspace.adapt_prompt(spec.load_system_prompt())
+        composed_prompt = self._compose_system_prompt()
         self.vm = VirtualMachine(
-            system_prompt=system_prompt,
+            system_prompt=composed_prompt,
             registry=self.registry,
         )
         self._booted = False
+
+    def _format_file_size(self, size_bytes: int) -> str:
+        if size_bytes < 0:
+            size_bytes = 0
+        if size_bytes >= 1024 * 1024:
+            value = size_bytes / (1024 * 1024)
+            value_str = f"{value:.2f}".rstrip("0").rstrip(".")
+            return f"{value_str} MB"
+        if size_bytes >= 1024:
+            value = size_bytes / 1024
+            value_str = f"{value:.2f}".rstrip("0").rstrip(".")
+            return f"{value_str} KB"
+        return f"{size_bytes} B"
+
+    def _compose_system_prompt(self) -> str:
+        base_prompt = getattr(self, "_base_system_prompt", "")
+        base_prompt = base_prompt.strip() or "You are a helpful assistant."
+
+        if not getattr(self, "_uploaded_files", None):
+            return base_prompt
+
+        lines = ["", "## 用户上传的文件", ""]
+        for entry in self._uploaded_files:
+            name = entry.get("name", "")
+            display_path = entry.get("display_path") or str(entry.get("path", "")).lstrip("/")
+            size_display = entry.get("size_display") or self._format_file_size(int(entry.get("size_bytes", 0)))
+            lines.append(f"- 用户上传了文件 {name}，位于 {display_path}，大小为 {size_display}")
+
+        return "\n".join([base_prompt.rstrip(), *lines]).strip()
+
+    def _refresh_system_prompt(self) -> None:
+        composed = self._compose_system_prompt()
+        self.vm.update_system_prompt(composed)
+
+    def list_uploaded_files(self) -> List[Dict[str, object]]:
+        return [dict(entry) for entry in getattr(self, "_uploaded_files", [])]
+
+    def uploaded_file_count(self) -> int:
+        return len(getattr(self, "_uploaded_files", []))
+
+    def register_uploaded_files(self, files: List[Dict[str, object]]) -> Dict[str, object]:
+        if not isinstance(files, list):
+            return {
+                "files": self.list_uploaded_files(),
+                "summaries": [],
+                "system_prompt": self.vm.system_prompt,
+            }
+
+        index_by_name = {entry["name"]: idx for idx, entry in enumerate(self._uploaded_files)}
+        summaries: List[str] = []
+
+        for payload in files:
+            name_raw = payload.get("name")
+            name = str(name_raw).strip() if isinstance(name_raw, str) else ""
+            if not name:
+                continue
+
+            relative_hint = payload.get("relative_path")
+            relative_path = (
+                PurePosixPath(str(relative_hint).strip())
+                if isinstance(relative_hint, str) and relative_hint.strip()
+                else PurePosixPath(name)
+            )
+
+            try:
+                size_bytes = int(payload.get("size_bytes", 0))
+            except (TypeError, ValueError):
+                size_bytes = 0
+            size_bytes = max(size_bytes, 0)
+
+            mount_path = self.workspace.paths.mount / relative_path
+            display_path = str(mount_path).lstrip("/")
+            size_display = self._format_file_size(size_bytes)
+
+            record = {
+                "name": name,
+                "relative_path": str(relative_path),
+                "path": str(mount_path),
+                "display_path": display_path,
+                "size_bytes": size_bytes,
+                "size_display": size_display,
+            }
+
+            if name in index_by_name:
+                self._uploaded_files[index_by_name[name]] = record
+                summaries.append(
+                    f"用户更新了文件 {name}，位于 {display_path}，大小为 {size_display}"
+                )
+            else:
+                self._uploaded_files.append(record)
+                index_by_name[name] = len(self._uploaded_files) - 1
+                summaries.append(
+                    f"用户上传了文件 {name}，位于 {display_path}，大小为 {size_display}"
+                )
+
+        self._refresh_system_prompt()
+
+        return {
+            "files": self.list_uploaded_files(),
+            "summaries": summaries,
+            "system_prompt": self.vm.system_prompt,
+        }
 
     def _workspace_state_summary(self, *, latest: Optional[str] = None, limit: int = 10) -> Dict[str, object]:
         state = getattr(self.workspace, "state", None)
@@ -410,6 +515,7 @@ class SessionState:
             "tool_calls": tool_calls,
             "vm_history": self.vm.describe_history(limit=25),
             "workspace_state": workspace_state,
+            "uploads": self.list_uploaded_files(),
         }
 
     def boot(self) -> Dict[str, object]:
@@ -443,6 +549,7 @@ class SessionState:
             "artifacts": [],
             "vm": self.vm.describe(),
             "workspace_state": workspace_state,
+            "uploads": self.list_uploaded_files(),
         }
 
     def delete_history(self) -> Dict[str, object]:
@@ -458,6 +565,7 @@ class SessionState:
             "cleared_messages": history_length,
             "workspace": workspace_details,
             "vm": self.vm.describe(),
+            "uploads": self.list_uploaded_files(),
         }
 
     def snapshot_workspace(self, label: Optional[str] = None, *, limit: int = 20) -> Dict[str, object]:

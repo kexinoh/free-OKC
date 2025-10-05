@@ -18,6 +18,11 @@ import {
   conversationList,
   conversationEmptyState,
   newConversationButton,
+  uploadButton,
+  fileUploadInput,
+  uploadedFilesCard,
+  uploadedFileList,
+  uploadedFilesEmpty,
 } from '../elements.js';
 import {
   getConversations,
@@ -36,7 +41,7 @@ import {
   setConversationPptSlides,
   setConversationWorkspaceState,
 } from '../conversationState.js';
-import { fetchJson } from '../utils.js';
+import { fetchJson, postFormData } from '../utils.js';
 import {
   logModelInvocation,
   updateWebPreview,
@@ -52,6 +57,11 @@ import { createStreamingController } from './streamingController.js';
 import { createConversationPanel } from './conversationPanel.js';
 
 let previousFocusedElement = null;
+
+let uploadLimit = 100;
+let maxFileSizeBytes = 100 * 1024 * 1024;
+
+let uploadedFilesState = [];
 
 const historyLayout = createHistoryLayoutManager({ historySidebar, chatPanel, chatMessages, appShell });
 const sendButton = chatForm?.querySelector('.send-button') ?? null;
@@ -69,6 +79,229 @@ if (chatEditingHint && (!editingHintInitial || editingHintInitial.length === 0))
 
 let messageRendererApi = null;
 let conversationPanelApi = null;
+
+function sanitizeFileName(name) {
+  if (typeof name !== 'string') return '';
+  const parts = name.split(/[/\\]+/);
+  const candidate = parts[parts.length - 1] ?? '';
+  return candidate.trim();
+}
+
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 B';
+  }
+  if (bytes >= 1024 * 1024) {
+    const value = bytes / (1024 * 1024);
+    return `${value.toFixed(2).replace(/\.00$/, '')} MB`;
+  }
+  if (bytes >= 1024) {
+    const value = bytes / 1024;
+    return `${value.toFixed(2).replace(/\.00$/, '')} KB`;
+  }
+  return `${Math.round(bytes)} B`;
+}
+
+function updateUploadConstraints(source) {
+  if (!source || typeof source !== 'object') {
+    return;
+  }
+
+  const limitCandidate = Number(
+    source.upload_limit ?? source.limit ?? source.max_files ?? source.maxFiles,
+  );
+  if (Number.isFinite(limitCandidate) && limitCandidate > 0) {
+    uploadLimit = limitCandidate;
+  }
+
+  let sizeBytesCandidate = Number(
+    source.max_upload_size_bytes ?? source.max_file_size_bytes,
+  );
+  if (!Number.isFinite(sizeBytesCandidate) || sizeBytesCandidate <= 0) {
+    const sizeMbCandidate = Number(
+      source.max_upload_size_mb ?? source.max_file_size_mb,
+    );
+    if (Number.isFinite(sizeMbCandidate) && sizeMbCandidate > 0) {
+      sizeBytesCandidate = sizeMbCandidate * 1024 * 1024;
+    }
+  }
+
+  if (Number.isFinite(sizeBytesCandidate) && sizeBytesCandidate > 0) {
+    maxFileSizeBytes = sizeBytesCandidate;
+  }
+}
+
+function getMaxFileSizeLimitMb() {
+  if (!Number.isFinite(maxFileSizeBytes) || maxFileSizeBytes <= 0) {
+    return 0;
+  }
+  return Math.max(1, Math.round(maxFileSizeBytes / (1024 * 1024)));
+}
+
+function renderUploadedFiles() {
+  if (!uploadedFilesCard || !uploadedFileList || !uploadedFilesEmpty) return;
+
+  uploadedFilesCard.hidden = false;
+  uploadedFileList.innerHTML = '';
+
+  if (!uploadedFilesState || uploadedFilesState.length === 0) {
+    uploadedFilesEmpty.hidden = false;
+    return;
+  }
+
+  uploadedFilesEmpty.hidden = true;
+  uploadedFilesState.forEach((file) => {
+    const item = document.createElement('li');
+    item.className = 'uploaded-file-entry';
+
+    const name = document.createElement('span');
+    name.className = 'uploaded-file-name';
+    name.textContent = file.name;
+
+    const meta = document.createElement('span');
+    meta.className = 'uploaded-file-meta';
+    const pathText = file.displayPath || file.path || file.name;
+    meta.textContent = `${file.sizeDisplay} · ${pathText}`;
+
+    item.append(name, meta);
+    uploadedFileList.appendChild(item);
+  });
+}
+
+function setUploadedFiles(files = []) {
+  const entries = Array.isArray(files) ? files : [];
+  uploadedFilesState = entries
+    .map((file) => {
+      const name = sanitizeFileName(file?.name);
+      if (!name) return null;
+
+      const rawPath = typeof file?.path === 'string' ? file.path : '';
+      const displayPath =
+        typeof file?.display_path === 'string' && file.display_path.trim()
+          ? file.display_path.trim()
+          : rawPath.replace(/^\//, '');
+
+      const sizeBytesRaw = Number(file?.size_bytes ?? 0);
+      const sizeBytes = Number.isFinite(sizeBytesRaw) && sizeBytesRaw > 0 ? sizeBytesRaw : 0;
+      const sizeDisplay =
+        typeof file?.size_display === 'string' && file.size_display.trim()
+          ? file.size_display.trim()
+          : formatFileSize(sizeBytes);
+
+      return {
+        name,
+        path: rawPath,
+        displayPath,
+        sizeBytes,
+        sizeDisplay,
+      };
+    })
+    .filter(Boolean);
+
+  renderUploadedFiles();
+}
+
+function getExistingUploadedFileNames() {
+  return new Set(uploadedFilesState.map((entry) => entry.name));
+}
+
+function notifyUploadMessage(text) {
+  const normalized = typeof text === 'string' ? text.trim() : '';
+  if (!normalized) return;
+  messageRendererApi?.addAndRenderMessage('assistant', normalized);
+}
+
+function handleUploadError(message) {
+  notifyUploadMessage(message);
+  setStatus('待命中…');
+}
+
+async function handleFileUploadSelection(fileList) {
+  const files = Array.from(fileList ?? []);
+  if (files.length === 0) {
+    if (fileUploadInput) {
+      fileUploadInput.value = '';
+    }
+    return;
+  }
+
+  const prepared = [];
+  const seenNames = new Set();
+  for (const file of files) {
+    const name = sanitizeFileName(file?.name);
+    if (!name) {
+      continue;
+    }
+    if (seenNames.has(name)) {
+      handleUploadError(`存在重复文件：${name}`);
+      if (fileUploadInput) fileUploadInput.value = '';
+      return;
+    }
+    if (Number.isFinite(file.size) && file.size > maxFileSizeBytes) {
+      const limitMb = getMaxFileSizeLimitMb();
+      handleUploadError(`文件 ${name} 超过 ${limitMb} MB 限制`);
+      if (fileUploadInput) fileUploadInput.value = '';
+      return;
+    }
+    seenNames.add(name);
+    prepared.push({ file, name });
+  }
+
+  if (prepared.length === 0) {
+    handleUploadError('未找到有效的文件。');
+    if (fileUploadInput) fileUploadInput.value = '';
+    return;
+  }
+
+  const existingNames = getExistingUploadedFileNames();
+  let projectedCount = existingNames.size;
+  prepared.forEach(({ name }) => {
+    if (!existingNames.has(name)) {
+      projectedCount += 1;
+    }
+  });
+
+  if (projectedCount > uploadLimit) {
+    handleUploadError(`最多仅能上传 ${uploadLimit} 个文件。`);
+    if (fileUploadInput) fileUploadInput.value = '';
+    return;
+  }
+
+  const formData = new FormData();
+  prepared.forEach(({ file, name }) => formData.append('files', file, name));
+
+  setStatus('正在上传文件…', true);
+  setInteractionDisabled(true);
+  if (uploadButton) uploadButton.disabled = true;
+  if (fileUploadInput) fileUploadInput.disabled = true;
+
+  try {
+    const response = await postFormData('/api/session/files', formData);
+    updateUploadConstraints(response);
+    setUploadedFiles(response?.files ?? []);
+    const summaries = Array.isArray(response?.summaries)
+      ? response.summaries.filter((entry) => typeof entry === 'string' && entry.trim())
+      : [];
+    if (summaries.length > 0) {
+      notifyUploadMessage(summaries.join('\n'));
+    } else {
+      notifyUploadMessage('文件上传成功。');
+    }
+  } catch (error) {
+    const message = error?.message ? String(error.message) : '文件上传失败。';
+    notifyUploadMessage(message.startsWith('文件上传失败') ? message : `文件上传失败：${message}`);
+  } finally {
+    setStatus('待命中…');
+    setInteractionDisabled(false);
+    if (uploadButton) uploadButton.disabled = false;
+    if (fileUploadInput) {
+      fileUploadInput.disabled = false;
+      fileUploadInput.value = '';
+    }
+  }
+}
+
+setUploadedFiles([]);
 
 const editingController = createEditingController({
   chatForm,
@@ -119,7 +352,10 @@ conversationPanelApi = createConversationPanel({
   addAndRenderMessage: (role, text, options) =>
     messageRendererApi.addAndRenderMessage(role, text, options),
   requestHistoryLayoutSync: () => historyLayout.requestLayoutSync(),
-  onSessionReset: () => bootSession(),
+  onSessionReset: () => {
+    setUploadedFiles([]);
+    bootSession();
+  },
 });
 
 function setInteractionDisabled(disabled) {
@@ -337,6 +573,7 @@ async function regenerateAssistantMessage(messageElement, messageId, button) {
       message: precedingUserMessage.content,
       replace_last: true,
     });
+    updateUploadConstraints(payload);
     if (payload.meta) {
       logModelInvocation(payload.meta);
       appendModelLogForConversation(payload.meta);
@@ -384,6 +621,7 @@ async function bootSession() {
   try {
     const data = await fetchJson('/api/session/boot');
     messageRendererApi.addAndRenderMessage('assistant', data.reply);
+    updateUploadConstraints(data);
     if (data?.meta) {
       logModelInvocation(data.meta);
       appendModelLogForConversation(data.meta);
@@ -399,11 +637,14 @@ async function bootSession() {
       }
       if ('workspace_state' in data) {
         setConversationWorkspaceState(data.workspace_state);
+      if (Array.isArray(data.uploads)) {
+        setUploadedFiles(data.uploads);
       }
     }
   } catch (error) {
     console.error(error);
     messageRendererApi.addAndRenderMessage('assistant', '无法连接到后端服务，请确认已启动。');
+    setUploadedFiles([]);
   } finally {
     setStatus('待命中…');
   }
@@ -416,6 +657,7 @@ async function sendChat(message) {
     messageRendererApi.addAndRenderMessage('assistant', '正在生成回复…', { pending: true });
   try {
     const payload = await streamingController.runAssistantStream(pendingMessage, pendingMessageId, { message });
+    updateUploadConstraints(payload);
     if (payload?.meta) {
       logModelInvocation(payload.meta);
       appendModelLogForConversation(payload.meta);
@@ -425,6 +667,9 @@ async function sendChat(message) {
     updatePptPreview(payload.ppt_slides);
     setConversationPptSlides(payload.ppt_slides);
     setConversationWorkspaceState(payload.workspace_state);
+    if (Array.isArray(payload?.uploads)) {
+      setUploadedFiles(payload.uploads);
+    }
   } catch (error) {
     console.error(error);
     messageRendererApi.finalizePendingMessage(
@@ -523,6 +768,18 @@ function initializeEventListeners() {
   if (cancelEditButton) {
     cancelEditButton.addEventListener('click', () => {
       editingController.cancelActiveEdit({ focusInput: true });
+    });
+  }
+
+  if (uploadButton && fileUploadInput) {
+    uploadButton.addEventListener('click', () => {
+      if (fileUploadInput.disabled) return;
+      fileUploadInput.click();
+    });
+
+    fileUploadInput.addEventListener('change', (event) => {
+      const target = event?.currentTarget ?? event?.target;
+      handleFileUploadSelection(target?.files ?? null);
     });
   }
 
