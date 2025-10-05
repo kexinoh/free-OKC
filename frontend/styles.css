@@ -430,7 +430,7 @@ body.no-scroll { overflow: hidden; }
 .message.user {
   margin-left: auto;
   background: var(--bg-muted);
-  border: 1px solid var(--border-color);
+  border: none;
 }
 
 .message.assistant {
