@@ -124,6 +124,7 @@ okcvm-server
 在浏览器中访问: **[http://localhost:8000/ui/](http://localhost:8000/ui/)**
 
 <div align="center">
+    <img width="2893" height="1921" alt="image" src="https://github.com/user-attachments/assets/2b1da3b3-762a-4e39-a356-879f3e782740" />
   <em>OKCVM Web 控制面板界面</em>
 </div>
 
