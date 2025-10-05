@@ -498,7 +498,7 @@ function initializeEventListeners() {
 
   if (chatMessages) {
     chatMessages.addEventListener('click', async (event) => {
-      const origin = event.target instanceof HTMLElement ? event.target : null;
+      const origin = event.target instanceof Element ? event.target : null;
       if (!origin) return;
 
       const navButton = origin.closest('button.branch-nav-button');
@@ -555,7 +555,7 @@ function initializeEventListeners() {
 
   if (conversationList) {
     conversationList.addEventListener('click', (event) => {
-      const target = event.target instanceof HTMLElement ? event.target : null;
+      const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
 
       const deleteButton = target.closest('button[data-action="delete"]');
