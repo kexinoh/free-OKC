@@ -58,8 +58,7 @@ body {
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
-  padding: var(--workspace-padding-block) var(--workspace-padding-inline);
-  padding-left: 0;
+  padding: var(--workspace-padding-block) var(--workspace-padding-inline) var(--workspace-padding-block) 0;
   overflow: hidden;
 }
 
