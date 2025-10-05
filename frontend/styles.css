@@ -564,7 +564,7 @@ body.no-scroll { overflow: hidden; }
 .message .message-content ul,
 .message .message-content ol,
 .message .message-content pre {
-  margin: 0;
+  margin: 0 0 0.2rem 0;
 }
 
 .message .message-content ul,
