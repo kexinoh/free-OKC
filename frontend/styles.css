@@ -73,6 +73,13 @@ body.no-scroll { overflow: hidden; }
   flex-wrap: wrap;
   min-height: calc(var(--viewport-height) - (var(--workspace-padding-block) * 2));
   height: calc(var(--viewport-height) - (var(--workspace-padding-block) * 2));
+  margin: 0 auto;
+}
+
+@media (min-width: 1024px) {
+  .app-workspace {
+    width: min(1600px, 80vw);
+  }
 }
 
 .app-shell {
@@ -109,7 +116,6 @@ body.no-scroll { overflow: hidden; }
   gap: 1rem;
   text-align: center;
   width: 100%;
-  max-width: 960px;
   margin: 0 auto;
 }
 .logo-area {
@@ -424,7 +430,6 @@ body.no-scroll { overflow: hidden; }
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: 960px;
   margin: 0 auto;
   justify-content: center;
 }
