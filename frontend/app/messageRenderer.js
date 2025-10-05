@@ -1,4 +1,5 @@
 import { cloneMessageActionIcon } from '../messageActionIcons.js';
+import { renderMarkdown } from '../markdown.js';
 import {
   appendMessageToConversation,
   resolvePendingConversationMessage,
@@ -59,6 +60,26 @@ export function createMessageRenderer({
       }
     }
     return null;
+  };
+
+  const setMessageContent = (messageElement, text) => {
+    if (!(messageElement instanceof HTMLElement)) return;
+    const body = messageElement.querySelector('.message-content');
+    if (!(body instanceof HTMLElement)) return;
+
+    const normalized = typeof text === 'string' ? text : '';
+
+    if (messageElement.dataset) {
+      messageElement.dataset.contentRaw = normalized;
+    }
+
+    if (messageElement.classList.contains('assistant')) {
+      body.innerHTML = renderMarkdown(normalized);
+    } else {
+      body.textContent = normalized;
+    }
+
+    body.classList.remove('pending');
   };
 
   const markMessagePending = (messageElement, placeholderText) => {
@@ -147,10 +168,8 @@ export function createMessageRenderer({
     const body = document.createElement('div');
     body.className = 'message-content';
     const initialText = typeof text === 'string' ? text : '';
-    body.textContent = initialText;
-    if (message.dataset) {
-      message.dataset.contentRaw = initialText;
-    }
+    message.append(header, body);
+    setMessageContent(message, initialText);
 
     const actions = document.createElement('div');
     actions.className = 'message-actions';
@@ -197,7 +216,7 @@ export function createMessageRenderer({
     }
 
     footer.append(branchNavigation, actions);
-    message.append(header, body, footer);
+    message.append(footer);
 
     if (pending) {
       markMessagePending(message, body.textContent || '正在生成回复…');
@@ -244,11 +263,7 @@ export function createMessageRenderer({
       return;
     }
 
-    const body = message.querySelector('.message-content');
-    if (body) {
-      body.textContent = finalText;
-      body.classList.remove('pending');
-    }
+    setMessageContent(message, finalText);
 
     message.classList.remove('pending');
     if (message.dataset) {
