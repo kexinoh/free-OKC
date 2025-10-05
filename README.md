@@ -132,6 +132,8 @@ Navigate to the following URL in your browser: **[http://localhost:8000/ui/](htt
 
 <div align="center">
   <br/>
+  <img width="2893" height="1921" alt="image" src="https://github.com/user-attachments/assets/2b1da3b3-762a-4e39-a356-879f3e782740" />
+
   <em>The OKCVM Web Control Panel</em>
 </div>
 
