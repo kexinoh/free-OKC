@@ -795,6 +795,7 @@ async function bootSession() {
       }
       if ('workspace_state' in data) {
         setConversationWorkspaceState(data.workspace_state);
+      }
       if (Array.isArray(data.uploads)) {
         setUploadedFiles(data.uploads);
       }
