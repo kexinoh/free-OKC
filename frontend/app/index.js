@@ -804,6 +804,7 @@ async function bootSession() {
     console.error(error);
     messageRendererApi.addAndRenderMessage('assistant', '无法连接到后端服务，请确认已启动。');
     setUploadedFiles([]);
+    openSettingsPanel();
   } finally {
     setStatus('待命中…');
   }
@@ -1091,16 +1092,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   historyLayout.observe(observedLayoutTarget);
   historyLayout.requestLayoutSync();
 
-  const conversation = await conversationPanelApi.initializeConversationState();
-  loadConfig();
+  try {
+    const conversation = await conversationPanelApi.initializeConversationState();
+    loadConfig();
 
-  if (!conversation || conversation.messages.length === 0) {
-    setStatus('连接工作台…', true);
-    bootSession();
-  } else {
-    setStatus('待命中…');
-    if (userInput) {
-      userInput.focus();
+    if (!conversation || conversation.messages.length === 0) {
+      setStatus('连接工作台…', true);
+      bootSession();
+    } else {
+      setStatus('待命中…');
+      if (userInput) {
+        userInput.focus();
+      }
     }
+  } catch (error) {
+    console.error('初始化会话状态失败', error);
+    messageRendererApi?.addAndRenderMessage(
+      'assistant',
+      '无法加载历史记录，请检查后端服务是否已启动，然后在右上角填写配置。',
+    );
+    openSettingsPanel();
+    setStatus('待命中…');
   }
 });
