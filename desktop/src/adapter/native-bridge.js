@@ -1,52 +1,11 @@
 /**
- * Native Bridge - Tauri API 封装层
+ * Native Bridge - Electron API 封装层
  * 
- * 提供统一的接口访问 Tauri 原生 API，自动检测运行环境。
+ * 提供统一的接口访问 Electron 原生 API，自动检测运行环境。
  */
 
-// 检测是否在 Tauri 环境中
-const isTauri = () => typeof window !== 'undefined' && !!window.__TAURI__;
-
-// 缓存 Tauri API 模块
-let tauriModules = null;
-
-/**
- * 懒加载 Tauri 模块
- */
-async function loadTauriModules() {
-    if (!isTauri() || tauriModules) return tauriModules;
-
-    try {
-        const [
-            { invoke },
-            { listen, emit },
-            { open, save, message, ask, confirm },
-            { sendNotification, isPermissionGranted, requestPermission },
-        ] = await Promise.all([
-            import('@tauri-apps/api/tauri'),
-            import('@tauri-apps/api/event'),
-            import('@tauri-apps/api/dialog'),
-            import('@tauri-apps/api/notification'),
-        ]);
-
-        tauriModules = {
-            invoke,
-            event: { listen, emit },
-            dialog: { open, save, message, ask, confirm },
-            notification: { sendNotification, isPermissionGranted, requestPermission },
-        };
-
-        return tauriModules;
-    } catch (error) {
-        console.error('[NativeBridge] Failed to load Tauri modules:', error);
-        return null;
-    }
-}
-
-// 预加载模块
-if (isTauri()) {
-    loadTauriModules();
-}
+// 检测是否在 Electron 环境中
+const isElectron = () => typeof window !== 'undefined' && !!window.__ELECTRON__;
 
 /**
  * Native Bridge API
@@ -55,20 +14,19 @@ const NativeBridge = {
     /**
      * 检测是否在桌面模式
      */
-    isDesktop: isTauri,
+    isDesktop: isElectron,
 
     /**
-     * 调用 Rust 命令
-     * @param {string} cmd - 命令名称
-     * @param {object} args - 命令参数
+     * 调用主进程方法
+     * @param {string} channel - 频道名称
+     * @param {...any} args - 参数
      * @returns {Promise<any>}
      */
-    async invoke(cmd, args = {}) {
-        if (!isTauri()) {
-            throw new Error('Not in Tauri environment');
+    async invoke(channel, ...args) {
+        if (!isElectron()) {
+            throw new Error('Not in Electron environment');
         }
-        const modules = await loadTauriModules();
-        return modules.invoke(cmd, args);
+        return window.electronAPI.invoke(channel, ...args);
     },
 
     /**
@@ -76,12 +34,11 @@ const NativeBridge = {
      * @returns {Promise<string>}
      */
     async getBackendUrl() {
-        if (isTauri()) {
+        if (isElectron()) {
             try {
-                return await this.invoke('get_backend_url');
+                return await this.invoke('get-backend-url') || '';
             } catch (error) {
                 console.warn('[NativeBridge] Failed to get backend URL:', error);
-                // 后端可能还在启动中，返回空字符串使用相对路径
                 return '';
             }
         }
@@ -94,35 +51,33 @@ const NativeBridge = {
      * @returns {Promise<object>}
      */
     async getBackendStatus() {
-        if (!isTauri()) {
+        if (!isElectron()) {
             return { status: 'running', port: null };
         }
-        return await this.invoke('get_backend_status');
+        return await this.invoke('get-backend-status');
     },
 
     /**
      * 监听原生事件
      * @param {string} event - 事件名称
      * @param {function} callback - 回调函数
-     * @returns {Promise<function>} 取消监听的函数
+     * @returns {function} 取消监听的函数
      */
-    async listen(event, callback) {
-        if (!isTauri()) {
+    listen(event, callback) {
+        if (!isElectron()) {
             return () => {}; // 返回空的取消函数
         }
-        const modules = await loadTauriModules();
-        return modules.event.listen(event, (e) => callback(e.payload));
+        return window.electronAPI.on(event, callback);
     },
 
     /**
-     * 发送事件到 Rust
+     * 一次性监听事件
      * @param {string} event - 事件名称
-     * @param {any} payload - 事件数据
+     * @param {function} callback - 回调函数
      */
-    async emit(event, payload) {
-        if (!isTauri()) return;
-        const modules = await loadTauriModules();
-        await modules.event.emit(event, payload);
+    once(event, callback) {
+        if (!isElectron()) return;
+        window.electronAPI.once(event, callback);
     },
 
     /**
@@ -131,12 +86,16 @@ const NativeBridge = {
      * @param {string} message - 消息内容
      */
     async showMessage(title, message) {
-        if (!isTauri()) {
+        if (!isElectron()) {
             alert(`${title}\n\n${message}`);
             return;
         }
-        const modules = await loadTauriModules();
-        await modules.dialog.message(message, { title });
+        await this.invoke('show-message-box', {
+            type: 'info',
+            title,
+            message,
+            buttons: ['确定'],
+        });
     },
 
     /**
@@ -146,11 +105,18 @@ const NativeBridge = {
      * @returns {Promise<boolean>}
      */
     async showConfirm(title, message) {
-        if (!isTauri()) {
+        if (!isElectron()) {
             return confirm(`${title}\n\n${message}`);
         }
-        const modules = await loadTauriModules();
-        return await modules.dialog.confirm(message, { title });
+        const result = await this.invoke('show-message-box', {
+            type: 'question',
+            title,
+            message,
+            buttons: ['取消', '确定'],
+            defaultId: 1,
+            cancelId: 0,
+        });
+        return result.response === 1;
     },
 
     /**
@@ -160,11 +126,69 @@ const NativeBridge = {
      * @returns {Promise<boolean>}
      */
     async showAsk(title, message) {
-        if (!isTauri()) {
-            return confirm(`${title}\n\n${message}`);
+        return this.showConfirm(title, message);
+    },
+
+    /**
+     * 显示错误对话框
+     * @param {string} title - 标题
+     * @param {string} message - 消息内容
+     */
+    async showError(title, message) {
+        if (!isElectron()) {
+            alert(`${title}\n\n${message}`);
+            return;
         }
-        const modules = await loadTauriModules();
-        return await modules.dialog.ask(message, { title });
+        await this.invoke('show-message-box', {
+            type: 'error',
+            title,
+            message,
+            buttons: ['确定'],
+        });
+    },
+
+    /**
+     * 在浏览器中打开链接
+     * @param {string} url - URL
+     */
+    async openExternal(url) {
+        if (isElectron()) {
+            await this.invoke('open-external', url);
+        } else {
+            window.open(url, '_blank');
+        }
+    },
+
+    /**
+     * 在文件管理器中显示文件
+     * @param {string} path - 文件路径
+     */
+    async showItemInFolder(path) {
+        if (isElectron()) {
+            await this.invoke('show-item-in-folder', path);
+        }
+    },
+
+    /**
+     * 获取平台信息
+     * @returns {string}
+     */
+    getPlatform() {
+        if (isElectron()) {
+            return window.electronAPI.platform;
+        }
+        return 'web';
+    },
+
+    /**
+     * 获取版本信息
+     * @returns {object}
+     */
+    getVersions() {
+        if (isElectron()) {
+            return window.electronAPI.versions;
+        }
+        return {};
     },
 };
 

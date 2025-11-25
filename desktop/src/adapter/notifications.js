@@ -15,22 +15,10 @@ const Notifications = {
      * @returns {Promise<boolean>}
      */
     async checkPermission() {
-        if (NativeBridge.isDesktop()) {
-            try {
-                const { isPermissionGranted } = await import('@tauri-apps/api/notification');
-                this._permissionGranted = await isPermissionGranted();
-                return this._permissionGranted;
-            } catch {
-                return false;
-            }
-        }
-
-        // Web 模式
         if ('Notification' in window) {
             this._permissionGranted = Notification.permission === 'granted';
             return this._permissionGranted;
         }
-
         return false;
     },
 
@@ -39,27 +27,12 @@ const Notifications = {
      * @returns {Promise<boolean>}
      */
     async requestPermission() {
-        if (NativeBridge.isDesktop()) {
-            try {
-                const { isPermissionGranted, requestPermission } = 
-                    await import('@tauri-apps/api/notification');
-
-                if (await isPermissionGranted()) {
-                    this._permissionGranted = true;
-                    return true;
-                }
-
-                const permission = await requestPermission();
-                this._permissionGranted = permission === 'granted';
-                return this._permissionGranted;
-            } catch (error) {
-                console.error('[Notifications] Failed to request permission:', error);
-                return false;
-            }
-        }
-
-        // Web 模式
         if ('Notification' in window) {
+            if (Notification.permission === 'granted') {
+                this._permissionGranted = true;
+                return true;
+            }
+
             const permission = await Notification.requestPermission();
             this._permissionGranted = permission === 'granted';
             return this._permissionGranted;
@@ -80,26 +53,26 @@ const Notifications = {
             return;
         }
 
-        if (NativeBridge.isDesktop()) {
-            try {
-                const { sendNotification } = await import('@tauri-apps/api/notification');
-                await sendNotification({
-                    title,
-                    body,
-                    icon: options.icon,
-                });
-            } catch (error) {
-                console.error('[Notifications] Failed to send notification:', error);
-            }
-            return;
-        }
-
-        // Web 模式
         if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(title, {
+            const notification = new Notification(title, {
                 body,
                 icon: options.icon,
+                silent: options.silent || false,
             });
+
+            // 点击通知时聚焦窗口
+            notification.onclick = () => {
+                window.focus();
+                if (NativeBridge.isDesktop()) {
+                    NativeBridge.invoke('window-show').catch(() => {});
+                }
+                notification.close();
+            };
+
+            // 自动关闭
+            if (options.timeout) {
+                setTimeout(() => notification.close(), options.timeout);
+            }
         }
     },
 
