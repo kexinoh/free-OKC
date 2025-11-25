@@ -1,7 +1,7 @@
 /**
  * OKCVM Desktop Adapter
  * 
- * 提供桌面端特有功能的适配层，使现有 Web 前端能够无缝运行在 Tauri 环境中。
+ * 提供桌面端特有功能的适配层，使现有 Web 前端能够无缝运行在 Electron 环境中。
  */
 
 import NativeBridge from './native-bridge.js';
@@ -33,6 +33,9 @@ export async function initDesktopAdapter() {
         // 初始化快捷键
         await Shortcuts.init();
 
+        // 初始化更新器
+        await Updater.init();
+
         // 请求通知权限
         await Notifications.requestPermission();
 
@@ -45,7 +48,8 @@ export async function initDesktopAdapter() {
         window.__OKCVM_CONFIG__ = {
             isDesktop: true,
             backendUrl,
-            version: await NativeBridge.invoke('get_app_version'),
+            version: await NativeBridge.invoke('get-app-version'),
+            platform: NativeBridge.getPlatform(),
         };
 
         console.log('[OKCVM] Desktop adapter initialized', window.__OKCVM_CONFIG__);

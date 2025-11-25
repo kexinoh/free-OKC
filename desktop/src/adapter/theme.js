@@ -28,10 +28,20 @@ const Theme = {
 
         // 监听系统主题变化
         if (NativeBridge.isDesktop()) {
-            await NativeBridge.listen('theme-changed', (theme) => {
+            // 监听来自主进程的主题变化事件
+            NativeBridge.listen('theme-changed', (theme) => {
                 if (this._preference === 'system') {
                     this._currentTheme = theme;
                     this._applyTheme(theme);
+                    this._notifyListeners();
+                }
+            });
+
+            // 也监听自定义 DOM 事件
+            window.addEventListener('okcvm:theme-changed', (e) => {
+                if (this._preference === 'system') {
+                    this._currentTheme = e.detail.theme;
+                    this._applyTheme(e.detail.theme);
                     this._notifyListeners();
                 }
             });
@@ -60,7 +70,7 @@ const Theme = {
 
         if (NativeBridge.isDesktop()) {
             try {
-                return await NativeBridge.invoke('get_system_theme_cmd');
+                return await NativeBridge.invoke('get-system-theme');
             } catch {
                 // 回退到 CSS 媒体查询
             }

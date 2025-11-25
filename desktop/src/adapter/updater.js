@@ -10,6 +10,28 @@ import NativeBridge from './native-bridge.js';
 const Updater = {
     _lastCheckTime: 0,
     _checkInterval: 24 * 60 * 60 * 1000, // 24 小时
+    _updateInfo: null,
+
+    /**
+     * 初始化更新器
+     */
+    async init() {
+        if (!NativeBridge.isDesktop()) {
+            return;
+        }
+
+        // 监听更新可用事件
+        window.addEventListener('okcvm:update-available', (e) => {
+            this._updateInfo = e.detail;
+            console.log('[Updater] Update available:', this._updateInfo);
+        });
+
+        // 监听更新下载完成事件
+        window.addEventListener('okcvm:update-downloaded', (e) => {
+            this._updateInfo = { ...this._updateInfo, downloaded: true };
+            console.log('[Updater] Update downloaded');
+        });
+    },
 
     /**
      * 检查是否应该检查更新
@@ -41,20 +63,19 @@ const Updater = {
         }
 
         try {
-            const { checkUpdate } = await import('@tauri-apps/api/updater');
-            const update = await checkUpdate();
+            const result = await NativeBridge.invoke('check-for-updates');
 
             // 记录检查时间
             this._lastCheckTime = Date.now();
             localStorage.setItem('okcvm-last-update-check', this._lastCheckTime.toString());
 
-            if (update.shouldUpdate) {
-                console.log('[Updater] Update available:', update.manifest);
+            if (result.available) {
+                this._updateInfo = result;
+                console.log('[Updater] Update available:', result);
                 return {
                     available: true,
-                    version: update.manifest?.version,
-                    notes: update.manifest?.body,
-                    date: update.manifest?.date,
+                    version: result.version,
+                    notes: result.notes,
                 };
             }
 
@@ -67,7 +88,25 @@ const Updater = {
     },
 
     /**
-     * 安装更新
+     * 下载更新
+     * @returns {Promise<boolean>}
+     */
+    async downloadUpdate() {
+        if (!NativeBridge.isDesktop()) {
+            return false;
+        }
+
+        try {
+            const result = await NativeBridge.invoke('download-update');
+            return result;
+        } catch (error) {
+            console.error('[Updater] Failed to download update:', error);
+            return false;
+        }
+    },
+
+    /**
+     * 安装更新并重启
      * @returns {Promise<boolean>}
      */
     async installUpdate() {
@@ -76,13 +115,7 @@ const Updater = {
         }
 
         try {
-            const { installUpdate } = await import('@tauri-apps/api/updater');
-            await installUpdate();
-
-            // 安装后需要重启
-            const { relaunch } = await import('@tauri-apps/api/process');
-            await relaunch();
-
+            await NativeBridge.invoke('install-update');
             return true;
         } catch (error) {
             console.error('[Updater] Failed to install update:', error);
@@ -97,12 +130,20 @@ const Updater = {
     async getCurrentVersion() {
         if (NativeBridge.isDesktop()) {
             try {
-                return await NativeBridge.invoke('get_app_version');
+                return await NativeBridge.invoke('get-app-version');
             } catch {
                 return 'unknown';
             }
         }
         return 'web';
+    },
+
+    /**
+     * 获取更新信息
+     * @returns {object|null}
+     */
+    getUpdateInfo() {
+        return this._updateInfo;
     },
 
     /**

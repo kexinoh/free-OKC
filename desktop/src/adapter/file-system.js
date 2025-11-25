@@ -55,25 +55,25 @@ const FileSystem = {
      */
     async _selectFilesNative(multiple, filters) {
         try {
-            const { open } = await import('@tauri-apps/api/dialog');
-            const selected = await open({
-                multiple,
+            const result = await NativeBridge.invoke('show-open-dialog', {
+                properties: multiple 
+                    ? ['openFile', 'multiSelections'] 
+                    : ['openFile'],
                 filters,
-                directory: false,
             });
 
-            if (!selected) return [];
-
-            const paths = Array.isArray(selected) ? selected : [selected];
+            if (result.canceled || !result.filePaths?.length) {
+                return [];
+            }
 
             // 读取文件内容
             const files = await Promise.all(
-                paths.map(async (path) => {
-                    const content = await NativeBridge.invoke('read_local_file', { path });
-                    const name = path.split(/[/\\]/).pop();
+                result.filePaths.map(async (filePath) => {
+                    const content = await NativeBridge.invoke('read-file', filePath);
+                    const name = filePath.split(/[/\\]/).pop();
                     return {
                         name,
-                        path,
+                        path: filePath,
                         content: new Uint8Array(content),
                         size: content.length,
                     };
@@ -128,13 +128,15 @@ const FileSystem = {
             return null;
         }
 
-        const { open } = await import('@tauri-apps/api/dialog');
-        const selected = await open({
-            directory: true,
-            multiple: false,
+        const result = await NativeBridge.invoke('show-open-dialog', {
+            properties: ['openDirectory'],
         });
 
-        return selected || null;
+        if (result.canceled || !result.filePaths?.length) {
+            return null;
+        }
+
+        return result.filePaths[0];
     },
 
     /**
@@ -156,25 +158,23 @@ const FileSystem = {
      */
     async _saveFileNative(content, defaultName, filters) {
         try {
-            const { save } = await import('@tauri-apps/api/dialog');
-            const path = await save({
+            const result = await NativeBridge.invoke('show-save-dialog', {
                 defaultPath: defaultName,
                 filters,
             });
 
-            if (!path) return null;
+            if (result.canceled || !result.filePath) {
+                return null;
+            }
 
             // 转换内容为字节数组
             const data = typeof content === 'string' 
-                ? new TextEncoder().encode(content) 
-                : content;
+                ? Array.from(new TextEncoder().encode(content))
+                : Array.from(content);
 
-            await NativeBridge.invoke('write_local_file', {
-                path,
-                data: Array.from(data),
-            });
+            await NativeBridge.invoke('write-file', result.filePath, data);
 
-            return path;
+            return result.filePath;
         } catch (error) {
             console.error('[FileSystem] Native file save failed:', error);
             throw error;
@@ -211,7 +211,7 @@ const FileSystem = {
             throw new Error('Cannot read local files in web mode');
         }
 
-        const content = await NativeBridge.invoke('read_local_file', { path });
+        const content = await NativeBridge.invoke('read-file', path);
         return new Uint8Array(content);
     },
 
@@ -227,13 +227,10 @@ const FileSystem = {
         }
 
         const data = typeof content === 'string' 
-            ? new TextEncoder().encode(content) 
-            : content;
+            ? Array.from(new TextEncoder().encode(content))
+            : Array.from(content);
 
-        return await NativeBridge.invoke('write_local_file', {
-            path,
-            data: Array.from(data),
-        });
+        return await NativeBridge.invoke('write-file', path, data);
     },
 
     /**
@@ -246,7 +243,7 @@ const FileSystem = {
             throw new Error('Cannot get file info in web mode');
         }
 
-        return await NativeBridge.invoke('get_file_info', { path });
+        return await NativeBridge.invoke('get-file-info', path);
     },
 
     /**
@@ -277,7 +274,7 @@ const FileSystem = {
             const results = await Promise.all(
                 files.map(async (file) => ({
                     name: file.name,
-                    path: file.name,
+                    path: file.path || file.name, // Electron 会提供文件路径
                     content: new Uint8Array(await file.arrayBuffer()),
                     size: file.size,
                 }))
@@ -290,36 +287,11 @@ const FileSystem = {
         element.addEventListener('dragleave', handleDragLeave);
         element.addEventListener('drop', handleDrop);
 
-        // Tauri 原生拖放
-        let unlistenTauri = null;
-        if (NativeBridge.isDesktop()) {
-            NativeBridge.listen('tauri://file-drop', async (paths) => {
-                if (!Array.isArray(paths)) return;
-
-                const files = await Promise.all(
-                    paths.map(async (path) => {
-                        const content = await NativeBridge.invoke('read_local_file', { path });
-                        return {
-                            name: path.split(/[/\\]/).pop(),
-                            path,
-                            content: new Uint8Array(content),
-                            size: content.length,
-                        };
-                    })
-                );
-
-                onDrop(files);
-            }).then((unlisten) => {
-                unlistenTauri = unlisten;
-            });
-        }
-
         // 返回清理函数
         return () => {
             element.removeEventListener('dragover', handleDragOver);
             element.removeEventListener('dragleave', handleDragLeave);
             element.removeEventListener('drop', handleDrop);
-            if (unlistenTauri) unlistenTauri();
         };
     },
 };

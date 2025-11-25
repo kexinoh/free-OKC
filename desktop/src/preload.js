@@ -1,19 +1,22 @@
 /**
- * Preload Script
+ * Frontend Preload Script
  * 
  * 在前端加载前执行，设置全局配置和初始化桌面适配层。
  * 这个脚本应该在 index.html 中最先加载。
+ * 
+ * 注意：这是给 Web 前端使用的预加载脚本，不是 Electron preload。
+ * Electron 的 preload 脚本在 main/preload.js。
  */
 
 (async function preload() {
     'use strict';
     
-    // 检测 Tauri 环境
-    const isTauri = typeof window !== 'undefined' && !!window.__TAURI__;
+    // 检测 Electron 环境
+    const isElectron = typeof window !== 'undefined' && !!window.__ELECTRON__;
     
-    console.log('[Preload] Starting...', { isTauri });
+    console.log('[Preload] Starting...', { isElectron });
     
-    if (isTauri) {
+    if (isElectron) {
         await initDesktopMode();
     } else {
         initWebMode();
@@ -29,23 +32,26 @@ async function initDesktopMode() {
     console.log('[Preload] Initializing desktop mode...');
     
     try {
-        // 动态导入 Tauri API
-        const { invoke } = await import('@tauri-apps/api/tauri');
-        const { listen } = await import('@tauri-apps/api/event');
+        // 等待 electronAPI 可用
+        if (!window.electronAPI) {
+            console.warn('[Preload] electronAPI not available yet');
+            return;
+        }
         
-        // 等待后端就绪
+        // 获取后端 URL
         let backendUrl = '';
         try {
-            backendUrl = await invoke('get_backend_url');
+            backendUrl = await window.electronAPI.invoke('get-backend-url');
             console.log('[Preload] Backend URL:', backendUrl);
         } catch (error) {
-            console.warn('[Preload] Backend not ready yet, will retry...');
+            console.warn('[Preload] Backend not ready yet:', error.message);
             
             // 监听后端就绪事件
             await new Promise((resolve) => {
-                listen('backend-ready', (event) => {
-                    backendUrl = `http://127.0.0.1:${event.payload}`;
+                const unlisten = window.electronAPI.on('backend-ready', (port) => {
+                    backendUrl = `http://127.0.0.1:${port}`;
                     console.log('[Preload] Backend ready:', backendUrl);
+                    unlisten();
                     resolve();
                 });
                 
@@ -57,7 +63,13 @@ async function initDesktopMode() {
         // 获取应用版本
         let version = '0.0.0';
         try {
-            version = await invoke('get_app_version');
+            version = await window.electronAPI.invoke('get-app-version');
+        } catch {}
+        
+        // 获取系统主题
+        let theme = 'light';
+        try {
+            theme = await window.electronAPI.invoke('get-system-theme');
         } catch {}
         
         // 设置全局配置
@@ -65,30 +77,9 @@ async function initDesktopMode() {
             isDesktop: true,
             backendUrl,
             version,
-            platform: getPlatform(),
+            platform: window.electronAPI.platform,
+            theme,
         };
-        
-        // 监听后端状态变化
-        listen('backend-stopped', () => {
-            console.warn('[Preload] Backend stopped');
-            window.dispatchEvent(new CustomEvent('okcvm:backend-stopped'));
-        });
-        
-        listen('backend-error', (event) => {
-            console.error('[Preload] Backend error:', event.payload);
-            window.dispatchEvent(new CustomEvent('okcvm:backend-error', { 
-                detail: event.payload 
-            }));
-        });
-        
-        // 监听托盘菜单事件
-        listen('new-chat', () => {
-            window.dispatchEvent(new CustomEvent('okcvm:new-chat'));
-        });
-        
-        listen('open-preferences', () => {
-            window.dispatchEvent(new CustomEvent('okcvm:open-preferences'));
-        });
         
         console.log('[Preload] Desktop mode initialized', window.__OKCVM_CONFIG__);
         
@@ -129,7 +120,7 @@ function getPlatform() {
 }
 
 /**
- * 全局辅助函数
+ * 全局辅助函数（兼容层）
  */
 window.OKCVM = window.OKCVM || {};
 

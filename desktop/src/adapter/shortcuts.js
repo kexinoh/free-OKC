@@ -14,16 +14,17 @@ const Shortcuts = {
      * 初始化快捷键监听
      */
     async init() {
-        // 监听来自 Rust 的快捷键事件
+        // 监听来自主进程的快捷键事件
         if (NativeBridge.isDesktop()) {
-            await NativeBridge.listen('new-chat', () => {
-                this._emit('new-chat');
-            });
-
-            await NativeBridge.listen('open-preferences', () => {
-                this._emit('open-preferences');
+            NativeBridge.listen('shortcut', (action) => {
+                this._emit(action);
             });
         }
+
+        // 监听自定义 DOM 事件（由 preload 脚本触发）
+        window.addEventListener('okcvm:new-chat', () => this._emit('new-chat'));
+        window.addEventListener('okcvm:open-preferences', () => this._emit('open-preferences'));
+        window.addEventListener('okcvm:check-update', () => this._emit('check-update'));
 
         // 注册本地键盘事件（Web 模式和 WebView 内部快捷键）
         document.addEventListener('keydown', (e) => this._handleKeyDown(e));

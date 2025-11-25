@@ -4,10 +4,11 @@ node_modules/
 # Build outputs
 dist/
 build/
-src-tauri/target/
+out/
 
-# Bundled binaries (generated during build)
-src-tauri/binaries/okcvm-server-*
+# Bundled backend
+backend-bundle/dist/
+backend-bundle/*.spec
 
 # PyInstaller
 *.spec.bak
@@ -34,7 +35,21 @@ Thumbs.db
 # Test outputs
 coverage/
 test-results/
+playwright-report/
 
 # Temporary files
 *.tmp
 *.temp
+
+# Electron specific
+*.asar
+
+# Release files (generated during build)
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.exe
+*.msi
+*.zip
+*.tar.gz

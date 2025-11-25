@@ -2,28 +2,112 @@
   "name": "okcvm-desktop",
   "version": "0.1.0",
   "description": "OKCVM Desktop Application",
-  "type": "module",
+  "main": "main/main.js",
+  "author": "OKCVM Team",
+  "license": "MIT",
   "scripts": {
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "dev": "npm run tauri:dev",
-    "build": "npm run bundle-backend && npm run tauri:build",
+    "start": "electron .",
+    "dev": "npm run bundle-backend && electron . --dev",
+    "build": "npm run bundle-backend && electron-builder",
+    "build:mac": "npm run bundle-backend && electron-builder --mac",
+    "build:win": "npm run bundle-backend && electron-builder --win",
+    "build:linux": "npm run bundle-backend && electron-builder --linux",
     "bundle-backend": "python scripts/bundle-backend.py",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
+    "pack": "electron-builder --dir",
+    "lint": "eslint main/ src/",
+    "lint:fix": "eslint main/ src/ --fix",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:all": "npm run test && npm run test:e2e"
+    "test:all": "npm run test && npm run test:e2e",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.okcvm.desktop",
+    "productName": "OKCVM",
+    "copyright": "Copyright © 2024 OKCVM Team",
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources"
+    },
+    "files": [
+      "main/**/*",
+      "src/**/*",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend-bundle/dist/",
+        "to": "backend",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "resources/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "resources/entitlements.mac.plist",
+      "entitlementsInherit": "resources/entitlements.mac.plist"
+    },
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "resources/icons",
+      "category": "Development",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "kexinoh",
+      "repo": "free-OKC"
+    }
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^1.5.0",
     "@playwright/test": "^1.40.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
     "eslint": "^8.56.0",
     "vitest": "^1.1.0"
   },
   "dependencies": {
-    "@tauri-apps/api": "^1.5.0"
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.7"
   }
 }
