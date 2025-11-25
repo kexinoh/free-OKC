@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+src-tauri/target/
+
+# Bundled binaries (generated during build)
+src-tauri/binaries/okcvm-server-*
+
+# PyInstaller
+*.spec.bak
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# Test outputs
+coverage/
+test-results/
+
+# Temporary files
+*.tmp
+*.temp
