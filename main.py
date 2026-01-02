@@ -38,7 +38,7 @@ logger = get_logger(__name__)
 # --- Helper Functions ---
 def _ensure_dependencies():
     """Checks if essential packages are installed."""
-    required = ["fastapi", "uvicorn", "langchain", "typer", "pyyaml"]
+    required = ["fastapi", "uvicorn", "langchain", "typer", "yaml"]
     missing = []
     for package in required:
         try:

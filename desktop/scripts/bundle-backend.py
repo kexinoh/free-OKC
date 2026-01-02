@@ -102,6 +102,8 @@ def run_pyinstaller():
         "anyio",
         "yaml",
         "dotenv",
+        "multipart",
+        "python_multipart",
     ]
     
     # 构建命令

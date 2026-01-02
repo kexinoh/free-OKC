@@ -294,22 +294,29 @@ function togglePptMode() {
 function handleOpenPreview() {
   if (!currentWebPreview) return;
 
+  // 检测是否在 Electron 环境
+  const isElectron = typeof window !== 'undefined' && !!window.__ELECTRON__;
+
   if (typeof currentWebPreview.url === 'string' && currentWebPreview.url.trim()) {
-    const newWindow = window.open(currentWebPreview.url, '_blank');
-    if (newWindow) {
-      newWindow.opener = null;
+    if (isElectron && window.electronAPI) {
+      // 在 Electron 中使用系统浏览器打开 URL
+      window.electronAPI.invoke('open-external', currentWebPreview.url);
+    } else {
+      const newWindow = window.open(currentWebPreview.url, '_blank');
+      if (newWindow) {
+        newWindow.opener = null;
+      }
     }
     return;
   }
 
   if (typeof currentWebPreview.html === 'string' && currentWebPreview.html.trim()) {
-    const blob = new Blob([currentWebPreview.html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const newWindow = window.open(url, '_blank');
+    // 使用 data URL，Electron 的 setWindowOpenHandler 会自动处理新窗口
+    const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(currentWebPreview.html);
+    const newWindow = window.open(dataUrl, '_blank');
     if (newWindow) {
       newWindow.opener = null;
     }
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 }
 

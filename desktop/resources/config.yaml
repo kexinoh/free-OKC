@@ -1,0 +1,31 @@
+# -------------------------------------------------------------
+# Desktop App Configuration for OKCVM
+# -------------------------------------------------------------
+# This config is used when running as a desktop application
+# confirm_on_start is disabled for non-interactive mode
+# -------------------------------------------------------------
+
+chat:
+  model: "kimi-k2-0905-preview"
+  base_url: "https://api.moonshot.cn/v1"
+  api_key_env: "KIMI_KEY"
+  supports_streaming: true
+
+media:
+  image:
+    model: "dall-e-3"
+    api_key_env: "OPENAI_API_KEY"
+
+  speech:
+    model: "tts-1"
+    api_key_env: "OPENAI_API_KEY"
+
+workspace:
+  path: "workspace"
+  # Disabled for desktop app (non-interactive mode)
+  confirm_on_start: false
+
+conversation_store:
+  # Use {DATA_DIR} placeholder which will be replaced by the actual user data directory
+  url: "sqlite:///{DATA_DIR}/okcvm_conversations.db"
+  echo: false

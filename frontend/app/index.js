@@ -23,6 +23,9 @@ import {
   uploadedFilesCard,
   uploadedFileList,
   uploadedFilesEmpty,
+  insightSidebar,
+  insightToggle,
+  insightPanelSidebar,
 } from '../elements.js';
 import {
   getConversations,
@@ -58,6 +61,7 @@ import { createMessageRenderer } from './messageRenderer.js';
 import { createStreamingController } from './streamingController.js';
 import { createConversationPanel } from './conversationPanel.js';
 import { assignWorkspaceBranch, restoreWorkspace } from '../workspaceApi.js';
+import { initBrowserTabs } from './browser-tabs.js';
 
 let previousFocusedElement = null;
 
@@ -992,13 +996,41 @@ function initializeEventListeners() {
   }
 
   if (historyToggle) {
+    console.log('[DEBUG] History toggle button found, attaching listener');
     historyToggle.addEventListener('click', () => {
+      console.log('[DEBUG] History toggle clicked');
       const isOpen = conversationPanelApi.toggleHistoryPanel();
+      console.log('[DEBUG] History sidebar is now:', isOpen ? 'open' : 'closed');
       if (!isOpen) {
         historyToggle.focus();
       }
     });
+  } else {
+    console.warn('[DEBUG] History toggle button NOT found');
   }
+
+  // Insight sidebar toggle (similar to history sidebar)
+  if (insightToggle && insightSidebar && insightPanelSidebar) {
+    console.log('[DEBUG] Insight toggle button found, attaching listener');
+    insightToggle.addEventListener('click', () => {
+      console.log('[DEBUG] Insight toggle clicked');
+      const isOpen = insightSidebar.classList.toggle('open');
+      console.log('[DEBUG] Insight sidebar is now:', isOpen ? 'open' : 'closed');
+      console.log('[DEBUG] Insight sidebar classes:', insightSidebar.className);
+      insightToggle.setAttribute('aria-expanded', String(isOpen));
+      historyLayout.requestLayoutSync();
+      if (!isOpen) {
+        insightToggle.focus();
+      }
+    });
+  } else {
+    console.warn('[DEBUG] Insight toggle elements NOT found:', {
+      toggle: !!insightToggle,
+      sidebar: !!insightSidebar,
+      panel: !!insightPanelSidebar
+    });
+  }
+
 
   if (conversationList) {
     conversationList.addEventListener('click', (event) => {
@@ -1078,6 +1110,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   initializePreviewControls();
   initializeConfigForm();
   initializeEventListeners();
+
+  // 初始化浏览器标签页管理器
+  initBrowserTabs();
 
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', historyLayout.requestLayoutSync);

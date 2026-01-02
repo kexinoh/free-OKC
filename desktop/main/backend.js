@@ -4,10 +4,12 @@
 
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const { app } = require('electron');
 const EventEmitter = require('events');
 const http = require('http');
 const net = require('net');
+const logger = require('./logger');
 
 class BackendManager extends EventEmitter {
     constructor(options = {}) {
@@ -77,37 +79,95 @@ class BackendManager extends EventEmitter {
      */
     async start() {
         if (this.status === 'running') {
-            console.log('Backend already running');
+            logger.info('Backend already running');
             return this.port;
         }
 
         this.status = 'starting';
         this.emit('starting');
+        logger.info('Backend starting...');
 
         try {
             // 查找可用端口
             this.port = await this.findAvailablePort();
-            console.log(`Starting backend on port ${this.port}`);
+            logger.info(`Found available port: ${this.port}`);
 
             // 启动进程
             const backendPath = this.getBackendPath();
+            logger.info(`Backend path: ${backendPath || 'Python script mode'}`);
+            logger.info(`Is dev mode: ${this.isDev}`);
+            logger.info(`Data directory: ${this.dataDir}`);
+
+            // 确定配置文件路径
+            let configPath;
+            if (app.isPackaged) {
+                // 生产模式（打包后）：使用 resources 目录的 config.yaml
+                configPath = path.join(process.resourcesPath, 'config.yaml');
+            } else {
+                // 开发模式：使用 desktop/resources 目录的 config.yaml
+                configPath = path.join(__dirname, '..', 'resources', 'config.yaml');
+            }
+            logger.info(`Config path: ${configPath}`);
+
+            // 读取配置文件并替换 {DATA_DIR} 占位符
+            let finalConfigPath = configPath;
+            try {
+                const configContent = fs.readFileSync(configPath, 'utf-8');
+                if (configContent.includes('{DATA_DIR}')) {
+                    logger.info('Replacing {DATA_DIR} placeholder in config...');
+                    const replacedContent = configContent.replace(/{DATA_DIR}/g, this.dataDir.replace(/\\/g, '/'));
+
+                    // 创建临时配置文件
+                    const tempConfigPath = path.join(this.dataDir, 'config.yaml');
+                    fs.writeFileSync(tempConfigPath, replacedContent, 'utf-8');
+                    finalConfigPath = tempConfigPath;
+                    logger.info(`Temporary config written to: ${tempConfigPath}`);
+                    logger.info(`Data directory: ${this.dataDir}`);
+                }
+            } catch (error) {
+                logger.warn(`Failed to process config file: ${error.message}`);
+                // 继续使用原配置文件
+            }
+
             const args = [
+                'run', // Typer CLI 需要子命令
                 '--host', '127.0.0.1',
                 '--port', this.port.toString(),
-                '--data-dir', this.dataDir,
+                '--config', finalConfigPath,
             ];
 
             if (this.isDev || !backendPath) {
                 // 开发模式：使用 Python 运行
-                const pythonPath = process.platform === 'win32' ? 'python' : 'python3';
-                const mainPy = path.join(__dirname, '..', '..', 'main.py');
+                // 优先使用虚拟环境的 Python
+                const projectRoot = path.join(__dirname, '..', '..');
+                let pythonPath;
+
+                if (process.platform === 'win32') {
+                    const venvPython = path.join(projectRoot, '.venv', 'Scripts', 'python.exe');
+                    pythonPath = fs.existsSync(venvPython) ? venvPython : 'python';
+                } else {
+                    const venvPython = path.join(projectRoot, '.venv', 'bin', 'python3');
+                    pythonPath = fs.existsSync(venvPython) ? venvPython : 'python3';
+                }
+
+                const mainPy = path.join(projectRoot, 'main.py');
+                logger.info(`Using Python: ${pythonPath}`);
+                logger.info(`Using Python script: ${mainPy}`);
                 this.process = spawn(pythonPath, [mainPy, ...args], {
-                    cwd: path.join(__dirname, '..', '..'),
+                    cwd: projectRoot,
                     stdio: ['ignore', 'pipe', 'pipe'],
                     env: { ...process.env, PYTHONUNBUFFERED: '1' },
                 });
             } else {
                 // 生产模式：运行打包的可执行文件
+                // 检查后端可执行文件是否存在
+                if (!fs.existsSync(backendPath)) {
+                    const errorMsg = `Backend executable not found at: ${backendPath}`;
+                    logger.error(errorMsg);
+                    throw new Error(errorMsg);
+                }
+                logger.info(`Spawning backend executable: ${backendPath}`);
+                logger.info(`Backend args: ${args.join(' ')}`);
                 this.process = spawn(backendPath, args, {
                     stdio: ['ignore', 'pipe', 'pipe'],
                     env: { ...process.env },
@@ -116,16 +176,16 @@ class BackendManager extends EventEmitter {
 
             // 处理输出
             this.process.stdout.on('data', (data) => {
-                console.log(`[Backend] ${data.toString().trim()}`);
+                logger.info(`[Backend] ${data.toString().trim()}`);
             });
 
             this.process.stderr.on('data', (data) => {
-                console.error(`[Backend Error] ${data.toString().trim()}`);
+                logger.error(`[Backend Error] ${data.toString().trim()}`);
             });
 
             // 进程退出处理
             this.process.on('close', (code) => {
-                console.log(`Backend process exited with code ${code}`);
+                logger.info(`Backend process exited with code ${code}`);
                 this.status = 'stopped';
                 this.process = null;
                 this.stopHealthCheck();
@@ -133,20 +193,23 @@ class BackendManager extends EventEmitter {
             });
 
             this.process.on('error', (error) => {
-                console.error('Backend process error:', error);
+                logger.error(`Backend process error: ${error.message}`);
                 this.status = 'error';
                 this.emit('error', error);
             });
 
             // 等待后端就绪
+            logger.info('Waiting for backend to be ready...');
             await this.waitForReady();
 
             this.status = 'running';
             this.startHealthCheck();
+            logger.info(`Backend is ready on port ${this.port}`);
             this.emit('ready', this.port);
 
             return this.port;
         } catch (error) {
+            logger.error(`Backend start failed: ${error.message}`);
             this.status = 'error';
             this.emit('error', error);
             throw error;
@@ -192,7 +255,7 @@ class BackendManager extends EventEmitter {
             const options = {
                 hostname: '127.0.0.1',
                 port: this.port,
-                path: '/api/health',
+                path: '/api/config',
                 method: 'GET',
                 timeout: 3000,
             };
@@ -223,7 +286,7 @@ class BackendManager extends EventEmitter {
      */
     startHealthCheck() {
         this.stopHealthCheck();
-        
+
         this.healthCheckTimer = setInterval(async () => {
             try {
                 const healthy = await this.checkHealth();
@@ -292,10 +355,10 @@ class BackendManager extends EventEmitter {
     async restart() {
         console.log('Restarting backend...');
         await this.stop();
-        
+
         // 等待一小段时间确保资源释放
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        
+
         return this.start();
     }
 

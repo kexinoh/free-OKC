@@ -33,7 +33,16 @@ from .models import (
 )
 
 # --- Frontend Setup ---
-FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
+def _get_base_path() -> Path:
+    """Get the base path for resources, supporting PyInstaller bundled mode."""
+    import sys
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running as PyInstaller bundle
+        return Path(sys._MEIPASS)
+    # Running as script - frontend is 3 levels up from this file
+    return Path(__file__).resolve().parents[3]
+
+FRONTEND_DIR = _get_base_path() / "frontend"
 
 
 MAX_UPLOAD_FILES = 100

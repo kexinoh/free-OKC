@@ -194,8 +194,13 @@ function createMenu(mainWindow, backendManager) {
 
 /**
  * 创建托盘菜单
+ * @param {BrowserWindow} mainWindow - 主窗口
+ * @param {BackendManager} backendManager - 后端管理器
+ * @param {App} app - Electron app
+ * @param {boolean} waitingForConfirmation - 是否正在等待退出确认
+ * @param {Function} handleTrayExit - 退出处理函数
  */
-function createTrayMenu(mainWindow, backendManager, app) {
+function createTrayMenu(mainWindow, backendManager, app, waitingForConfirmation = false, handleTrayExit = null) {
     const template = [
         {
             label: '显示窗口',
@@ -242,9 +247,13 @@ function createTrayMenu(mainWindow, backendManager, app) {
         },
         { type: 'separator' },
         {
-            label: '退出',
+            label: waitingForConfirmation ? '再次点击确认退出 ⚠️' : '退出',
             click: () => {
-                app.quit();
+                if (handleTrayExit) {
+                    handleTrayExit();
+                } else {
+                    app.quit();
+                }
             },
         },
     ];

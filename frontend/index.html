@@ -1,40 +1,38 @@
 <!DOCTYPE html>
+<!-- CACHE BUSTER: 2026-01-03-02:53:00 SIDEBAR_FIX -->
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OK Computer 创意工坊</title>
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-  </head>
-  <body>
-    <div class="app-workspace">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Free-OK Computer 创意工坊2026-01-03-02:53:00</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+  <div class="app-workspace">
+    <!-- 浏览器标签栏 - 移到最顶部 -->
+    <div class="browser-tabs" id="browser-tabs">
+      <div class="browser-tab-list" id="browser-tab-list">
+        <button type="button" class="browser-tab active" data-tab="main">
+          <span class="tab-title">主页</span>
+        </button>
+      </div>
+      <button type="button" class="browser-new-tab" id="browser-new-tab" title="新建标签页">+</button>
+    </div>
+
+    <div class="app-workspace-content">
       <aside class="history-sidebar" id="history-sidebar">
-        <button
-          type="button"
-          class="history-toggle"
-          id="history-toggle"
-          aria-expanded="false"
-          aria-controls="history-panel"
-          aria-label="展开历史会话侧栏"
-        >
-          <svg
-            class="history-toggle-icon"
-            aria-hidden="true"
-            viewBox="0 0 1024 1024"
-            role="img"
-            focusable="false"
-            xmlns="http://www.w3.org/2000/svg"
-          >
+        <button type="button" class="history-toggle" id="history-toggle" aria-expanded="false"
+          aria-controls="history-panel" aria-label="展开历史会话侧栏">
+          <svg class="history-toggle-icon" aria-hidden="true" viewBox="0 0 1024 1024" role="img" focusable="false"
+            xmlns="http://www.w3.org/2000/svg">
             <path
               d="M64 101.3C64 80.7 80.7 64 101.3 64h821.3c20.6 0 37.3 16.7 37.3 37.3 0 20.6-16.7 37.3-37.3 37.3H101.3c-20.6 0.1-37.3-16.5-37.3-37.3zM64 512c0-20.6 16.8-37.3 37.6-37.3h484.8c20.8 0 37.6 16.6 37.6 37.3 0 20.6-16.8 37.3-37.6 37.3H101.6c-9.9 0.1-19.5-3.9-26.6-10.9-7-6.9-11-16.5-11-26.4zM64 922.7c0-20.6 16.7-37.3 37.3-37.3h821.3c20.6 0 37.3 16.7 37.3 37.3 0 20.6-16.7 37.3-37.3 37.3H101.3C80.7 960 64 943.4 64 922.7zM709.6 351.7c-14.1-14.6-13.9-37.9 0.5-52.3 14.4-14.4 37.7-14.6 52.3-0.5l186.7 186.7c14.6 14.6 14.6 38.2 0 52.8L762.4 725.1c-14.6 14.2-37.9 14-52.3-0.5s-14.6-37.7-0.5-52.3L869.9 512 709.6 351.7z"
-              fill="currentColor"
-            ></path>
+              fill="currentColor"></path>
           </svg>
           <span class="history-toggle-label"></span>
         </button>
@@ -48,67 +46,70 @@
           </div>
           <p class="history-empty" id="conversation-empty">暂无会话记录</p>
           <ul class="conversation-list" id="conversation-list"></ul>
+          <div class="sidebar-footer">
+            <button type="button" class="sidebar-footer-btn" id="help-feedback-btn">
+              <span class="icon" aria-hidden="true">ℹ️</span>
+              <span>反馈帮助</span>
+            </button>
+            <button type="button" class="sidebar-footer-btn" id="settings-btn-sidebar">
+              <span class="icon" aria-hidden="true">⚙️</span>
+              <span>设置</span>
+            </button>
+          </div>
         </div>
       </aside>
 
       <div class="app-shell">
         <header class="app-header">
-        <div class="logo-area">
-          <span class="logo">OK</span>
-          <div>
-            <h1>Free-OK Computer 创意工坊</h1>
-            <p>以对话驱动的自动化AGENT</p>
+          <div class="logo-area">
+            <span class="logo">OK</span>
+            <div>
+              <h1>Free-OK Computer 创意工坊</h1>
+              <p>以对话驱动的自动化AGENT</p>
+            </div>
           </div>
-        </div>
-        <div class="header-actions">
-          <div class="status-pill" id="status-pill">待命中…</div>
-          <button
-            type="button"
-            class="settings-toggle"
-            id="settings-toggle"
-            aria-haspopup="dialog"
-            aria-expanded="false"
-          >
-            <span aria-hidden="true">⚙️</span>
-            <span>服务配置</span>
-          </button>
-        </div>
-      </header>
+          <div class="header-actions">
+            <div class="status-pill" id="status-pill">待命中…</div>
+            <button type="button" class="settings-toggle" id="settings-toggle" aria-haspopup="dialog"
+              aria-expanded="false">
+              <span aria-hidden="true">⚙️</span>
+              <span>服务配置</span>
+            </button>
+          </div>
+        </header>
 
         <main class="app-main">
-        <section class="chat-panel">
-          <div class="chat-messages" id="chat-messages"></div>
-          <form class="chat-input" id="chat-form">
-            <div class="chat-input-editor">
-              <textarea
-                id="user-input"
-                rows="2"
-                placeholder="试着说：帮我创建一个个人简历网页"
-                required
-              ></textarea>
-              <p class="chat-input-hint" id="chat-editing-hint" hidden>
-                正在编辑历史消息，点击“发送”完成修改。
-              </p>
-            </div>
-            <input type="file" id="file-upload-input" class="file-upload-input" hidden multiple />
-            <div class="chat-input-actions">
-              <button type="button" class="ghost-button upload-button" id="upload-button">
-                上传文件
-              </button>
-              <button
-                type="button"
-                class="ghost-button cancel-edit-button"
-                id="cancel-edit"
-                hidden
-              >
-                取消编辑
-              </button>
-              <button type="submit" class="send-button">发送</button>
-            </div>
-          </form>
-        </section>
+          <section class="chat-panel">
+            <div class="chat-messages" id="chat-messages"></div>
+            <form class="chat-input" id="chat-form">
+              <div class="chat-input-editor">
+                <textarea id="user-input" rows="2" placeholder="试着说：帮我创建一个个人简历网页" required></textarea>
+                <p class="chat-input-hint" id="chat-editing-hint" hidden>
+                  正在编辑历史消息，点击"发送"完成修改。
+                </p>
+              </div>
+              <input type="file" id="file-upload-input" class="file-upload-input" hidden multiple />
+              <div class="chat-input-actions">
+                <button type="button" class="ghost-button upload-button" id="upload-button">
+                  上传文件
+                </button>
+                <button type="button" class="ghost-button cancel-edit-button" id="cancel-edit" hidden>
+                  取消编辑
+                </button>
+                <button type="submit" class="send-button">发送</button>
+              </div>
+            </form>
+          </section>
+        </main>
+      </div>
 
-        <aside class="insight-panel">
+      <!-- Insight 侧边栏 - 移到右侧 -->
+      <aside class="insight-sidebar" id="insight-sidebar">
+        <div class="insight-panel-sidebar" id="insight-panel-sidebar" tabindex="-1">
+          <div class="insight-panel-header">
+            <h2>信息面板</h2>
+          </div>
+
           <section class="insight-card">
             <h2>当前模型调用</h2>
             <ul class="model-log" id="model-log"></ul>
@@ -148,154 +149,156 @@
               等待生成幻灯片内容…
             </p>
           </section>
-        </aside>
-        </main>
-      </div>
-    </div>
-
-    <div class="settings-overlay" id="settings-overlay" hidden>
-      <div
-        class="settings-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-title"
-        tabindex="-1"
-      >
-        <div class="settings-drawer-header">
-          <div class="settings-header">
-            <h2 id="settings-title">模型配置</h2>
-            <p>为聊天、图像、语音与音频工具填写推理端点信息。</p>
-          </div>
-          <button
-            type="button"
-            class="ghost-button settings-close"
-            data-action="close-settings"
-            aria-label="关闭配置面板"
-          >
-            关闭
-          </button>
         </div>
-
-        <form class="config-form" id="config-form">
-          <fieldset class="config-group">
-            <legend>聊天模型</legend>
-            <label>
-              模型 ID
-              <input type="text" data-service="chat" data-field="model" placeholder="moonshot-chat" />
-            </label>
-            <label>
-              Base URL
-              <input type="url" data-service="chat" data-field="base_url" placeholder="https://api.example.com/v1/chat" />
-            </label>
-            <label>
-              API Key
-              <input type="password" data-service="chat" data-field="api_key" placeholder="••••••" autocomplete="off" />
-            </label>
-          </fieldset>
-
-          <fieldset class="config-group">
-            <legend>图像生成</legend>
-            <label>
-              模型 ID
-              <input type="text" data-service="image" data-field="model" placeholder="moonshot-image" />
-            </label>
-            <label>
-              Base URL
-              <input type="url" data-service="image" data-field="base_url" placeholder="https://api.example.com/v1/images" />
-            </label>
-            <label>
-              API Key
-              <input type="password" data-service="image" data-field="api_key" placeholder="••••••" autocomplete="off" />
-            </label>
-          </fieldset>
-
-          <fieldset class="config-group">
-            <legend>语音合成</legend>
-            <label>
-              模型 ID
-              <input type="text" data-service="speech" data-field="model" placeholder="moonshot-tts" />
-            </label>
-            <label>
-              Base URL
-              <input type="url" data-service="speech" data-field="base_url" placeholder="https://api.example.com/v1/speech" />
-            </label>
-            <label>
-              API Key
-              <input type="password" data-service="speech" data-field="api_key" placeholder="••••••" autocomplete="off" />
-            </label>
-          </fieldset>
-
-          <fieldset class="config-group">
-            <legend>音效生成</legend>
-            <label>
-              模型 ID
-              <input type="text" data-service="sound_effects" data-field="model" placeholder="moonshot-sfx" />
-            </label>
-            <label>
-              Base URL
-              <input type="url" data-service="sound_effects" data-field="base_url" placeholder="https://api.example.com/v1/sfx" />
-            </label>
-            <label>
-              API Key
-              <input type="password" data-service="sound_effects" data-field="api_key" placeholder="••••••" autocomplete="off" />
-            </label>
-          </fieldset>
-
-          <fieldset class="config-group">
-            <legend>语音识别</legend>
-            <label>
-              模型 ID
-              <input type="text" data-service="asr" data-field="model" placeholder="moonshot-asr" />
-            </label>
-            <label>
-              Base URL
-              <input type="url" data-service="asr" data-field="base_url" placeholder="https://api.example.com/v1/asr" />
-            </label>
-            <label>
-              API Key
-              <input type="password" data-service="asr" data-field="api_key" placeholder="••••••" autocomplete="off" />
-            </label>
-          </fieldset>
-
-          <div class="config-actions">
-            <span class="config-status" id="config-status" role="status"></span>
-            <button type="submit" class="primary-button">保存配置</button>
-          </div>
-        </form>
-      </div>
+        <button type="button" class="insight-toggle" id="insight-toggle" aria-expanded="false"
+          aria-controls="insight-panel-sidebar" aria-label="展开信息侧栏">
+          <svg class="insight-toggle-icon" aria-hidden="true" viewBox="0 0 24 24" role="img" focusable="false"
+            xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" fill="currentColor"></path>
+          </svg>
+          <span class="insight-toggle-label"></span>
+        </button>
+      </aside>
     </div>
+  </div>
 
-    <template id="model-log-item-template">
-      <li class="model-log-item">
-        <header>
-          <span class="model-name"></span>
-          <time class="model-time"></time>
-        </header>
-        <p class="model-summary"></p>
-        <dl class="model-meta">
-          <div>
-            <dt>输入 Token</dt>
-            <dd class="meta-input"></dd>
-          </div>
-          <div>
-            <dt>输出 Token</dt>
-            <dd class="meta-output"></dd>
-          </div>
-          <div>
-            <dt>耗时</dt>
-            <dd class="meta-latency"></dd>
-          </div>
-        </dl>
-      </li>
-    </template>
+  <div class="settings-overlay" id="settings-overlay" hidden>
+    <div class="settings-drawer" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
+      <div class="settings-drawer-header">
+        <div class="settings-header">
+          <h2 id="settings-title">模型配置</h2>
+          <p>为聊天、图像、语音与音频工具填写推理端点信息。</p>
+        </div>
+        <button type="button" class="ghost-button settings-close" data-action="close-settings" aria-label="关闭配置面板">
+          关闭
+        </button>
+      </div>
 
-    <template id="ppt-slide-template">
-      <section class="ppt-slide">
-        <h3></h3>
-        <ul></ul>
-      </section>
-    </template>
+      <form class="config-form" id="config-form">
+        <fieldset class="config-group">
+          <legend>聊天模型</legend>
+          <label>
+            模型 ID
+            <input type="text" data-service="chat" data-field="model" placeholder="moonshot-chat" />
+          </label>
+          <label>
+            Base URL
+            <input type="url" data-service="chat" data-field="base_url" placeholder="https://api.example.com/v1/chat" />
+          </label>
+          <label>
+            API Key
+            <input type="password" data-service="chat" data-field="api_key" placeholder="••••••" autocomplete="off" />
+          </label>
+        </fieldset>
 
-    <script type="module" src="app/index.js"></script>
-  </body>
+        <fieldset class="config-group">
+          <legend>图像生成</legend>
+          <label>
+            模型 ID
+            <input type="text" data-service="image" data-field="model" placeholder="moonshot-image" />
+          </label>
+          <label>
+            Base URL
+            <input type="url" data-service="image" data-field="base_url"
+              placeholder="https://api.example.com/v1/images" />
+          </label>
+          <label>
+            API Key
+            <input type="password" data-service="image" data-field="api_key" placeholder="••••••" autocomplete="off" />
+          </label>
+        </fieldset>
+
+        <fieldset class="config-group">
+          <legend>语音合成</legend>
+          <label>
+            模型 ID
+            <input type="text" data-service="speech" data-field="model" placeholder="moonshot-tts" />
+          </label>
+          <label>
+            Base URL
+            <input type="url" data-service="speech" data-field="base_url"
+              placeholder="https://api.example.com/v1/speech" />
+          </label>
+          <label>
+            API Key
+            <input type="password" data-service="speech" data-field="api_key" placeholder="••••••" autocomplete="off" />
+          </label>
+        </fieldset>
+
+        <fieldset class="config-group">
+          <legend>音效生成</legend>
+          <label>
+            模型 ID
+            <input type="text" data-service="sound_effects" data-field="model" placeholder="moonshot-sfx" />
+          </label>
+          <label>
+            Base URL
+            <input type="url" data-service="sound_effects" data-field="base_url"
+              placeholder="https://api.example.com/v1/sfx" />
+          </label>
+          <label>
+            API Key
+            <input type="password" data-service="sound_effects" data-field="api_key" placeholder="••••••"
+              autocomplete="off" />
+          </label>
+        </fieldset>
+
+        <fieldset class="config-group">
+          <legend>语音识别</legend>
+          <label>
+            模型 ID
+            <input type="text" data-service="asr" data-field="model" placeholder="moonshot-asr" />
+          </label>
+          <label>
+            Base URL
+            <input type="url" data-service="asr" data-field="base_url" placeholder="https://api.example.com/v1/asr" />
+          </label>
+          <label>
+            API Key
+            <input type="password" data-service="asr" data-field="api_key" placeholder="••••••" autocomplete="off" />
+          </label>
+        </fieldset>
+
+        <div class="config-actions">
+          <span class="config-status" id="config-status" role="status"></span>
+          <button type="submit" class="primary-button">保存配置</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <template id="model-log-item-template">
+    <li class="model-log-item">
+      <header>
+        <span class="model-name"></span>
+        <time class="model-time"></time>
+      </header>
+      <p class="model-summary"></p>
+      <dl class="model-meta">
+        <div>
+          <dt>输入 Token</dt>
+          <dd class="meta-input"></dd>
+        </div>
+        <div>
+          <dt>输出 Token</dt>
+          <dd class="meta-output"></dd>
+        </div>
+        <div>
+          <dt>耗时</dt>
+          <dd class="meta-latency"></dd>
+        </div>
+      </dl>
+    </li>
+  </template>
+
+  <template id="ppt-slide-template">
+    <section class="ppt-slide">
+      <h3></h3>
+      <ul></ul>
+    </section>
+  </template>
+
+  <script type="module" src="app/index.js"></script>
+</body>
+
 </html>

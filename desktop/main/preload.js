@@ -7,6 +7,11 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// 🔥 立即输出日志，确认脚本已加载
+console.log('[Preload] 🚀 Script loaded! Starting initialization...');
+console.log('[Preload] 🔍 ipcRenderer available:', !!ipcRenderer);
+console.log('[Preload] 🔍 contextBridge available:', !!contextBridge);
+
 // 验证 IPC 频道白名单
 const validChannels = {
     invoke: [
@@ -46,6 +51,7 @@ const validChannels = {
         'update-available',
         'update-downloaded',
         'notification',
+        'open-browser-tab',  // 在应用内打开浏览器标签页
     ],
 };
 
@@ -87,7 +93,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // 平台信息
     platform: process.platform,
-    
+
     // 版本信息
     versions: {
         node: process.versions.node,
@@ -98,6 +104,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 // 暴露环境检测
 contextBridge.exposeInMainWorld('__ELECTRON__', true);
+
+// 🔥 不再需要在preload中处理open-browser-tab事件
+// 该事件会直接通过 electronAPI.on('open-browser-tab') 传递给渲染进程
+// 避免了重复触发导致创建两个tab的问题
+console.log('[Preload] ✅ open-browser-tab will be handled via electronAPI.on');
 
 // 页面加载完成后初始化
 window.addEventListener('DOMContentLoaded', async () => {
@@ -132,23 +143,23 @@ window.addEventListener('DOMContentLoaded', async () => {
         // 监听后端就绪事件
         ipcRenderer.on('backend-ready', (event, port) => {
             window.__OKCVM_CONFIG__.backendUrl = `http://127.0.0.1:${port}`;
-            window.dispatchEvent(new CustomEvent('okcvm:backend-ready', { 
-                detail: { port, url: window.__OKCVM_CONFIG__.backendUrl } 
+            window.dispatchEvent(new CustomEvent('okcvm:backend-ready', {
+                detail: { port, url: window.__OKCVM_CONFIG__.backendUrl }
             }));
         });
 
         // 监听后端停止事件
         ipcRenderer.on('backend-stopped', (event, code) => {
-            window.dispatchEvent(new CustomEvent('okcvm:backend-stopped', { 
-                detail: { code } 
+            window.dispatchEvent(new CustomEvent('okcvm:backend-stopped', {
+                detail: { code }
             }));
         });
 
         // 监听主题变化
         ipcRenderer.on('theme-changed', (event, newTheme) => {
             window.__OKCVM_CONFIG__.theme = newTheme;
-            window.dispatchEvent(new CustomEvent('okcvm:theme-changed', { 
-                detail: { theme: newTheme } 
+            window.dispatchEvent(new CustomEvent('okcvm:theme-changed', {
+                detail: { theme: newTheme }
             }));
         });
 
@@ -159,14 +170,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         // 监听更新事件
         ipcRenderer.on('update-available', (event, info) => {
-            window.dispatchEvent(new CustomEvent('okcvm:update-available', { 
-                detail: info 
+            window.dispatchEvent(new CustomEvent('okcvm:update-available', {
+                detail: info
             }));
         });
 
         ipcRenderer.on('update-downloaded', (event, info) => {
-            window.dispatchEvent(new CustomEvent('okcvm:update-downloaded', { 
-                detail: info 
+            window.dispatchEvent(new CustomEvent('okcvm:update-downloaded', {
+                detail: info
             }));
         });
 

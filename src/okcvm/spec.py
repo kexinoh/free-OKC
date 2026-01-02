@@ -3,12 +3,29 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
 
-DEFAULT_SPEC_DIR = Path(__file__).resolve().parents[2] / "spec"
+def _get_default_spec_dir() -> Path:
+    """Determine the spec directory, supporting PyInstaller bundles."""
+    # Check environment variable first (set by PyInstaller runtime hook)
+    env_spec_dir = os.environ.get("OKCVM_SPEC_DIR")
+    if env_spec_dir:
+        return Path(env_spec_dir)
+    
+    # Check for PyInstaller frozen mode
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "spec"
+    
+    # Development mode: relative to this file
+    return Path(__file__).resolve().parents[2] / "spec"
+
+
+DEFAULT_SPEC_DIR = _get_default_spec_dir()
 SYSTEM_PROMPT_FILENAME = "system_prompt.md"
 TOOLS_FILENAME = "tools.json"
 
