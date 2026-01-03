@@ -29,6 +29,29 @@ Imagine seamlessly embedding a powerful, multi-modal agent brain into your own a
 - **🔌 Effortless Integration**: Provides a clean Python API, making it simple to integrate OKCVM into your existing systems.
 - **💾 Persistent Conversations**: Conversation trees and workspace metadata are stored in a MySQL-compatible database, enabling token-based multi-account access across browsers.
 
+## 🖥️ Desktop Client (Recommended)
+
+> **✨ Primary Interface**: The OKCVM Desktop client is now our recommended way to interact with the agent. It provides a native, streamlined experience with built-in backend integration.
+
+The Desktop client is a cross-platform Electron application that bundles the Python backend with a native user interface:
+
+- **🚀 Zero Configuration** - No manual backend setup required. Everything runs out of the box.
+- **🌐 Cross-Platform** - Native builds for macOS, Windows, and Linux.
+- **🖥️ Native Experience** - System tray integration, global shortcuts, and native notifications.
+- **🔄 Auto-Updates** - Built-in updater keeps you on the latest version.
+- **🌙 Dark Mode** - Follows your system theme automatically.
+- **📁 File Integration** - Native file dialogs and drag-and-drop support.
+
+### Quick Start (Desktop)
+
+1. **Download** the latest release for your platform from [GitHub Releases](https://github.com/kexinoh/free-OKC/releases)
+2. **Install** the application (DMG for macOS, NSIS installer for Windows, AppImage/DEB for Linux)
+3. **Launch** OKCVM from your Applications folder or Start Menu
+4. **Configure** your model endpoints in the settings panel
+5. **Start chatting** with your self-hosted agent!
+
+For development setup and building from source, see the [Desktop README](desktop/README.md).
+
 ## 📂 Repository Structure
 
 ```
@@ -36,6 +59,7 @@ Imagine seamlessly embedding a powerful, multi-modal agent brain into your own a
 ├── spec/                # 📜 Canonical system prompt and tool specification files
 ├── src/okcvm/           # 🐍 Python source for the VM, tool registry, and reference tools
 ├── frontend/            # 🎨 Static operator console served by the FastAPI backend
+├── desktop/             # 🖥️ Cross-platform Electron desktop application
 ├── docs/                # 🧭 In-depth architecture, backend, and frontend documentation
 ├── tests/               # 🧪 Automated test suite for validating tool and registry behavior
 ├── roadmap.md           # 🗺️ Project development roadmap (English)
@@ -44,9 +68,9 @@ Imagine seamlessly embedding a powerful, multi-modal agent brain into your own a
 └── config.yaml          # ⚙️ Sample runtime configuration consumed by the CLI and API
 ```
 
-## 🛠️ Getting Started
+## 🛠️ Development Setup & API Usage
 
-Get OKCVM up and running locally in just a few steps and experience its power.
+For developers who want to integrate OKCVM or contribute to the project. **End users should use the Desktop client above.**
 
 #### 1. Clone & Install
 
