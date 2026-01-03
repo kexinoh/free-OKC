@@ -10,8 +10,10 @@ import {
   configForm,
   settingsToggle,
   settingsOverlay,
-  settingsDrawer,
+  settingsModal,
   settingsCloseButtons,
+  settingsTabs,
+  settingsPages,
   historySidebar,
   historyToggle,
   historyPanel,
@@ -45,6 +47,7 @@ import {
   setConversationWorkspaceState,
   cloneWorkspaceCheckpoint,
   composeWorkspaceBranchName,
+  getActiveTabId,
 } from '../conversationState.js';
 import { fetchJson, postFormData } from '../utils.js';
 import {
@@ -61,7 +64,7 @@ import { createMessageRenderer } from './messageRenderer.js';
 import { createStreamingController } from './streamingController.js';
 import { createConversationPanel } from './conversationPanel.js';
 import { assignWorkspaceBranch, restoreWorkspace } from '../workspaceApi.js';
-import { initBrowserTabs } from './browser-tabs.js';
+import { initBrowserTabs, getBrowserTabsManager } from './browser-tabs.js';
 
 let previousFocusedElement = null;
 
@@ -834,6 +837,12 @@ async function sendChat(message) {
     if (Array.isArray(payload?.uploads)) {
       setUploadedFiles(payload.uploads);
     }
+
+    // 更新标签页标题
+    const tabsManager = getBrowserTabsManager();
+    if (tabsManager) {
+      tabsManager.updateActiveTabTitle();
+    }
   } catch (error) {
     console.error(error);
     messageRendererApi.finalizePendingMessage(
@@ -869,6 +878,21 @@ function handleUserSubmit(event) {
   sendChat(value);
 }
 
+function switchSettingsTab(tabName) {
+  if (!settingsTabs || !settingsPages) return;
+
+  settingsTabs.forEach((tab) => {
+    const isActive = tab.dataset.tab === tabName;
+    tab.classList.toggle('active', isActive);
+    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+
+  settingsPages.forEach((page) => {
+    const isActive = page.dataset.page === tabName;
+    page.classList.toggle('active', isActive);
+  });
+}
+
 function openSettingsPanel() {
   if (!settingsOverlay || !settingsToggle) return;
   if (!settingsOverlay.hidden) return;
@@ -881,8 +905,8 @@ function openSettingsPanel() {
   const firstInput = configForm?.querySelector('input, select, textarea, button');
   if (firstInput instanceof HTMLElement) {
     firstInput.focus();
-  } else if (settingsDrawer instanceof HTMLElement) {
-    settingsDrawer.focus();
+  } else if (settingsModal instanceof HTMLElement) {
+    settingsModal.focus();
   }
 }
 
@@ -1086,6 +1110,28 @@ function initializeEventListeners() {
     });
   }
 
+  // 设置选项卡切换
+  if (settingsTabs && settingsTabs.length > 0) {
+    settingsTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        if (tabName) {
+          switchSettingsTab(tabName);
+        }
+      });
+    });
+  }
+
+  // 主题切换按钮
+  const themeOptions = document.querySelectorAll('.theme-option');
+  themeOptions.forEach((option) => {
+    option.addEventListener('click', () => {
+      themeOptions.forEach((opt) => opt.classList.remove('active'));
+      option.classList.add('active');
+      // TODO: 实现主题切换逻辑
+    });
+  });
+
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (editingController.isEditing()) {
@@ -1130,6 +1176,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     const conversation = await conversationPanelApi.initializeConversationState();
     loadConfig();
+
+    // 初始化标签页并设置回调
+    const tabsManager = getBrowserTabsManager();
+    if (tabsManager) {
+      // 渲染初始标签页
+      tabsManager.renderTabs();
+
+      // 设置标签页切换回调
+      tabsManager.setCallbacks({
+        onTabSwitch: async (tab) => {
+          console.log('[App] Tab switched to:', tab.id, 'conversation:', tab.conversationId);
+          const targetConversation = getConversations().find(c => c.id === tab.conversationId);
+          if (targetConversation) {
+            messageRendererApi.renderConversation(targetConversation);
+            conversationPanelApi.renderConversationList();
+          }
+          setStatus('待命中…');
+        },
+        onNewTab: async (tab) => {
+          console.log('[App] New tab created:', tab.id);
+          const targetConversation = getCurrentConversation();
+          if (targetConversation) {
+            messageRendererApi.renderConversation(targetConversation);
+            conversationPanelApi.renderConversationList();
+          }
+          setStatus('连接工作台…', true);
+          bootSession();
+        },
+        onTabClose: async (tab) => {
+          console.log('[App] Tab closed:', tab.id);
+        },
+      });
+    }
 
     if (!conversation || conversation.messages.length === 0) {
       setStatus('连接工作台…', true);

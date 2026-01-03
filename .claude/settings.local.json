@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python main.py run:*)",
+      "Bash(timeout /t 5)",
+      "Bash(curl:*)",
+      "Bash(ping:*)",
+      "Bash(python:*)",
+      "Bash(dir .venvScriptspython.exe)",
+      "Bash(.venvScriptspython.exe --version)",
+      "Bash(dir .venvScriptspython.exe /b)",
+      "Bash(where:*)",
+      "Bash(dir:*)",
+      "Bash(cd:*)"
+    ]
+  }
+}

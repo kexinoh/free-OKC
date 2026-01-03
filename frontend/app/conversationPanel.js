@@ -9,6 +9,11 @@ import {
   loadConversationsFromStorage,
   discardConversation,
   restoreConversation,
+  getConversationTabs,
+  getActiveTabId,
+  updateTabConversation,
+  getTabByConversationId,
+  loadTabsFromStorage,
 } from '../conversationState.js';
 import { formatConversationTime, fetchJson } from '../utils.js';
 
@@ -129,10 +134,16 @@ export function createConversationPanel({
 
   const deleteSessionHistory = async () => fetchJson('/api/session/history', { method: 'DELETE' });
 
-  const selectConversation = (conversationId) => {
+  const selectConversation = (conversationId, options = {}) => {
     if (!conversationId) return;
     const conversation = getConversations().find((entry) => entry.id === conversationId);
     if (!conversation) return;
+
+    // 更新当前标签页的会话关联
+    const activeTabId = getActiveTabId();
+    if (activeTabId) {
+      updateTabConversation(activeTabId, conversationId);
+    }
 
     setCurrentSessionId(conversation.id);
     renderConversationList();
@@ -140,10 +151,15 @@ export function createConversationPanel({
 
     closeHistoryOnMobile();
 
+    // 通知标签页更新标题
+    if (typeof options.onTabTitleUpdate === 'function') {
+      options.onTabTitleUpdate();
+    }
+
     setStatus('待命中…');
   };
 
-  const startNewConversation = async () => {
+  const startNewConversation = async (options = {}) => {
     setStatus('清理工作台…', true);
 
     try {
@@ -156,10 +172,22 @@ export function createConversationPanel({
     }
 
     const conversation = createConversation();
+
+    // 更新当前标签页的会话关联
+    const activeTabId = getActiveTabId();
+    if (activeTabId) {
+      updateTabConversation(activeTabId, conversation.id);
+    }
+
     renderConversationList();
     renderConversation(conversation);
 
     closeHistoryOnMobile();
+
+    // 通知标签页更新标题
+    if (typeof options.onTabTitleUpdate === 'function') {
+      options.onTabTitleUpdate();
+    }
 
     setStatus('连接工作台…', true);
     if (typeof onSessionReset === 'function') {
@@ -214,6 +242,8 @@ export function createConversationPanel({
 
   const initializeConversationState = async () => {
     await loadConversationsFromStorage();
+    // 加载标签页状态（必须在会话加载之后）
+    loadTabsFromStorage();
     ensureCurrentConversation();
     renderConversationList();
     renderConversation();

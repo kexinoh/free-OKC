@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- CACHE BUSTER: 2026-01-03-02:53:00 SIDEBAR_FIX -->
+<!-- CACHE BUSTER: 2026-01-03-v2-FORCE-RELOAD -->
 <html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Free-OK Computer 创意工坊2026-01-03-02:53:00</title>
+  <title>Free-OK Computer 创意工坊 v2</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,9 +17,7 @@
     <!-- 浏览器标签栏 - 移到最顶部 -->
     <div class="browser-tabs" id="browser-tabs">
       <div class="browser-tab-list" id="browser-tab-list">
-        <button type="button" class="browser-tab active" data-tab="main">
-          <span class="tab-title">主页</span>
-        </button>
+        <!-- 标签页将由 JavaScript 动态生成 -->
       </div>
       <button type="button" class="browser-new-tab" id="browser-new-tab" title="新建标签页">+</button>
     </div>
@@ -47,10 +45,28 @@
           <p class="history-empty" id="conversation-empty">暂无会话记录</p>
           <ul class="conversation-list" id="conversation-list"></ul>
           <div class="sidebar-footer">
-            <button type="button" class="sidebar-footer-btn" id="help-feedback-btn">
-              <span class="icon" aria-hidden="true">ℹ️</span>
-              <span>反馈帮助</span>
-            </button>
+            <div class="help-menu-wrapper">
+              <button type="button" class="sidebar-footer-btn" id="help-feedback-btn">
+                <span class="icon" aria-hidden="true">ℹ️</span>
+                <span>反馈和帮助</span>
+              </button>
+              <div class="help-dropdown" id="help-dropdown" hidden>
+                <button type="button" class="help-dropdown-item" data-action="github">
+                  <span class="help-dropdown-icon">🌐</span>
+                  <div class="help-dropdown-content">
+                    <span class="help-dropdown-title">Github</span>
+                    <span class="help-dropdown-desc">提交 Issue，反馈 BUG</span>
+                  </div>
+                </button>
+                <button type="button" class="help-dropdown-item" data-action="qq">
+                  <span class="help-dropdown-icon">💬</span>
+                  <div class="help-dropdown-content">
+                    <span class="help-dropdown-title">QQ群</span>
+                    <span class="help-dropdown-desc">加入交流群</span>
+                  </div>
+                </button>
+              </div>
+            </div>
             <button type="button" class="sidebar-footer-btn" id="settings-btn-sidebar">
               <span class="icon" aria-hidden="true">⚙️</span>
               <span>设置</span>
@@ -162,108 +178,348 @@
     </div>
   </div>
 
+  <!-- 全局设置覆盖层 -->
   <div class="settings-overlay" id="settings-overlay" hidden>
-    <div class="settings-drawer" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
-      <div class="settings-drawer-header">
-        <div class="settings-header">
-          <h2 id="settings-title">模型配置</h2>
-          <p>为聊天、图像、语音与音频工具填写推理端点信息。</p>
-        </div>
-        <button type="button" class="ghost-button settings-close" data-action="close-settings" aria-label="关闭配置面板">
-          关闭
+    <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
+      <div class="settings-modal-header">
+        <h2 id="settings-title">全局设置</h2>
+        <button type="button" class="settings-modal-close" data-action="close-settings" aria-label="关闭设置">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
         </button>
       </div>
 
-      <form class="config-form" id="config-form">
-        <fieldset class="config-group">
-          <legend>聊天模型</legend>
-          <label>
-            模型 ID
-            <input type="text" data-service="chat" data-field="model" placeholder="moonshot-chat" />
-          </label>
-          <label>
-            Base URL
-            <input type="url" data-service="chat" data-field="base_url" placeholder="https://api.example.com/v1/chat" />
-          </label>
-          <label>
-            API Key
-            <input type="password" data-service="chat" data-field="api_key" placeholder="••••••" autocomplete="off" />
-          </label>
-        </fieldset>
+      <!-- 设置选项卡导航 -->
+      <nav class="settings-tabs" role="tablist">
+        <button type="button" class="settings-tab active" role="tab" data-tab="basic" aria-selected="true">
+          <span class="settings-tab-icon">⚙️</span>
+          <span>基础设置</span>
+        </button>
+        <button type="button" class="settings-tab" role="tab" data-tab="model" aria-selected="false">
+          <span class="settings-tab-icon">🤖</span>
+          <span>模型配置</span>
+        </button>
+        <button type="button" class="settings-tab" role="tab" data-tab="ai-dialog" aria-selected="false">
+          <span class="settings-tab-icon">💬</span>
+          <span>AI 对话配置</span>
+        </button>
+        <button type="button" class="settings-tab" role="tab" data-tab="storage" aria-selected="false">
+          <span class="settings-tab-icon">📁</span>
+          <span>存储管理</span>
+        </button>
+        <button type="button" class="settings-tab" role="tab" data-tab="about" aria-selected="false">
+          <span class="settings-tab-icon">ℹ️</span>
+          <span>关于</span>
+        </button>
+      </nav>
 
-        <fieldset class="config-group">
-          <legend>图像生成</legend>
-          <label>
-            模型 ID
-            <input type="text" data-service="image" data-field="model" placeholder="moonshot-image" />
-          </label>
-          <label>
-            Base URL
-            <input type="url" data-service="image" data-field="base_url"
-              placeholder="https://api.example.com/v1/images" />
-          </label>
-          <label>
-            API Key
-            <input type="password" data-service="image" data-field="api_key" placeholder="••••••" autocomplete="off" />
-          </label>
-        </fieldset>
+      <!-- 设置内容区域 -->
+      <div class="settings-content">
+        <!-- 基础设置页 -->
+        <div class="settings-page active" data-page="basic">
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              <span class="settings-section-icon">🎨</span>
+              外观设置
+            </h3>
+            <div class="settings-card">
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <span class="settings-item-label">主题模式</span>
+                </div>
+                <div class="settings-theme-toggle">
+                  <button type="button" class="theme-option active" data-theme="system">跟随系统</button>
+                  <button type="button" class="theme-option" data-theme="light">浅色模式</button>
+                  <button type="button" class="theme-option" data-theme="dark">深色模式</button>
+                </div>
+              </div>
+            </div>
+          </section>
 
-        <fieldset class="config-group">
-          <legend>语音合成</legend>
-          <label>
-            模型 ID
-            <input type="text" data-service="speech" data-field="model" placeholder="moonshot-tts" />
-          </label>
-          <label>
-            Base URL
-            <input type="url" data-service="speech" data-field="base_url"
-              placeholder="https://api.example.com/v1/speech" />
-          </label>
-          <label>
-            API Key
-            <input type="password" data-service="speech" data-field="api_key" placeholder="••••••" autocomplete="off" />
-          </label>
-        </fieldset>
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              <span class="settings-section-icon">📷</span>
+              截图设置
+            </h3>
+            <div class="settings-card">
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <span class="settings-item-label">移动端适配</span>
+                  <span class="settings-item-desc">截图时自动缩放宽度，适合移动端查看</span>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="mobile-screenshot" checked />
+                  <span class="settings-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+          </section>
 
-        <fieldset class="config-group">
-          <legend>音效生成</legend>
-          <label>
-            模型 ID
-            <input type="text" data-service="sound_effects" data-field="model" placeholder="moonshot-sfx" />
-          </label>
-          <label>
-            Base URL
-            <input type="url" data-service="sound_effects" data-field="base_url"
-              placeholder="https://api.example.com/v1/sfx" />
-          </label>
-          <label>
-            API Key
-            <input type="password" data-service="sound_effects" data-field="api_key" placeholder="••••••"
-              autocomplete="off" />
-          </label>
-        </fieldset>
-
-        <fieldset class="config-group">
-          <legend>语音识别</legend>
-          <label>
-            模型 ID
-            <input type="text" data-service="asr" data-field="model" placeholder="moonshot-asr" />
-          </label>
-          <label>
-            Base URL
-            <input type="url" data-service="asr" data-field="base_url" placeholder="https://api.example.com/v1/asr" />
-          </label>
-          <label>
-            API Key
-            <input type="password" data-service="asr" data-field="api_key" placeholder="••••••" autocomplete="off" />
-          </label>
-        </fieldset>
-
-        <div class="config-actions">
-          <span class="config-status" id="config-status" role="status"></span>
-          <button type="submit" class="primary-button">保存配置</button>
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              <span class="settings-section-icon">🌐</span>
+              网络设置
+            </h3>
+            <div class="settings-card">
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <span class="settings-item-label">启用代理</span>
+                  <span class="settings-item-desc">通过代理服务器连接网络（适用于需要代理的网络环境）</span>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="enable-proxy" />
+                  <span class="settings-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+          </section>
         </div>
-      </form>
+
+        <!-- 模型配置页 -->
+        <div class="settings-page" data-page="model">
+          <form class="config-form" id="config-form">
+            <section class="settings-section">
+              <h3 class="settings-section-title">
+                <span class="settings-section-icon">💭</span>
+                聊天模型
+              </h3>
+              <div class="settings-card">
+                <div class="config-field">
+                  <label>模型 ID</label>
+                  <input type="text" data-service="chat" data-field="model" placeholder="moonshot-chat" />
+                </div>
+                <div class="config-field">
+                  <label>Base URL</label>
+                  <input type="url" data-service="chat" data-field="base_url" placeholder="https://api.example.com/v1/chat" />
+                </div>
+                <div class="config-field">
+                  <label>API Key</label>
+                  <input type="password" data-service="chat" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-section">
+              <h3 class="settings-section-title">
+                <span class="settings-section-icon">🖼️</span>
+                图像生成
+              </h3>
+              <div class="settings-card">
+                <div class="config-field">
+                  <label>模型 ID</label>
+                  <input type="text" data-service="image" data-field="model" placeholder="moonshot-image" />
+                </div>
+                <div class="config-field">
+                  <label>Base URL</label>
+                  <input type="url" data-service="image" data-field="base_url" placeholder="https://api.example.com/v1/images" />
+                </div>
+                <div class="config-field">
+                  <label>API Key</label>
+                  <input type="password" data-service="image" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-section">
+              <h3 class="settings-section-title">
+                <span class="settings-section-icon">🔊</span>
+                语音合成
+              </h3>
+              <div class="settings-card">
+                <div class="config-field">
+                  <label>模型 ID</label>
+                  <input type="text" data-service="speech" data-field="model" placeholder="moonshot-tts" />
+                </div>
+                <div class="config-field">
+                  <label>Base URL</label>
+                  <input type="url" data-service="speech" data-field="base_url" placeholder="https://api.example.com/v1/speech" />
+                </div>
+                <div class="config-field">
+                  <label>API Key</label>
+                  <input type="password" data-service="speech" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-section">
+              <h3 class="settings-section-title">
+                <span class="settings-section-icon">🎵</span>
+                音效生成
+              </h3>
+              <div class="settings-card">
+                <div class="config-field">
+                  <label>模型 ID</label>
+                  <input type="text" data-service="sound_effects" data-field="model" placeholder="moonshot-sfx" />
+                </div>
+                <div class="config-field">
+                  <label>Base URL</label>
+                  <input type="url" data-service="sound_effects" data-field="base_url" placeholder="https://api.example.com/v1/sfx" />
+                </div>
+                <div class="config-field">
+                  <label>API Key</label>
+                  <input type="password" data-service="sound_effects" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-section">
+              <h3 class="settings-section-title">
+                <span class="settings-section-icon">🎤</span>
+                语音识别
+              </h3>
+              <div class="settings-card">
+                <div class="config-field">
+                  <label>模型 ID</label>
+                  <input type="text" data-service="asr" data-field="model" placeholder="moonshot-asr" />
+                </div>
+                <div class="config-field">
+                  <label>Base URL</label>
+                  <input type="url" data-service="asr" data-field="base_url" placeholder="https://api.example.com/v1/asr" />
+                </div>
+                <div class="config-field">
+                  <label>API Key</label>
+                  <input type="password" data-service="asr" data-field="api_key" placeholder="••••••" autocomplete="off" />
+                </div>
+              </div>
+            </section>
+
+            <div class="config-actions">
+              <span class="config-status" id="config-status" role="status"></span>
+              <button type="submit" class="primary-button">保存配置</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- AI 对话配置页 -->
+        <div class="settings-page" data-page="ai-dialog">
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              <span class="settings-section-icon">⚡</span>
+              对话设置
+            </h3>
+            <div class="settings-card">
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <span class="settings-item-label">流式输出</span>
+                  <span class="settings-item-desc">实时显示 AI 回复内容</span>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="streaming-output" checked />
+                  <span class="settings-switch-slider"></span>
+                </label>
+              </div>
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <span class="settings-item-label">显示推理过程</span>
+                  <span class="settings-item-desc">展示 AI 的思考过程</span>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="show-reasoning" checked />
+                  <span class="settings-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              <span class="settings-section-icon">📝</span>
+              系统提示词
+            </h3>
+            <div class="settings-card">
+              <div class="config-field">
+                <label>自定义系统提示词</label>
+                <textarea id="system-prompt" rows="4" placeholder="输入自定义的系统提示词..."></textarea>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 存储管理页 -->
+        <div class="settings-page" data-page="storage">
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              <span class="settings-section-icon">💾</span>
+              数据存储
+            </h3>
+            <div class="settings-card">
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <span class="settings-item-label">对话记录</span>
+                  <span class="settings-item-desc">当前存储的对话数量</span>
+                </div>
+                <span class="settings-item-value" id="conversation-count">0 条</span>
+              </div>
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <span class="settings-item-label">缓存大小</span>
+                  <span class="settings-item-desc">本地缓存占用空间</span>
+                </div>
+                <span class="settings-item-value" id="cache-size">0 MB</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              <span class="settings-section-icon">🗑️</span>
+              清理数据
+            </h3>
+            <div class="settings-card">
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <span class="settings-item-label">清除所有对话</span>
+                  <span class="settings-item-desc">删除所有对话记录，此操作不可恢复</span>
+                </div>
+                <button type="button" class="danger-button" id="clear-conversations">清除</button>
+              </div>
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <span class="settings-item-label">清除缓存</span>
+                  <span class="settings-item-desc">清除本地缓存数据</span>
+                </div>
+                <button type="button" class="ghost-button" id="clear-cache">清除</button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 关于页 -->
+        <div class="settings-page" data-page="about">
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              <span class="settings-section-icon">📖</span>
+              关于应用
+            </h3>
+            <div class="settings-card about-card">
+              <div class="about-logo">
+                <span class="logo">OK</span>
+              </div>
+              <h4>Free-OK Computer 创意工坊</h4>
+              <p class="about-desc">以对话驱动的自动化 AGENT</p>
+              <p class="about-version">版本 1.0.0</p>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h3 class="settings-section-title">
+              <span class="settings-section-icon">🔗</span>
+              相关链接
+            </h3>
+            <div class="settings-card">
+              <a href="https://github.com/kexinoh/free-OKC" target="_blank" class="settings-link-item">
+                <span class="settings-link-icon">🌐</span>
+                <div class="settings-link-info">
+                  <span class="settings-link-label">GitHub 仓库</span>
+                  <span class="settings-link-desc">查看源代码、提交 Issue</span>
+                </div>
+                <span class="settings-link-arrow">→</span>
+              </a>
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   </div>
 

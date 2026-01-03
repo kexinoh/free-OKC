@@ -12,6 +12,10 @@ import {
 let conversations = [];
 let currentSessionId = null;
 
+// 多标签页状态管理
+let conversationTabs = [];
+let activeTabId = null;
+
 const MODEL_LOG_LIMIT = 6;
 
 function cloneConversation(conversation) {
@@ -908,4 +912,181 @@ export function setConversationWorkspaceState(state, conversationId = currentSes
     delete conversation.workspace;
   }
   saveConversationsToStorage(conversation);
+}
+
+// ==================== 多标签页管理 ====================
+
+export function getConversationTabs() {
+  return conversationTabs;
+}
+
+export function getActiveTabId() {
+  return activeTabId;
+}
+
+export function setActiveTabId(tabId) {
+  activeTabId = tabId ?? null;
+}
+
+export function createConversationTab(conversationId = null) {
+  const tabId = generateId();
+  let targetConversationId = conversationId;
+
+  // 如果没有指定会话ID，创建新会话
+  if (!targetConversationId) {
+    const conversation = createConversation();
+    targetConversationId = conversation.id;
+  }
+
+  const tab = {
+    id: tabId,
+    conversationId: targetConversationId,
+    createdAt: new Date().toISOString(),
+  };
+
+  conversationTabs.push(tab);
+  activeTabId = tabId;
+  currentSessionId = targetConversationId;
+
+  saveTabsToStorage();
+  return tab;
+}
+
+export function closeConversationTab(tabId) {
+  if (!tabId) return null;
+
+  const index = conversationTabs.findIndex(tab => tab.id === tabId);
+  if (index === -1) return null;
+
+  const [removed] = conversationTabs.splice(index, 1);
+
+  // 如果关闭的是当前活动标签，切换到相邻标签
+  if (activeTabId === tabId) {
+    if (conversationTabs.length > 0) {
+      // 优先切换到左边的标签，如果没有则切换到右边
+      const newIndex = Math.min(index, conversationTabs.length - 1);
+      const newTab = conversationTabs[newIndex];
+      activeTabId = newTab.id;
+      currentSessionId = newTab.conversationId;
+    } else {
+      // 没有标签了，创建一个新的
+      const newTab = createConversationTab();
+      activeTabId = newTab.id;
+      currentSessionId = newTab.conversationId;
+    }
+  }
+
+  saveTabsToStorage();
+  return removed;
+}
+
+export function switchConversationTab(tabId) {
+  if (!tabId) return null;
+
+  const tab = conversationTabs.find(t => t.id === tabId);
+  if (!tab) return null;
+
+  activeTabId = tabId;
+  currentSessionId = tab.conversationId;
+
+  saveTabsToStorage();
+  return tab;
+}
+
+export function updateTabConversation(tabId, conversationId) {
+  const tab = conversationTabs.find(t => t.id === tabId);
+  if (!tab) return null;
+
+  tab.conversationId = conversationId;
+  if (activeTabId === tabId) {
+    currentSessionId = conversationId;
+  }
+
+  saveTabsToStorage();
+  return tab;
+}
+
+export function getTabByConversationId(conversationId) {
+  return conversationTabs.find(t => t.conversationId === conversationId) ?? null;
+}
+
+export function getActiveTab() {
+  return conversationTabs.find(t => t.id === activeTabId) ?? null;
+}
+
+function saveTabsToStorage() {
+  try {
+    const data = {
+      tabs: conversationTabs,
+      activeTabId: activeTabId,
+    };
+    localStorage.setItem('okc_conversation_tabs', JSON.stringify(data));
+  } catch (error) {
+    console.error('保存标签页状态失败', error);
+  }
+}
+
+export function loadTabsFromStorage() {
+  try {
+    const stored = localStorage.getItem('okc_conversation_tabs');
+    if (stored) {
+      const data = JSON.parse(stored);
+      if (Array.isArray(data.tabs)) {
+        conversationTabs = data.tabs.filter(tab =>
+          tab && typeof tab.id === 'string' && typeof tab.conversationId === 'string'
+        );
+      }
+      if (data.activeTabId) {
+        activeTabId = data.activeTabId;
+      }
+    }
+  } catch (error) {
+    console.error('加载标签页状态失败', error);
+    conversationTabs = [];
+    activeTabId = null;
+  }
+
+  // 确保至少有一个标签页
+  if (conversationTabs.length === 0) {
+    const conversation = getCurrentConversation() ?? createConversation();
+    const tab = {
+      id: generateId(),
+      conversationId: conversation.id,
+      createdAt: new Date().toISOString(),
+    };
+    conversationTabs.push(tab);
+    activeTabId = tab.id;
+    currentSessionId = conversation.id;
+    saveTabsToStorage();
+  } else {
+    // 验证标签页关联的会话是否存在
+    const validTabs = conversationTabs.filter(tab => {
+      const conversation = conversations.find(c => c.id === tab.conversationId);
+      return conversation !== undefined;
+    });
+
+    if (validTabs.length !== conversationTabs.length) {
+      conversationTabs = validTabs;
+      if (!conversationTabs.find(t => t.id === activeTabId)) {
+        activeTabId = conversationTabs[0]?.id ?? null;
+      }
+      saveTabsToStorage();
+    }
+
+    // 设置当前会话ID
+    const activeTab = conversationTabs.find(t => t.id === activeTabId);
+    if (activeTab) {
+      currentSessionId = activeTab.conversationId;
+    }
+  }
+
+  return conversationTabs;
+}
+
+export function getTabTitle(tabId) {
+  const tab = conversationTabs.find(t => t.id === tabId);
+  if (!tab) return '新对话';
+
+  const conversation = conversations.find(c => c.id === tab.conversationId);
+  return conversation?.title ?? DEFAULT_CONVERSATION_TITLE;
 }

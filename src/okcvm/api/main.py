@@ -10,7 +10,6 @@ from uuid import uuid4
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -154,6 +153,11 @@ def _ensure_frontend() -> None:
             "The frontend directory could not be located. Expected path: "
             f"{FRONTEND_DIR}"
         )
+    # Log the frontend directory for debugging
+    logger.info(f"Frontend directory: {FRONTEND_DIR}")
+    logger.info(f"Frontend directory exists: {FRONTEND_DIR.exists()}")
+    if FRONTEND_DIR.exists():
+        logger.info(f"Frontend directory contents: {list(FRONTEND_DIR.iterdir())[:10]}")
 
 _ensure_frontend()
 
@@ -375,7 +379,67 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestLoggingMiddleware)
 
     # --- Static Files and Root Redirect ---
-    app.mount("/ui", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="ui")
+    # 自定义静态文件路由，确保 HTML 文件正确返回
+    @app.get("/ui/{file_path:path}")
+    async def serve_frontend(file_path: str) -> Response:
+        """服务前端静态文件，确保 HTML 文件的 Content-Type 正确"""
+        # 默认返回 index.html
+        if not file_path or file_path == "" or file_path.endswith("/"):
+            file_path = file_path.rstrip("/") + "/index.html" if file_path else "index.html"
+
+        # 构建完整路径
+        full_path = FRONTEND_DIR / file_path
+
+        # 安全检查：确保路径在 FRONTEND_DIR 内
+        try:
+            full_path = full_path.resolve()
+            full_path.relative_to(FRONTEND_DIR.resolve())
+        except (ValueError, RuntimeError):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # 检查文件是否存在
+        if not full_path.is_file():
+            # 如果是目录，尝试返回 index.html
+            if full_path.is_dir():
+                index_path = full_path / "index.html"
+                if index_path.is_file():
+                    full_path = index_path
+                else:
+                    raise HTTPException(status_code=404, detail="File not found")
+            else:
+                raise HTTPException(status_code=404, detail="File not found")
+
+        # 确定 MIME 类型
+        media_type = None
+        suffix = full_path.suffix.lower()
+        if suffix in {".html", ".htm"}:
+            media_type = "text/html; charset=utf-8"
+        elif suffix == ".css":
+            media_type = "text/css; charset=utf-8"
+        elif suffix == ".js":
+            media_type = "application/javascript; charset=utf-8"
+        elif suffix == ".json":
+            media_type = "application/json; charset=utf-8"
+        elif suffix in {".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico"}:
+            media_type = f"image/{suffix[1:]}"
+        elif suffix == ".woff":
+            media_type = "font/woff"
+        elif suffix == ".woff2":
+            media_type = "font/woff2"
+        elif suffix == ".ttf":
+            media_type = "font/ttf"
+
+        logger.debug(f"Serving frontend file: {file_path} (media_type={media_type})")
+        # 禁用缓存，特别是对于 JavaScript 文件
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+        return FileResponse(full_path, media_type=media_type, headers=headers)
+
+    # 备用方案：使用 StaticFiles（但优先级较低，只在上面的路由不匹配时使用）
+    # app.mount("/ui", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="ui")
 
     @app.get("/")
     async def root(

@@ -153,16 +153,48 @@ function createWindow() {
 
     // 开发模式加载本地服务，生产模式等待后端就绪
     const isDev = process.argv.includes('--dev');
+    logger.info(`🔍 Window creation mode - isDev: ${isDev}, isPackaged: ${app.isPackaged}`);
 
     // 监听后端就绪事件
     backendManager.once('ready', (port) => {
-        logger.info(`Backend ready on port ${port}, loading UI...`);
-        const url = isDev ? `http://localhost:${port}/ui/` : `http://127.0.0.1:${port}/ui/`;
-        mainWindow.loadURL(url);
+        logger.info('🎉 ===== BACKEND READY EVENT RECEIVED =====');
+        logger.info(`📡 Backend port: ${port}`);
+        logger.info(`🔧 Development mode: ${isDev}`);
+        logger.info(`📦 App packaged: ${app.isPackaged}`);
 
-        // 🔥 默认打开开发者工具方便调试
-        logger.info('Opening DevTools for debugging...');
-        mainWindow.webContents.openDevTools();
+        const url = isDev ? `http://localhost:${port}/ui/` : `http://127.0.0.1:${port}/ui/`;
+        logger.info(`🌐 Loading UI from URL: ${url}`);
+        logger.info(`🔗 Backend URL will be: http://127.0.0.1:${port}`);
+
+        // 禁用缓存，强制每次加载最新文件
+        mainWindow.webContents.session.clearCache().then(() => {
+            logger.info('🧹 Cache cleared before loading UI');
+            mainWindow.loadURL(url).then(() => {
+                logger.info('✅ UI loaded successfully');
+            }).catch((error) => {
+                logger.error(`❌ Failed to load UI: ${error.message}`);
+            });
+        }).catch((error) => {
+            logger.warn(`⚠️ Failed to clear cache: ${error.message}`);
+            mainWindow.loadURL(url).then(() => {
+                logger.info('✅ UI loaded successfully');
+            }).catch((error) => {
+                logger.error(`❌ Failed to load UI: ${error.message}`);
+            });
+        });
+
+        // 仅在开发模式下打开开发者工具
+        if (isDev) {
+            logger.info('🔧 Opening DevTools (dev mode)...');
+            mainWindow.webContents.openDevTools();
+        }
+
+        // 发送后端就绪事件到渲染进程
+        mainWindow.webContents.once('did-finish-load', () => {
+            logger.info('📤 Sending backend-ready event to renderer process...');
+            mainWindow.webContents.send('backend-ready', port);
+            logger.info(`📤 Backend ready event sent with port: ${port}`);
+        });
     });
 
     // 监听后端错误事件
@@ -327,7 +359,7 @@ function handleTrayExit() {
 
         // 更新托盘菜单，显示确认提示
         if (tray) {
-            tray.setContextMenu(createTrayMenu(mainWindow, backendManager, app, true));
+            tray.setContextMenu(createTrayMenu(mainWindow, backendManager, app, true, handleTrayExit));
         }
 
         // 5秒后重置
@@ -335,7 +367,7 @@ function handleTrayExit() {
             logger.info('Tray exit confirmation timeout, resetting...');
             trayExitClickCount = 0;
             if (tray) {
-                tray.setContextMenu(createTrayMenu(mainWindow, backendManager, app, false));
+                tray.setContextMenu(createTrayMenu(mainWindow, backendManager, app, false, handleTrayExit));
             }
         }, 5000);
     } else if (trayExitClickCount === 2) {
@@ -416,13 +448,23 @@ function getIconPath() {
  * 获取托盘图标路径
  */
 function getTrayIconPath() {
+    const fs = require('fs');
     const iconName = process.platform === 'darwin' ? 'trayTemplate.png' :
         process.platform === 'win32' ? 'tray.ico' : 'tray.png';
 
+    let iconPath;
     if (app.isPackaged) {
-        return path.join(process.resourcesPath, iconName);
+        iconPath = path.join(process.resourcesPath, iconName);
+    } else {
+        iconPath = path.join(__dirname, '..', 'resources', iconName);
     }
-    return path.join(__dirname, '..', 'resources', iconName);
+
+    // 调试日志
+    logger.info(`[Tray] Platform: ${process.platform}`);
+    logger.info(`[Tray] Icon path: ${iconPath}`);
+    logger.info(`[Tray] Icon exists: ${fs.existsSync(iconPath)}`);
+
+    return iconPath;
 }
 
 /**
@@ -431,7 +473,10 @@ function getTrayIconPath() {
 function setupIPC() {
     // 获取后端 URL
     ipcMain.handle('get-backend-url', () => {
-        return backendManager.getUrl();
+        const url = backendManager.getUrl();
+        logger.info(`🔍 IPC: get-backend-url called, returning: ${url}`);
+        logger.info(`🔍 Backend status: ${JSON.stringify(backendManager.getStatus())}`);
+        return url;
     });
 
     // 获取后端状态

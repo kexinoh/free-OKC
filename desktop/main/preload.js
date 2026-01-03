@@ -91,6 +91,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
     },
 
+    // 在外部浏览器中打开链接
+    openExternal: (url) => {
+        return ipcRenderer.invoke('open-external', url);
+    },
+
     // 平台信息
     platform: process.platform,
 
@@ -117,17 +122,25 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
         // 获取后端 URL
         let backendUrl = '';
+        console.log('[Preload] 🔍 Attempting to get backend URL...');
         try {
             backendUrl = await ipcRenderer.invoke('get-backend-url');
+            console.log('[Preload] ✅ Backend URL received:', backendUrl);
+            if (!backendUrl) {
+                console.warn('[Preload] ⚠️ Backend URL is empty or null!');
+            }
         } catch (error) {
+            console.error('[Preload] ❌ Failed to get backend URL:', error.message);
             console.warn('[Preload] Backend not ready:', error.message);
         }
 
         // 获取应用版本
         const version = await ipcRenderer.invoke('get-app-version');
+        console.log('[Preload] 📦 App version:', version);
 
         // 获取系统主题
         const theme = await ipcRenderer.invoke('get-system-theme');
+        console.log('[Preload] 🎨 System theme:', theme);
 
         // 设置全局配置
         window.__OKCVM_CONFIG__ = {
@@ -138,14 +151,22 @@ window.addEventListener('DOMContentLoaded', async () => {
             theme,
         };
 
-        console.log('[Preload] Initialized:', window.__OKCVM_CONFIG__);
+        console.log('[Preload] ✅ Configuration initialized:', window.__OKCVM_CONFIG__);
 
         // 监听后端就绪事件
         ipcRenderer.on('backend-ready', (event, port) => {
-            window.__OKCVM_CONFIG__.backendUrl = `http://127.0.0.1:${port}`;
+            const newBackendUrl = `http://127.0.0.1:${port}`;
+            console.log('[Preload] 🎉 Backend ready event received!');
+            console.log('[Preload] 📡 Port:', port);
+            console.log('[Preload] 🔗 New backend URL:', newBackendUrl);
+
+            window.__OKCVM_CONFIG__.backendUrl = newBackendUrl;
+            console.log('[Preload] ✅ Config updated with new backend URL');
+
             window.dispatchEvent(new CustomEvent('okcvm:backend-ready', {
                 detail: { port, url: window.__OKCVM_CONFIG__.backendUrl }
             }));
+            console.log('[Preload] 📤 Dispatched okcvm:backend-ready event');
         });
 
         // 监听后端停止事件

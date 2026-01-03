@@ -129,16 +129,16 @@ class BackendManager extends EventEmitter {
                 // 继续使用原配置文件
             }
 
-            const args = [
-                'run', // Typer CLI 需要子命令
+            // 基础参数（不含 run 子命令）
+            const baseArgs = [
                 '--host', '127.0.0.1',
                 '--port', this.port.toString(),
                 '--config', finalConfigPath,
             ];
 
             if (this.isDev || !backendPath) {
-                // 开发模式：使用 Python 运行
-                // 优先使用虚拟环境的 Python
+                // 开发模式：使用 Python 运行 main.py
+                // main.py 使用 typer 子命令，需要 'run' 命令
                 const projectRoot = path.join(__dirname, '..', '..');
                 let pythonPath;
 
@@ -151,8 +151,10 @@ class BackendManager extends EventEmitter {
                 }
 
                 const mainPy = path.join(projectRoot, 'main.py');
+                const args = ['run', ...baseArgs];  // main.py 需要 'run' 子命令
                 logger.info(`Using Python: ${pythonPath}`);
                 logger.info(`Using Python script: ${mainPy}`);
+                logger.info(`Python args: ${args.join(' ')}`);
                 this.process = spawn(pythonPath, [mainPy, ...args], {
                     cwd: projectRoot,
                     stdio: ['ignore', 'pipe', 'pipe'],
@@ -160,15 +162,15 @@ class BackendManager extends EventEmitter {
                 });
             } else {
                 // 生产模式：运行打包的可执行文件
-                // 检查后端可执行文件是否存在
+                // okcvm-server.exe 使用 server.py，不需要 'run' 子命令
                 if (!fs.existsSync(backendPath)) {
                     const errorMsg = `Backend executable not found at: ${backendPath}`;
                     logger.error(errorMsg);
                     throw new Error(errorMsg);
                 }
                 logger.info(`Spawning backend executable: ${backendPath}`);
-                logger.info(`Backend args: ${args.join(' ')}`);
-                this.process = spawn(backendPath, args, {
+                logger.info(`Backend args: ${baseArgs.join(' ')}`);
+                this.process = spawn(backendPath, baseArgs, {
                     stdio: ['ignore', 'pipe', 'pipe'],
                     env: { ...process.env },
                 });

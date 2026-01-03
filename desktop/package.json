@@ -6,7 +6,7 @@
   "author": "OKCVM Team",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
+    "start": "electron . --dev",
     "dev": "npm run bundle-backend && electron . --dev",
     "build": "npm run bundle-backend && electron-builder",
     "build:mac": "npm run bundle-backend && electron-builder --mac",
